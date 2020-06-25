@@ -21,9 +21,9 @@ void PCLFiltration::onInit() {
   _ouster_min_range_sq *= _ouster_min_range_sq;
   _ouster_max_range_sq *= _ouster_max_range_sq;
 
-  param_loader.loadParam("ouster/filter/intensity", _ouster_filter_intensity_en, false);
-  param_loader.loadParam("ouster/filter/intensity_thrd", _ouster_filter_intensity_thrd, std::numeric_limits<double>::max());
-  param_loader.loadParam("ouster/filter/intensity_range", _ouster_filter_intensity_range_sq, std::numeric_limits<float>::max());
+  param_loader.loadParam("ouster/filter/intensity/enable", _ouster_filter_intensity_en, false);
+  param_loader.loadParam("ouster/filter/intensity/threshold", _ouster_filter_intensity_thrd, std::numeric_limits<double>::max());
+  param_loader.loadParam("ouster/filter/intensity/range", _ouster_filter_intensity_range_sq, std::numeric_limits<float>::max());
   _ouster_filter_intensity_range_sq *= _ouster_filter_intensity_range_sq;
 
   /* Realsense */
@@ -69,7 +69,7 @@ void PCLFiltration::onInit() {
   ReconfigureServer::CallbackType f = boost::bind(&PCLFiltration::callbackReconfigure, this, _1, _2);
   reconfigure_server_->setCallback(f);
 
-  NODELET_INFO_ONCE("[PCLFiltration] Cartographer tools initialized");
+  NODELET_INFO_ONCE("[PCLFiltration] Nodelet initialized");
 
   is_initialized = true;
 }
@@ -91,13 +91,16 @@ void PCLFiltration::callbackReconfigure(Config& config, [[maybe_unused]] uint32_
 /* ousterCallback() //{ */
 void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg) {
   if (is_initialized && _ouster_republish) {
+
+    std::chrono::time_point<std::chrono::system_clock> start_time = std::chrono::system_clock::now();
+
     NODELET_INFO_ONCE("[PCLFiltration] Subscribing Ouster messages.");
-    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processing Ouster data.");
 
     // Convert to PCL format
     PCI pcl;
     PCI pclOverMaxRange;
     pcl::fromROSMsg(*msg, pcl);
+    unsigned int points_before = pcl.points.size();
 
     // NaN filter
     std::vector<int> indices;
@@ -128,6 +131,10 @@ void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg)
         ROS_ERROR("Exception caught during over-range ouster data. ");
       }
     }
+
+    std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
+    NODELET_INFO_THROTTLE(1.0, "[PCLFiltration] Processed OS1 data (run time: %0.1f ms; points before: %d, after: %ld).", elapsed_ms.count() * 1000,
+                          points_before, pcl.points.size());
   }
 }
 //}
@@ -136,11 +143,12 @@ void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg)
 void PCLFiltration::realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr msg) {
   if (is_initialized && _realsense_republish) {
     NODELET_INFO_ONCE("[PCLFiltration] Subscribing Realsense messages.");
-    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processing Realsense data.");
+    std::chrono::time_point<std::chrono::system_clock> start_time = std::chrono::system_clock::now();
 
     // Convert to PCL format
     PC::Ptr pcPtr(new PC);
     pcl::fromROSMsg(*msg, *pcPtr);
+    unsigned int points_before = pcPtr->points.size();
 
     // NaN filter
     std::vector<int> indices;
@@ -184,6 +192,10 @@ void PCLFiltration::realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr m
       msg_out.header.frame_id = _realsense_frame;
     }
     _pub_realsense.publish(msg_out);
+
+    std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
+    NODELET_INFO_THROTTLE(1.0, "[PCLFiltration] Processed RealSense data (run time: %0.1f ms; points before: %d, after: %ld).", elapsed_ms.count() * 1000,
+                          points_before, pcPtr->points.size());
   }
 }
 //}
