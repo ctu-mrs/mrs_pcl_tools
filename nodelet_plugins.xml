@@ -1,0 +1,7 @@
+<library path="lib/libmrs_pcl_tools">
+  <class name="mrs_pcl_tools/PCLFiltration" type="mrs_pcl_tools::PCLFiltration" base_class_type="nodelet::Nodelet">
+    <description>
+     Nodelet for mrs pointcloud filtration. 
+    </description>
+  </class>
+</library>

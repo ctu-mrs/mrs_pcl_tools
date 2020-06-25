@@ -1,0 +1,60 @@
+<launch>
+
+  <!-- Filtration parameters -->
+  <arg name="UAV_NAME" default="$(env UAV_NAME)" />
+
+  <arg name="min_range" default="0.4" />
+  <arg name="max_range" default="20.0" />
+  <arg name="ouster_republish" default="true" />
+  <arg name="realsense_republish" default="false" />
+  <arg name="rplidar_republish" default="false" />
+  
+  <arg name="standalone" default="$(optenv STANDALONE_LOCALIZATION true)" />
+  <arg name="debug" default="$(optenv DEBUG false)" />
+  <arg     if="$(eval arg('standalone') or arg('debug'))" name="nodelet" value="standalone" />
+  <arg unless="$(eval arg('standalone') or arg('debug'))" name="nodelet" value="load" />
+  <arg     if="$(eval arg('standalone') or arg('debug'))" name="nodelet_manager" value="" />
+  <arg unless="$(eval arg('standalone') or arg('debug'))" name="nodelet_manager" value="$(arg UAV_NAME)_ouster_nodelet_manager" />
+  <arg unless="$(arg debug)" name="launch_prefix" value=""/>
+  <arg     if="$(arg debug)" name="launch_prefix" value="debug_roslaunch"/>
+
+  <group ns="$(arg UAV_NAME)">
+    <node pkg="nodelet" type="nodelet" name="pcl_filtration" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
+
+      <!-- Parameters -->
+      <param name="ouster/republish" type="bool" value="$(arg ouster_republish)" />
+      <param name="ouster/pcl2_over_max_range" type="bool" value="false" />
+      <param name="ouster/min_range" type="double" value="$(arg min_range)" />
+      <param name="ouster/max_range" type="double" value="$(arg max_range)" />
+      <param name="ouster/filter/intensity" type="bool" value="false" />
+      <param name="ouster/filter/intensity_thrd" type="double" value="100.0" />
+      <param name="ouster/filter/intensity_range" type="double" value="10.0" />
+
+      <param name="realsense/republish" type="bool" value="$(arg realsense_republish)" />
+      <param name="realsense/voxel_resolution" type="double" value="0.0" />
+      <param name="realsense/min_range" type="double" value="0.4" />
+      <param name="realsense/max_range" type="double" value="5.0" />
+      <param name="realsense/minimum_grid_resolution" type="double" value="0.03" />
+      <param name="realsense/use_bilateral" type="bool" value="false" />
+      <param name="realsense/bilateral_sigma_S" type="double" value="5.0" />
+      <param name="realsense/bilateral_sigma_R" type="double" value="5e-3" />
+      <param name="realsense/frame" type="string" value="depth/optical" />
+
+      <param name="rplidar/republish" type="bool" value="$(arg rplidar_republish)" />
+      <param name="rplidar/voxel_resolution" type="double" value="0.05" />
+
+      <!-- Subscribers -->
+      <remap from="~ouster_in" to="os1_cloud_node/points" />
+      <remap from="~realsense_in" to="rs_d435/pointcloud" />
+      <remap from="~rplidar_in" to="rplidar/scan_raw" />
+
+      <!-- Publishers -->
+      <remap from="~ouster_out" to="os1_cloud_node/points_processed" />
+      <remap from="~ouster_over_max_range_out" to="os1_cloud_node/points_over_max_range" />
+      <remap from="~realsense_out" to="rs_d435/pointcloud_processed" />
+      <remap from="~rplidar_out" to="rplidar/scan_processed" />
+
+    </node>
+  </group>
+
+</launch>

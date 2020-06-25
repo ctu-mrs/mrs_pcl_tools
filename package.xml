@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>mrs_pcl_tools</name>
+  <version>0.0.0</version>
+  <description>Pointcloud tools package</description>
+
+  <maintainer email="petrapa6@fel.cvut.cz">Pavel Petracek</maintainer>
+  <author email="petrapa6@fel.cvut.cz">Pavel Petracek</author>
+
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>rosconsole</depend>
+  <depend>roscpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>pcl_ros</depend>
+  <depend>pcl_conversions</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nodelet</depend>
+  <depend>mrs_lib</depend>
+  <depend>message_generation</depend>
+  <depend>dynamic_reconfigure</depend>
+
+  <!-- The export tag contains other, unspecified, tags -->
+  <export>
+    <!-- Other tools can request additional information be placed here -->
+    <nodelet plugin="${prefix}/nodelet_plugins.xml" />
+  </export>
+</package>
