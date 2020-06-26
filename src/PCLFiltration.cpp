@@ -18,12 +18,15 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("ouster/pcl2_over_max_range", _ouster_pcl2_over_max_range, false);
   param_loader.loadParam("ouster/min_range", _ouster_min_range_sq, 0.4f);
   param_loader.loadParam("ouster/max_range", _ouster_max_range_sq, 100.0f);
+  _ouster_min_range_mm = _ouster_min_range_sq * 1000;
+  _ouster_max_range_mm = _ouster_max_range_sq * 1000;
   _ouster_min_range_sq *= _ouster_min_range_sq;
   _ouster_max_range_sq *= _ouster_max_range_sq;
 
   param_loader.loadParam("ouster/filter/intensity/enable", _ouster_filter_intensity_en, false);
-  param_loader.loadParam("ouster/filter/intensity/threshold", _ouster_filter_intensity_thrd, std::numeric_limits<double>::max());
+  param_loader.loadParam("ouster/filter/intensity/threshold", _ouster_filter_intensity_thrd, std::numeric_limits<int>::max());
   param_loader.loadParam("ouster/filter/intensity/range", _ouster_filter_intensity_range_sq, std::numeric_limits<float>::max());
+  _ouster_filter_intensity_range_mm = _ouster_filter_intensity_range_sq * 1000;
   _ouster_filter_intensity_range_sq *= _ouster_filter_intensity_range_sq;
 
   /* Realsense */
@@ -96,28 +99,44 @@ void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg)
 
     NODELET_INFO_ONCE("[PCLFiltration] Subscribing Ouster messages.");
 
-    // Convert to PCL format
-    PCI pcl;
-    PCI pclOverMaxRange;
-    pcl::fromROSMsg(*msg, pcl);
-    unsigned int points_before = pcl.points.size();
+    unsigned int points_before = msg->height * msg->width;
+    unsigned int points_after;
 
-    // NaN filter
-    std::vector<int> indices;
-    pcl::removeNaNFromPointCloud(pcl, pcl, indices);
+    std::vector<int> idxs_over_max_range;
 
-    // Min/Max range filter
-    removeCloseAndFarPointCloud(pcl, pcl, pclOverMaxRange, _ouster_min_range_sq, _ouster_max_range_sq);
+    // TODO: Can this if/else be written w/o code repetition?
+    if (hasField("range", msg)) {
 
-    // Publish
-    publishCloud(_pub_ouster, pcl);
-    if (_ouster_pcl2_over_max_range) {
-      publishCloud(_pub_ouster_over_max_range, pclOverMaxRange);
+      auto pcl     = removeCloseAndFarPointCloudOS1<pt_OS1>(msg, idxs_over_max_range, _ouster_min_range_mm, _ouster_max_range_mm, _ouster_filter_intensity_en,
+                                                        _ouster_filter_intensity_range_mm, _ouster_filter_intensity_thrd);
+      points_after = pcl->points.size();
+
+      publishCloud(_pub_ouster, *pcl);
+
+      if (_ouster_pcl2_over_max_range) {
+        // use PCL copy constructor from point cloud subset
+        PC_OS1 pcl_over_max_range(*pcl, idxs_over_max_range);
+        publishCloud(_pub_ouster_over_max_range, pcl_over_max_range);
+      }
+
+    } else {
+
+      auto pcl     = removeCloseAndFarPointCloud<pt_XYZI>(msg, idxs_over_max_range, _ouster_min_range_sq, _ouster_max_range_sq, _ouster_filter_intensity_en,
+                                                      _ouster_filter_intensity_range_sq, _ouster_filter_intensity_thrd);
+      points_after = pcl->points.size();
+
+      publishCloud(_pub_ouster, *pcl);
+
+      if (_ouster_pcl2_over_max_range) {
+        // use PCL copy constructor from point cloud subset
+        PC_I pcl_over_max_range(*pcl, idxs_over_max_range);
+        publishCloud(_pub_ouster_over_max_range, pcl_over_max_range);
+      }
     }
 
     std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
-    NODELET_INFO_THROTTLE(1.0, "[PCLFiltration] Processed OS1 data (run time: %0.1f ms; points before: %d, after: %ld).", elapsed_ms.count() * 1000,
-                          points_before, pcl.points.size());
+    NODELET_INFO_THROTTLE(1.0, "[PCLFiltration] Processed OS1 data (run time: %0.1f ms; points before: %d, after: %d).", elapsed_ms.count() * 1000,
+                          points_before, points_after);
   }
 }
 //}
@@ -128,51 +147,44 @@ void PCLFiltration::realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr m
     NODELET_INFO_ONCE("[PCLFiltration] Subscribing Realsense messages.");
     std::chrono::time_point<std::chrono::system_clock> start_time = std::chrono::system_clock::now();
 
-    // Convert to PCL format
-    PC::Ptr pcPtr(new PC);
-    pcl::fromROSMsg(*msg, *pcPtr);
-    unsigned int points_before = pcPtr->points.size();
+    unsigned int points_before = msg->height * msg->width;
 
-    // NaN filter
-    std::vector<int> indices;
-    pcl::removeNaNFromPointCloud(*pcPtr, *pcPtr, indices);
-
-    // Min/Max range filter
-    removeCloseAndFarPointCloud(*pcPtr, *pcPtr, _realsense_min_range_sq, _realsense_max_range_sq);
+    std::vector<int> idxs_over_max_range;
+    auto             pcl = removeCloseAndFarPointCloud<pt_XYZI>(msg, idxs_over_max_range, _realsense_min_range_sq, _realsense_max_range_sq, false, 0.0f, 0);
 
     // Bilateral filter
     if (_realsense_use_bilateral) {
       NODELET_INFO_THROTTLE(1.0, "[PCLFiltration] \t - Applying fast bilateral OMP filter.");
-      pcl::FastBilateralFilterOMP<pcl::PointXYZ> fbf;
-      fbf.setInputCloud(pcPtr);
+      pcl::FastBilateralFilterOMP<pt_XYZI> fbf;
+      fbf.setInputCloud(pcl);
       fbf.setSigmaS(_realsense_bilateral_sigma_S);
       fbf.setSigmaR(_realsense_bilateral_sigma_R);
-      fbf.applyFilter(*pcPtr);
+      fbf.applyFilter(*pcl);
     }
 
     // Grid minimum
     if (_realsense_minimum_grid_resolution > 0.0f) {
       NODELET_INFO_THROTTLE(1.0, "[PCLFiltration] \t - Applying minimum grid filter.");
-      pcl::GridMinimum<pcl::PointXYZ> gmf(_realsense_minimum_grid_resolution);
-      gmf.setInputCloud(pcPtr);
-      gmf.filter(*pcPtr);
+      pcl::GridMinimum<pt_XYZI> gmf(_realsense_minimum_grid_resolution);
+      gmf.setInputCloud(pcl);
+      gmf.filter(*pcl);
     }
 
     // Voxel grid sampling
     if (_realsense_voxel_resolution > 0.0f) {
       NODELET_INFO_THROTTLE(1.0, "[PCLFiltration] \t - Applying voxel sampling filter.");
-      pcl::VoxelGrid<pcl::PointXYZ> vg;
-      vg.setInputCloud(pcPtr);
+      pcl::VoxelGrid<pt_XYZI> vg;
+      vg.setInputCloud(pcl);
       vg.setLeafSize(_realsense_voxel_resolution, _realsense_voxel_resolution, _realsense_voxel_resolution);
-      vg.filter(*pcPtr);
+      vg.filter(*pcl);
     }
 
     // Publish data
-    publishCloud(_pub_realsense, *pcPtr);
+    publishCloud(_pub_realsense, *pcl);
 
     std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
     NODELET_INFO_THROTTLE(1.0, "[PCLFiltration] Processed RealSense data (run time: %0.1f ms; points before: %d, after: %ld).", elapsed_ms.count() * 1000,
-                          points_before, pcPtr->points.size());
+                          points_before, pcl->points.size());
   }
 }
 //}
@@ -186,99 +198,117 @@ void PCLFiltration::rplidarCallback([[maybe_unused]] const sensor_msgs::LaserSca
 }
 //}
 
-/* removeCloseAndFarPointCloud //{*/
-void PCLFiltration::removeCloseAndFarPointCloud(const PC& cloud_in, PC& cloud_out, const float min_range_sq, const float max_range_sq) {
-  if (&cloud_in != &cloud_out) {
-    cloud_out.header = cloud_in.header;
-    cloud_out.points.resize(cloud_in.points.size());
+/*//{ removeCloseAndFarPointCloud() */
+template <typename T>
+typename pcl::PointCloud<T>::Ptr PCLFiltration::removeCloseAndFarPointCloud(const sensor_msgs::PointCloud2::ConstPtr msg,
+                                                                            std::vector<int>& indices_cloud_over_max_range, const float min_range_sq,
+                                                                            const float max_range_sq, bool filter_intensity,
+                                                                            const float filter_intensity_range_sq, const int filter_intensity_thrd) {
+
+  // Convert to pcl object
+  typename pcl::PointCloud<T>::Ptr cloud;
+  pcl::fromROSMsg(*msg, *cloud);
+
+  size_t j          = 0;
+  size_t k          = 0;
+  size_t cloud_size = cloud->points.size();
+
+  if (filter_intensity && !hasField("intensity", msg)) {
+    NODELET_ERROR("[PCLFiltration]: You tried to filter intensity of point cloud with no intensity field. No intensity-filter will be applied.");
+    filter_intensity = false;
   }
 
-  size_t j = 0;
+  // Resize idx vector
+  indices_cloud_over_max_range.resize(cloud_size);
 
-  for (size_t i = 0; i < cloud_in.points.size(); ++i) {
-    double dist_sq = cloud_in.points[i].x * cloud_in.points[i].x + cloud_in.points[i].y * cloud_in.points[i].y + cloud_in.points[i].z * cloud_in.points[i].z;
-    if (dist_sq > min_range_sq && dist_sq <= max_range_sq) {
-      cloud_out.points[j++] = cloud_in.points[i];
-    }
-  }
-  if (j != cloud_in.points.size()) {
-    cloud_out.points.resize(j);
-  }
+  for (size_t i = 0; i < cloud_size; i++) {
 
-  cloud_out.height   = 1;
-  cloud_out.width    = static_cast<uint32_t>(j);
-  cloud_out.is_dense = false;
-}
+    float range_sq =
+        cloud->points.at(i).x * cloud->points.at(i).x + cloud->points.at(i).y * cloud->points.at(i).y + cloud->points.at(i).z * cloud->points.at(i).z;
 
-void PCLFiltration::removeCloseAndFarPointCloud(const PCI& cloud_in, PCI& cloud_out, const float min_range_sq, const float max_range_sq) {
-  if (&cloud_in != &cloud_out) {
-    cloud_out.header = cloud_in.header;
-    cloud_out.points.resize(cloud_in.points.size());
-  }
-
-  size_t j = 0;
-
-  for (size_t i = 0; i < cloud_in.points.size(); ++i) {
-    double dist_sq = cloud_in.points[i].x * cloud_in.points[i].x + cloud_in.points[i].y * cloud_in.points[i].y + cloud_in.points[i].z * cloud_in.points[i].z;
-    // Filter out low intensities in close radius
-    if (_ouster_filter_intensity_en && cloud_in.points[i].intensity < _ouster_filter_intensity_thrd && dist_sq < _ouster_filter_intensity_range_sq) {
+    if (range_sq < min_range_sq) {
       continue;
-    }
-    if (dist_sq > min_range_sq && dist_sq <= max_range_sq) {
-      cloud_out.points[j++] = cloud_in.points[i];
-    }
-  }
-  if (j != cloud_in.points.size()) {
-    cloud_out.points.resize(j);
-  }
 
-  cloud_out.height   = 1;
-  cloud_out.width    = static_cast<uint32_t>(j);
-  cloud_out.is_dense = false;
-}
+    } else if (range_sq <= max_range_sq) {
 
-void PCLFiltration::removeCloseAndFarPointCloud(const PCI& cloud_in, PCI& cloud_out, PCI& cloud_out_over_max_range, const float min_range_sq,
-                                                const float max_range_sq) {
-  if (&cloud_in != &cloud_out) {
-    cloud_out.header = cloud_in.header;
-    cloud_out.points.resize(cloud_in.points.size());
-  }
-  if (&cloud_in != &cloud_out_over_max_range) {
-    cloud_out_over_max_range.header = cloud_in.header;
-    cloud_out_over_max_range.points.resize(cloud_in.points.size());
-  }
-
-  size_t j = 0;
-  size_t k = 0;
-
-  for (size_t i = 0; i < cloud_in.points.size(); ++i) {
-    double dist_sq = cloud_in.points[i].x * cloud_in.points[i].x + cloud_in.points[i].y * cloud_in.points[i].y + cloud_in.points[i].z * cloud_in.points[i].z;
-    if (dist_sq < min_range_sq) {
-      continue;
-    } else if (dist_sq <= max_range_sq) {
       // Filter out low intensities in close radius
-      if (_ouster_filter_intensity_en && cloud_in.points[i].intensity < _ouster_filter_intensity_thrd && dist_sq < _ouster_filter_intensity_range_sq) {
+      if (filter_intensity && cloud->points.at(i).intensity < filter_intensity_thrd && range_sq < filter_intensity_range_sq) {
         continue;
       }
-      cloud_out.points[j++] = cloud_in.points[i];
+
+      cloud->points.at(j++) = cloud->points.at(i);
+
     } else {
-      cloud_out_over_max_range.points[k++] = cloud_in.points[i];
+      indices_cloud_over_max_range.at(k++) = i;
     }
   }
-  if (j != cloud_in.points.size()) {
-    cloud_out.points.resize(j);
+
+  if (j != cloud_size) {
+    cloud->points.resize(j);
   }
-  if (k != cloud_in.points.size()) {
-    cloud_out_over_max_range.points.resize(k);
+  if (k != cloud_size) {
+    indices_cloud_over_max_range.resize(k);
   }
 
-  cloud_out.height   = 1;
-  cloud_out.width    = static_cast<uint32_t>(j);
-  cloud_out.is_dense = false;
+  cloud->height   = 1;
+  cloud->width    = static_cast<uint32_t>(j);
+  cloud->is_dense = false;
 
-  cloud_out_over_max_range.height   = 1;
-  cloud_out_over_max_range.width    = static_cast<uint32_t>(k);
-  cloud_out_over_max_range.is_dense = false;
+  return cloud;
+}
+/*//}*/
+
+/*//{ removeCloseAndFarPointCloudOS1() */
+template <typename T>
+typename pcl::PointCloud<T>::Ptr PCLFiltration::removeCloseAndFarPointCloudOS1(const sensor_msgs::PointCloud2::ConstPtr msg,
+                                                                               std::vector<int>& indices_cloud_over_max_range, const uint32_t min_range_mm,
+                                                                               const uint32_t max_range_mm, const bool filter_intensity,
+                                                                               const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd) {
+
+  // Convert to pcl object
+  typename pcl::PointCloud<T>::Ptr cloud;
+  pcl::fromROSMsg(*msg, *cloud);
+
+  size_t j          = 0;
+  size_t k          = 0;
+  size_t cloud_size = cloud->points.size();
+
+  // Resize idx vector
+  indices_cloud_over_max_range.resize(cloud_size);
+
+  for (size_t i = 0; i < cloud_size; i++) {
+
+    uint32_t range_mm = cloud->points.at(i).range;
+
+    if (range_mm < min_range_mm) {
+      continue;
+
+    } else if (range_mm <= max_range_mm) {
+
+      // Filter out low intensities in close radius
+      if (filter_intensity && cloud->points.at(i).intensity < filter_intensity_thrd && range_mm < filter_intensity_range_mm) {
+        continue;
+      }
+
+      cloud->points.at(j++) = cloud->points.at(i);
+
+    } else {
+      indices_cloud_over_max_range.at(k++) = i;
+    }
+  }
+
+  if (j != cloud_size) {
+    cloud->points.resize(j);
+  }
+  if (k != cloud_size) {
+    indices_cloud_over_max_range.resize(k);
+  }
+
+  cloud->height   = 1;
+  cloud->width    = static_cast<uint32_t>(j);
+  cloud->is_dense = false;
+
+  return cloud;
 }
 /*//}*/
 
@@ -292,9 +322,20 @@ void PCLFiltration::publishCloud(const ros::Publisher pub, const pcl::PointCloud
       pub.publish(pcl_msg);
     }
     catch (...) {
-      ROS_ERROR("Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+      NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
     }
   }
+}
+/*//}*/
+
+/*//{ hasField() */
+bool PCLFiltration::hasField(const std::string field, const sensor_msgs::PointCloud2::ConstPtr msg) {
+  for (auto f : msg->fields) {
+    if (f.name == field) {
+      return true;
+    }
+  }
+  return false;
 }
 /*//}*/
 

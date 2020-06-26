@@ -24,6 +24,7 @@ find_package(catkin REQUIRED COMPONENTS
     pcl_ros
     mrs_lib
     dynamic_reconfigure
+    os1_driver
 )
 
 find_package(PCL REQUIRED COMPONENTS)

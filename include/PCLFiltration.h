@@ -18,13 +18,19 @@
 
 #include <dynamic_reconfigure/server.h>
 
+#include <os1_driver/ouster_ros/point_os1.h>
+
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
 //}
 
 /*//{ typedefs */
-typedef pcl::PointCloud<pcl::PointXYZ>  PC;
-typedef pcl::PointCloud<pcl::PointXYZI> PCI;
+typedef pcl::PointXYZ             pt_XYZ;
+typedef pcl::PointXYZI            pt_XYZI;
+typedef ouster_ros::OS1::PointOS1 pt_OS1;
+typedef pcl::PointCloud<pt_XYZ>   PC;
+typedef pcl::PointCloud<pt_XYZI>  PC_I;
+typedef pcl::PointCloud<pt_OS1>   PC_OS1;
 //}
 
 namespace mrs_pcl_tools
@@ -50,23 +56,26 @@ private:
 
   ros::Timer _timer_check_subscribers;
 
-  boost::recursive_mutex                                        config_mutex_;
+  boost::recursive_mutex                               config_mutex_;
   typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;
-  typedef dynamic_reconfigure::Server<Config>                   ReconfigureServer;
-  boost::shared_ptr<ReconfigureServer>                          reconfigure_server_;
+  typedef dynamic_reconfigure::Server<Config>          ReconfigureServer;
+  boost::shared_ptr<ReconfigureServer>                 reconfigure_server_;
   /* mrs_pcl_tools::mrs_pcl_tools_dynparamConfig         last_drs_config; */
 
   void callbackReconfigure(mrs_pcl_tools::pcl_filtration_dynparamConfig &config, uint32_t level);
 
   /* Ouster */
-  void   ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg);
-  bool   _ouster_republish;
-  bool   _ouster_pcl2_over_max_range;
-  bool   _ouster_filter_intensity_en;
-  float  _ouster_min_range_sq;
-  float  _ouster_max_range_sq;
-  float  _ouster_filter_intensity_range_sq;
-  double _ouster_filter_intensity_thrd;
+  void     ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg);
+  bool     _ouster_republish;
+  bool     _ouster_pcl2_over_max_range;
+  bool     _ouster_filter_intensity_en;
+  float    _ouster_min_range_sq;
+  float    _ouster_max_range_sq;
+  float    _ouster_filter_intensity_range_sq;
+  int      _ouster_filter_intensity_thrd;
+  uint32_t _ouster_min_range_mm;
+  uint32_t _ouster_max_range_mm;
+  uint32_t _ouster_filter_intensity_range_mm;
 
   /* Realsense */
   void        realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr msg);
@@ -86,12 +95,19 @@ private:
   float _rplidar_voxel_resolution;
 
   /* Functions */
-  void removeCloseAndFarPointCloud(const PC &cloud_in, PC &cloud_out, const float min_range_sq, const float max_range_sq);
-  void removeCloseAndFarPointCloud(const PCI &cloud_in, PCI &cloud_out, const float min_range_sq, const float max_range_sq);
-  void removeCloseAndFarPointCloud(const PCI &cloud_in, PCI &cloud_out, PCI &cloud_out_over_max_range, const float min_range_sq, const float max_range_sq);
+  template <typename T>
+  typename pcl::PointCloud<T>::Ptr removeCloseAndFarPointCloudOS1(const sensor_msgs::PointCloud2::ConstPtr msg, std::vector<int> &indices_cloud_over_max_range,
+                                                                  const uint32_t min_range_mm, const uint32_t max_range_mm, const bool filter_intensity,
+                                                                  const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd);
+  template <typename T>
+  typename pcl::PointCloud<T>::Ptr removeCloseAndFarPointCloud(const sensor_msgs::PointCloud2::ConstPtr msg, std::vector<int> &indices_cloud_over_max_range,
+                                                               const float min_range_sq, const float max_range_sq, bool filter_intensity,
+                                                               const float filter_intensity_range_sq, const int filter_intensity_thrd);
 
   template <typename T>
   void publishCloud(const ros::Publisher pub, const pcl::PointCloud<T> cloud);
+
+  bool hasField(const std::string field, const sensor_msgs::PointCloud2::ConstPtr msg);
 
   /* void checkSubscribers(const ros::TimerEvent& te); */
 };
