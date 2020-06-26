@@ -78,7 +78,7 @@ void PCLFiltration::onInit() {
 //}
 
 /* callbackReconfigure() //{ */
-void PCLFiltration::callbackReconfigure(Config& config, [[maybe_unused]] uint32_t level) {
+void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_t level) {
   if (!is_initialized) {
     return;
   }
@@ -99,37 +99,26 @@ void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg)
     unsigned int points_before = msg->height * msg->width;
     unsigned int points_after;
 
-    std::vector<int> idxs_over_max_range;
+    std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_variant;
+    std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
 
-    // TODO: Can this if/else be written w/o code repetition? Try std::variant: https://en.cppreference.com/w/cpp/utility/variant
     if (hasField("range", msg)) {
       NODELET_INFO_ONCE("[PCLFiltration] Subscribing Ouster messages. Point type: ouster_ros::OS1::PointOS1.");
-
-      std::pair<PC_OS1::Ptr, PC_OS1::Ptr> pcl_pair =
-          removeCloseAndFarPointCloudOS1<pt_OS1>(msg, _ouster_pcl2_over_max_range, _ouster_min_range_mm, _ouster_max_range_mm, _ouster_filter_intensity_en,
-                                                 _ouster_filter_intensity_range_mm, _ouster_filter_intensity_thrd);
-      points_after = pcl_pair.first->points.size();
-
-      publishCloud(_pub_ouster, *pcl_pair.first);
-
-      if (_ouster_pcl2_over_max_range) {
-        // use PCL copy constructor from point cloud subset
-        publishCloud(_pub_ouster_over_max_range, *pcl_pair.second);
-      }
-
+      removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, msg, _ouster_pcl2_over_max_range, _ouster_min_range_mm, _ouster_max_range_mm,
+                                     _ouster_filter_intensity_en, _ouster_filter_intensity_range_mm, _ouster_filter_intensity_thrd);
     } else {
       NODELET_INFO_ONCE("[PCLFiltration] Subscribing Ouster messages. Point type: pcl::PointXYZI.");
+      removeCloseAndFarPointCloud(pcl_variant, pcl_over_max_range_variant, msg, _ouster_pcl2_over_max_range, _ouster_min_range_sq, _ouster_max_range_sq);
+    }
 
-      std::pair<PC_I::Ptr, PC_I::Ptr> pcl_pair =
-          removeCloseAndFarPointCloud<pt_XYZI>(msg, _ouster_pcl2_over_max_range, _ouster_min_range_sq, _ouster_max_range_sq);
-      points_after = pcl_pair.first->points.size();
+    auto cloud_visitor = [&](const auto &pc) {
+      points_after = pc->points.size();
+      publishCloud(_pub_ouster, *pc);
+    };
+    std::visit(cloud_visitor, pcl_variant);
 
-      publishCloud(_pub_ouster, *pcl_pair.first);
-
-      if (_ouster_pcl2_over_max_range) {
-        // use PCL copy constructor from point cloud subset
-        publishCloud(_pub_ouster_over_max_range, *pcl_pair.second);
-      }
+    if (_ouster_pcl2_over_max_range) {
+      std::visit([&](const auto &pc) { publishCloud(_pub_ouster, *pc); }, pcl_over_max_range_variant);
     }
 
     std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
@@ -147,7 +136,7 @@ void PCLFiltration::realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr m
 
     unsigned int points_before = msg->height * msg->width;
 
-    PC::Ptr pcl = removeCloseAndFarPointCloud<pt_XYZ>(msg, false, _realsense_min_range_sq, _realsense_max_range_sq).first;
+    PC::Ptr pcl = removeCloseAndFarPointCloudXYZ(msg, false, _realsense_min_range_sq, _realsense_max_range_sq).first;
 
     // Bilateral filter
     if (_realsense_use_bilateral) {
@@ -196,13 +185,13 @@ void PCLFiltration::rplidarCallback([[maybe_unused]] const sensor_msgs::LaserSca
 //}
 
 /*//{ removeCloseAndFarPointCloud() */
-template <typename T>
-std::pair<typename pcl::PointCloud<T>::Ptr, typename pcl::PointCloud<T>::Ptr> PCLFiltration::removeCloseAndFarPointCloud(
-    const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range, const float min_range_sq, const float max_range_sq) {
+void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
+                                                const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range, const float min_range_sq,
+                                                const float max_range_sq) {
 
   // Convert to pcl object
-  typename pcl::PointCloud<T>::Ptr cloud(new pcl::PointCloud<T>());
-  typename pcl::PointCloud<T>::Ptr cloud_over_max_range(new pcl::PointCloud<T>());
+  PC_I::Ptr cloud(new PC_I());
+  PC_I::Ptr cloud_over_max_range(new PC_I());
   pcl::fromROSMsg(*msg, *cloud);
 
   size_t j          = 0;
@@ -239,6 +228,8 @@ std::pair<typename pcl::PointCloud<T>::Ptr, typename pcl::PointCloud<T>::Ptr> PC
   cloud->width    = static_cast<uint32_t>(j);
   cloud->is_dense = false;
 
+  cloud_var.emplace<1>(cloud);
+
   if (cloud_over_max_range) {
     if (k != cloud_size) {
       cloud_over_max_range->points.resize(k);
@@ -246,21 +237,21 @@ std::pair<typename pcl::PointCloud<T>::Ptr, typename pcl::PointCloud<T>::Ptr> PC
     cloud_over_max_range->height   = 1;
     cloud_over_max_range->width    = static_cast<uint32_t>(k);
     cloud_over_max_range->is_dense = false;
-  }
 
-  return std::make_pair(cloud, cloud_over_max_range);
+    cloud_over_max_range_var.emplace<1>(cloud_over_max_range);
+  }
 }
 /*//}*/
 
 /*//{ removeCloseAndFarPointCloudOS1() */
-template <typename T>
-std::pair<typename pcl::PointCloud<T>::Ptr, typename pcl::PointCloud<T>::Ptr> PCLFiltration::removeCloseAndFarPointCloudOS1(
-    const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range, const uint32_t min_range_mm, const uint32_t max_range_mm,
-    const bool filter_intensity, const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd) {
+void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var,
+                                                   std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var, const sensor_msgs::PointCloud2::ConstPtr msg,
+                                                   const bool ret_cloud_over_max_range, const uint32_t min_range_mm, const uint32_t max_range_mm,
+                                                   const bool filter_intensity, const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd) {
 
   // Convert to pcl object
-  typename pcl::PointCloud<T>::Ptr cloud(new pcl::PointCloud<T>());
-  typename pcl::PointCloud<T>::Ptr cloud_over_max_range(new pcl::PointCloud<T>());
+  PC_OS1::Ptr cloud(new PC_OS1());
+  PC_OS1::Ptr cloud_over_max_range(new PC_OS1());
   pcl::fromROSMsg(*msg, *cloud);
 
   size_t j          = 0;
@@ -285,6 +276,63 @@ std::pair<typename pcl::PointCloud<T>::Ptr, typename pcl::PointCloud<T>::Ptr> PC
       if (filter_intensity && cloud->points.at(i).intensity < filter_intensity_thrd && range_mm < filter_intensity_range_mm) {
         continue;
       }
+
+      cloud->points.at(j++) = cloud->points.at(i);
+
+    } else if (ret_cloud_over_max_range) {
+      cloud_over_max_range->points.at(k++) = cloud->points.at(i);
+    }
+  }
+
+  // Resize both clouds
+  if (j != cloud_size) {
+    cloud->points.resize(j);
+  }
+  cloud->height   = 1;
+  cloud->width    = static_cast<uint32_t>(j);
+  cloud->is_dense = false;
+  cloud_var.emplace<0>(cloud);
+
+  if (cloud_over_max_range) {
+    if (k != cloud_size) {
+      cloud_over_max_range->points.resize(k);
+    }
+    cloud_over_max_range->height   = 1;
+    cloud_over_max_range->width    = static_cast<uint32_t>(k);
+    cloud_over_max_range->is_dense = false;
+
+    cloud_over_max_range_var.emplace<0>(cloud_over_max_range);
+  }
+}
+/*//}*/
+
+/*//{ removeCloseAndFarPointCloudXYZ() */
+std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range,
+                                                                          const float min_range_sq, const float max_range_sq) {
+
+  // Convert to pcl object
+  PC::Ptr cloud(new PC());
+  PC::Ptr cloud_over_max_range(new PC());
+  pcl::fromROSMsg(*msg, *cloud);
+
+  size_t j          = 0;
+  size_t k          = 0;
+  size_t cloud_size = cloud->points.size();
+
+  if (ret_cloud_over_max_range) {
+    cloud_over_max_range->header = cloud->header;
+    cloud_over_max_range->points.resize(cloud_size);
+  }
+
+  for (size_t i = 0; i < cloud_size; i++) {
+
+    float range_sq =
+        cloud->points.at(i).x * cloud->points.at(i).x + cloud->points.at(i).y * cloud->points.at(i).y + cloud->points.at(i).z * cloud->points.at(i).z;
+
+    if (range_sq < min_range_sq) {
+      continue;
+
+    } else if (range_sq <= max_range_sq) {
 
       cloud->points.at(j++) = cloud->points.at(i);
 

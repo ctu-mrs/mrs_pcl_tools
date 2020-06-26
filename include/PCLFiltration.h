@@ -6,6 +6,8 @@
 
 #include <chrono>
 
+#include <variant>
+
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/filters/voxel_grid.h>
@@ -95,22 +97,22 @@ private:
   float _rplidar_voxel_resolution;
 
   /* Functions */
-  template <typename T>
-  std::pair<typename pcl::PointCloud<T>::Ptr, typename pcl::PointCloud<T>::Ptr> removeCloseAndFarPointCloudOS1(
-      const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range, const uint32_t min_range_mm, const uint32_t max_range_mm,
-      const bool filter_intensity, const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd);
+  void removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
+                                      const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range, const uint32_t min_range_mm,
+                                      const uint32_t max_range_mm, const bool filter_intensity, const uint32_t filter_intensity_range_mm,
+                                      const int filter_intensity_thrd);
 
-  template <typename T>
-  std::pair<typename pcl::PointCloud<T>::Ptr, typename pcl::PointCloud<T>::Ptr> removeCloseAndFarPointCloud(const sensor_msgs::PointCloud2::ConstPtr msg,
-                                                                                                            const bool  ret_cloud_over_max_range,
-                                                                                                            const float min_range_sq, const float max_range_sq);
+  void removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
+                                   const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range, const float min_range_sq,
+                                   const float max_range_sq);
+
+  std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range,
+                                                             const float min_range_sq, const float max_range_sq);
 
   template <typename T>
   void publishCloud(const ros::Publisher pub, const pcl::PointCloud<T> cloud);
 
   bool hasField(const std::string field, const sensor_msgs::PointCloud2::ConstPtr msg);
-
-  /* void checkSubscribers(const ros::TimerEvent& te); */
 };
 //}
 
