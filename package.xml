@@ -21,6 +21,7 @@
   <depend>mrs_lib</depend>
   <depend>message_generation</depend>
   <depend>dynamic_reconfigure</depend>
+  <depend>os1_driver</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
