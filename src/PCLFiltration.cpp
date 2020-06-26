@@ -1,6 +1,5 @@
 #include "PCLFiltration.h"
 
-
 namespace mrs_pcl_tools
 {
 
@@ -102,7 +101,7 @@ void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg)
 
     std::vector<int> idxs_over_max_range;
 
-    // TODO: Can this if/else be written w/o code repetition?
+    // TODO: Can this if/else be written w/o code repetition? Try std::variant: https://en.cppreference.com/w/cpp/utility/variant
     if (hasField("range", msg)) {
       NODELET_INFO_ONCE("[PCLFiltration] Subscribing Ouster messages. Point type: ouster_ros::OS1::PointOS1.");
 
