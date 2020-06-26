@@ -90,6 +90,9 @@ private:
   void removeCloseAndFarPointCloud(const PCI &cloud_in, PCI &cloud_out, const float min_range_sq, const float max_range_sq);
   void removeCloseAndFarPointCloud(const PCI &cloud_in, PCI &cloud_out, PCI &cloud_out_over_max_range, const float min_range_sq, const float max_range_sq);
 
+  template <typename T>
+  void publishCloud(const ros::Publisher pub, const pcl::PointCloud<T> cloud);
+
   /* void checkSubscribers(const ros::TimerEvent& te); */
 };
 //}

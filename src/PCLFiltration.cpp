@@ -110,26 +110,9 @@ void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg)
     removeCloseAndFarPointCloud(pcl, pcl, pclOverMaxRange, _ouster_min_range_sq, _ouster_max_range_sq);
 
     // Publish
-    if (_pub_ouster.getNumSubscribers() > 0) {
-      try {
-        sensor_msgs::PointCloud2::Ptr msg_out = boost::make_shared<sensor_msgs::PointCloud2>();
-        pcl::toROSMsg(pcl, *msg_out);
-        _pub_ouster.publish(msg_out);
-      }
-      catch (...) {
-        ROS_ERROR("Exception caught during publish of ouster data processed. ");
-      }
-    }
-
-    if (_ouster_pcl2_over_max_range && _pub_ouster_over_max_range.getNumSubscribers() > 0) {
-      try {
-        sensor_msgs::PointCloud2::Ptr msg_over_max_range_out = boost::make_shared<sensor_msgs::PointCloud2>();
-        pcl::toROSMsg(pclOverMaxRange, *msg_over_max_range_out);
-        _pub_ouster_over_max_range.publish(msg_over_max_range_out);
-      }
-      catch (...) {
-        ROS_ERROR("Exception caught during over-range ouster data. ");
-      }
+    publishCloud(_pub_ouster, pcl);
+    if (_ouster_pcl2_over_max_range) {
+      publishCloud(_pub_ouster_over_max_range, pclOverMaxRange);
     }
 
     std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
@@ -184,14 +167,8 @@ void PCLFiltration::realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr m
       vg.filter(*pcPtr);
     }
 
-    // Convert to ROS msg format
-    sensor_msgs::PointCloud2 msg_out;
-    pcl::toROSMsg(*pcPtr, msg_out);
-    msg_out.header = msg->header;
-    if (_realsense_frame.size() > 0) {
-      msg_out.header.frame_id = _realsense_frame;
-    }
-    _pub_realsense.publish(msg_out);
+    // Publish data
+    publishCloud(_pub_realsense, *pcPtr);
 
     std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
     NODELET_INFO_THROTTLE(1.0, "[PCLFiltration] Processed RealSense data (run time: %0.1f ms; points before: %d, after: %ld).", elapsed_ms.count() * 1000,
@@ -302,6 +279,22 @@ void PCLFiltration::removeCloseAndFarPointCloud(const PCI& cloud_in, PCI& cloud_
   cloud_out_over_max_range.height   = 1;
   cloud_out_over_max_range.width    = static_cast<uint32_t>(k);
   cloud_out_over_max_range.is_dense = false;
+}
+/*//}*/
+
+/*//{ publishCloud() */
+template <typename T>
+void PCLFiltration::publishCloud(const ros::Publisher pub, const pcl::PointCloud<T> cloud) {
+  if (pub.getNumSubscribers() > 0) {
+    try {
+      sensor_msgs::PointCloud2::Ptr pcl_msg = boost::make_shared<sensor_msgs::PointCloud2>();
+      pcl::toROSMsg(cloud, *pcl_msg);
+      pub.publish(pcl_msg);
+    }
+    catch (...) {
+      ROS_ERROR("Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+    }
+  }
 }
 /*//}*/
 
