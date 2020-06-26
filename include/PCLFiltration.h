@@ -96,12 +96,14 @@ private:
 
   /* Functions */
   template <typename T>
-  typename pcl::PointCloud<T>::Ptr removeCloseAndFarPointCloudOS1(const sensor_msgs::PointCloud2::ConstPtr msg, std::vector<int> &indices_cloud_over_max_range,
-                                                                  const uint32_t min_range_mm, const uint32_t max_range_mm, const bool filter_intensity,
-                                                                  const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd);
+  std::pair<typename pcl::PointCloud<T>::Ptr, typename pcl::PointCloud<T>::Ptr> removeCloseAndFarPointCloudOS1(
+      const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range, const uint32_t min_range_mm, const uint32_t max_range_mm,
+      const bool filter_intensity, const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd);
+
   template <typename T>
-  typename pcl::PointCloud<T>::Ptr removeCloseAndFarPointCloud(const sensor_msgs::PointCloud2::ConstPtr msg, std::vector<int> &indices_cloud_over_max_range,
-                                                               const float min_range_sq, const float max_range_sq);
+  std::pair<typename pcl::PointCloud<T>::Ptr, typename pcl::PointCloud<T>::Ptr> removeCloseAndFarPointCloud(const sensor_msgs::PointCloud2::ConstPtr msg,
+                                                                                                            const bool  ret_cloud_over_max_range,
+                                                                                                            const float min_range_sq, const float max_range_sq);
 
   template <typename T>
   void publishCloud(const ros::Publisher pub, const pcl::PointCloud<T> cloud);
