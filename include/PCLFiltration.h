@@ -101,8 +101,7 @@ private:
                                                                   const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd);
   template <typename T>
   typename pcl::PointCloud<T>::Ptr removeCloseAndFarPointCloud(const sensor_msgs::PointCloud2::ConstPtr msg, std::vector<int> &indices_cloud_over_max_range,
-                                                               const float min_range_sq, const float max_range_sq, bool filter_intensity,
-                                                               const float filter_intensity_range_sq, const int filter_intensity_thrd);
+                                                               const float min_range_sq, const float max_range_sq);
 
   template <typename T>
   void publishCloud(const ros::Publisher pub, const pcl::PointCloud<T> cloud);
