@@ -118,7 +118,7 @@ void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg)
     std::visit(cloud_visitor, pcl_variant);
 
     if (_ouster_pcl2_over_max_range) {
-      std::visit([&](const auto &pc) { publishCloud(_pub_ouster, *pc); }, pcl_over_max_range_variant);
+      std::visit([&](const auto &pc) { publishCloud(_pub_ouster_over_max_range, *pc); }, pcl_over_max_range_variant);
     }
 
     std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
@@ -216,7 +216,9 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
       cloud->points.at(j++) = cloud->points.at(i);
 
     } else if (ret_cloud_over_max_range) {
+
       cloud_over_max_range->points.at(k++) = cloud->points.at(i);
+
     }
   }
 
