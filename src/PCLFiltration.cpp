@@ -91,7 +91,7 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
 //}
 
 /* ousterCallback() //{ */
-void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg) {
+void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
   if (is_initialized && _ouster_republish) {
 
     std::chrono::time_point<std::chrono::system_clock> start_time = std::chrono::system_clock::now();
@@ -129,7 +129,7 @@ void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg)
 //}
 
 /* realsenseCallback() //{ */
-void PCLFiltration::realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr msg) {
+void PCLFiltration::realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
   if (is_initialized && _realsense_republish) {
     NODELET_INFO_ONCE("[PCLFiltration] Subscribing Realsense messages.");
     std::chrono::time_point<std::chrono::system_clock> start_time = std::chrono::system_clock::now();
@@ -186,12 +186,12 @@ void PCLFiltration::rplidarCallback([[maybe_unused]] const sensor_msgs::LaserSca
 
 /*//{ removeCloseAndFarPointCloud() */
 void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
-                                                const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range, const float min_range_sq,
+                                                const sensor_msgs::PointCloud2::ConstPtr &msg, const bool ret_cloud_over_max_range, const float min_range_sq,
                                                 const float max_range_sq) {
 
   // Convert to pcl object
-  PC_I::Ptr cloud(new PC_I());
-  PC_I::Ptr cloud_over_max_range(new PC_I());
+  PC_I::Ptr cloud                = boost::make_shared<PC_I>();
+  PC_I::Ptr cloud_over_max_range = boost::make_shared<PC_I>();
   pcl::fromROSMsg(*msg, *cloud);
 
   size_t j          = 0;
@@ -218,7 +218,6 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
     } else if (ret_cloud_over_max_range) {
 
       cloud_over_max_range->points.at(k++) = cloud->points.at(i);
-
     }
   }
 
@@ -246,14 +245,15 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
 /*//}*/
 
 /*//{ removeCloseAndFarPointCloudOS1() */
-void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var,
-                                                   std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var, const sensor_msgs::PointCloud2::ConstPtr msg,
-                                                   const bool ret_cloud_over_max_range, const uint32_t min_range_mm, const uint32_t max_range_mm,
-                                                   const bool filter_intensity, const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd) {
+void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &    cloud_var,
+                                                   std::variant<PC_OS1::Ptr, PC_I::Ptr> &    cloud_over_max_range_var,
+                                                   const sensor_msgs::PointCloud2::ConstPtr &msg, const bool ret_cloud_over_max_range,
+                                                   const uint32_t min_range_mm, const uint32_t max_range_mm, const bool filter_intensity,
+                                                   const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd) {
 
   // Convert to pcl object
-  PC_OS1::Ptr cloud(new PC_OS1());
-  PC_OS1::Ptr cloud_over_max_range(new PC_OS1());
+  PC_OS1::Ptr cloud                = boost::make_shared<PC_OS1>();
+  PC_OS1::Ptr cloud_over_max_range = boost::make_shared<PC_OS1>();
   pcl::fromROSMsg(*msg, *cloud);
 
   size_t j          = 0;
@@ -381,7 +381,7 @@ void PCLFiltration::publishCloud(const ros::Publisher pub, const pcl::PointCloud
 /*//}*/
 
 /*//{ hasField() */
-bool PCLFiltration::hasField(const std::string field, const sensor_msgs::PointCloud2::ConstPtr msg) {
+bool PCLFiltration::hasField(const std::string field, const sensor_msgs::PointCloud2::ConstPtr &msg) {
   for (auto f : msg->fields) {
     if (f.name == field) {
       return true;

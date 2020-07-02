@@ -67,7 +67,7 @@ private:
   void callbackReconfigure(mrs_pcl_tools::pcl_filtration_dynparamConfig &config, uint32_t level);
 
   /* Ouster */
-  void     ousterCallback(const sensor_msgs::PointCloud2::ConstPtr msg);
+  void     ousterCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
   bool     _ouster_republish;
   bool     _ouster_pcl2_over_max_range;
   bool     _ouster_filter_intensity_en;
@@ -80,7 +80,7 @@ private:
   uint32_t _ouster_filter_intensity_range_mm;
 
   /* Realsense */
-  void        realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr msg);
+  void        realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
   bool        _realsense_republish;
   bool        _realsense_use_bilateral;
   float       _realsense_min_range_sq;
@@ -98,12 +98,12 @@ private:
 
   /* Functions */
   void removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
-                                      const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range, const uint32_t min_range_mm,
+                                      const sensor_msgs::PointCloud2::ConstPtr &msg, const bool ret_cloud_over_max_range, const uint32_t min_range_mm,
                                       const uint32_t max_range_mm, const bool filter_intensity, const uint32_t filter_intensity_range_mm,
                                       const int filter_intensity_thrd);
 
   void removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
-                                   const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range, const float min_range_sq,
+                                   const sensor_msgs::PointCloud2::ConstPtr &msg, const bool ret_cloud_over_max_range, const float min_range_sq,
                                    const float max_range_sq);
 
   std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range,
@@ -112,7 +112,7 @@ private:
   template <typename T>
   void publishCloud(const ros::Publisher pub, const pcl::PointCloud<T> cloud);
 
-  bool hasField(const std::string field, const sensor_msgs::PointCloud2::ConstPtr msg);
+  bool hasField(const std::string field, const sensor_msgs::PointCloud2::ConstPtr& msg);
 };
 //}
 
