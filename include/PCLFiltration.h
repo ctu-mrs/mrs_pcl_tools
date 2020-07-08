@@ -1,38 +1,14 @@
 #pragma once
 
 /* includes //{ */
-#include <nodelet/nodelet.h>
-#include <ros/ros.h>
-
-#include <chrono>
+#include "common_includes_and_typedefs.h"
 
 #include <variant>
 
-#include <pcl/point_types.h>
-#include <pcl_ros/point_cloud.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/filters/fast_bilateral_omp.h>
-#include <pcl/filters/grid_minimum.h>
-
 #include <sensor_msgs/LaserScan.h>
-
-#include <mrs_lib/param_loader.h>
-
-#include <dynamic_reconfigure/server.h>
-
-#include <os1_driver/ouster_ros/point_os1.h>
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
-//}
-
-/*//{ typedefs */
-typedef pcl::PointXYZ             pt_XYZ;
-typedef pcl::PointXYZI            pt_XYZI;
-typedef ouster_ros::OS1::PointOS1 pt_OS1;
-typedef pcl::PointCloud<pt_XYZ>   PC;
-typedef pcl::PointCloud<pt_XYZI>  PC_I;
-typedef pcl::PointCloud<pt_OS1>   PC_OS1;
 //}
 
 namespace mrs_pcl_tools

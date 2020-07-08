@@ -59,7 +59,7 @@ generate_dynamic_reconfigure_options(
 
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES mrs_pcl_tools 
+  LIBRARIES PCLFiltration 
   CATKIN_DEPENDS roscpp sensor_msgs pcl_ros mrs_lib
   DEPENDS Eigen
 )
@@ -95,15 +95,28 @@ add_definitions(
 # add_definitions(-DPCL_NO_PRECOMPILE)
 
 ## Declare a C++ Library
-add_library(mrs_pcl_tools
+add_library(PCLFiltration
   src/PCLFiltration.cpp
   )
 
-add_dependencies(mrs_pcl_tools mrs_pcl_tools_gencfg)
+add_dependencies(PCLFiltration mrs_pcl_tools_gencfg)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(
-  mrs_pcl_tools ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+  PCLFiltration ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
 )
 
-target_include_directories(mrs_pcl_tools SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
+target_include_directories(PCLFiltration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
+
+# add_library(PCL2MapRegistration
+#   src/Pcl2MapRegistration.cpp
+#   )
+
+# add_dependencies(PCL2MapRegistration PCL2MapRegistration_gencfg)
+
+# ## Specify libraries to link a library or executable target against
+# target_link_libraries(
+#   PCL2MapRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+# )
+
+# target_include_directories(PCL2MapRegistration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})

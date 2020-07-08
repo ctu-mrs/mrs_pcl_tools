@@ -7,6 +7,7 @@
   <arg name="realsense_republish" default="false" />
   <arg name="rplidar_republish" default="false" />
 
+  <arg name="ouster_publish_cloud_over_max_range" default="false" />
   <arg name="ouster_min_range" default="0.45" />
   <arg name="ouster_max_range" default="20.0" />
   <arg name="ouster_filter_intensity_en" default="false" />
@@ -22,7 +23,7 @@
 
       <!-- Parameters -->
       <param name="ouster/republish" type="bool" value="$(arg ouster_republish)" />
-      <param name="ouster/pcl2_over_max_range" type="bool" value="false" />
+      <param name="ouster/pcl2_over_max_range" type="bool" value="$(arg ouster_publish_cloud_over_max_range)" />
       <param name="ouster/min_range" type="double" value="$(arg ouster_min_range)" />
       <param name="ouster/max_range" type="double" value="$(arg ouster_max_range)" />
       <param name="ouster/filter/intensity/enable" type="bool" value="$(arg ouster_filter_intensity_en)" />
