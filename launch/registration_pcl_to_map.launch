@@ -1,0 +1,29 @@
+<launch>
+
+  <!-- Filtration parameters -->
+  <arg name="UAV_NAME" default="$(env UAV_NAME)" />
+
+  <arg name="map" default="$(find naki_gazebo_resources)/models/stara_voda/pcd/stara_voda.pcd" />
+  <arg name="pcl" default="$(find naki_gazebo_resources)/models/stara_voda/pcd/stara_voda_aloam_full.pcd" />
+
+  <arg name="nodelet" default="standalone" />
+  <arg name="nodelet_manager" default="" />
+  <arg name="launch_prefix" default=""/>
+
+  <group ns="$(arg UAV_NAME)">
+    <node pkg="nodelet" type="nodelet" name="pcl_to_map_registration" args="$(arg nodelet) mrs_pcl_tools/PCL2MapRegistration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
+
+      <!-- Parameters -->
+      <param name="map" type="string" value="$(arg map)" />
+      <param name="pcl" type="string" value="$(arg pcl)" />
+
+      <!-- Subscribers -->
+      <!-- <remap from="~ouster_in" to="os1_cloud_node/points" /> -->
+
+      <!-- Publishers -->
+      <!-- <remap from="~ouster_out" to="os1_cloud_node/points_processed" /> -->
+
+    </node>
+  </group>
+
+</launch>

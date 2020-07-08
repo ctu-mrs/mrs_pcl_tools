@@ -1,7 +1,18 @@
-<library path="lib/libmrs_pcl_tools">
+<library path="lib/libPCLFiltration">
+
   <class name="mrs_pcl_tools/PCLFiltration" type="mrs_pcl_tools::PCLFiltration" base_class_type="nodelet::Nodelet">
     <description>
-     Nodelet for mrs pointcloud filtration. 
+        Nodelet for mrs pointcloud filtration. 
     </description>
   </class>
+
+</library>
+
+<library path="lib/libPCL2MapRegistration">
+  <class name="mrs_pcl_tools/PCL2MapRegistration" type="mrs_pcl_tools::PCL2MapRegistration" base_class_type="nodelet::Nodelet">
+    <description>
+        Nodelet for mrs pointcloud registration to a priori map. 
+    </description>
+  </class>
+
 </library>

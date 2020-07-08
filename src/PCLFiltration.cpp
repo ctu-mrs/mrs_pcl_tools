@@ -393,5 +393,4 @@ bool PCLFiltration::hasField(const std::string field, const sensor_msgs::PointCl
 
 }  // namespace mrs_pcl_tools
 
-#include <pluginlib/class_list_macros.h>
 PLUGINLIB_EXPORT_CLASS(mrs_pcl_tools::PCLFiltration, nodelet::Nodelet);
