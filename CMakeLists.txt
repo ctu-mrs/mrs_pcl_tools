@@ -51,6 +51,7 @@ ENDIF()
 
 generate_dynamic_reconfigure_options(
   cfg/pcl_filtration_dynparam.cfg
+  cfg/pcl2map_registration_dynparam.cfg
 )
 
 ###################################
@@ -114,7 +115,7 @@ add_library(PCL2MapRegistration
   src/PCL2MapRegistration.cpp
   )
 
-# add_dependencies(PCL2MapRegistration PCL2MapRegistration_gencfg)
+add_dependencies(PCL2MapRegistration mrs_pcl_tools_gencfg)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(
