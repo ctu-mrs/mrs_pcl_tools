@@ -31,10 +31,11 @@
 //}
 
 /*//{ typedefs */
-typedef pcl::PointXYZ             pt_XYZ;
-typedef pcl::PointXYZI            pt_XYZI;
-typedef ouster_ros::OS1::PointOS1 pt_OS1;
-typedef pcl::PointCloud<pt_XYZ>   PC;
-typedef pcl::PointCloud<pt_XYZI>  PC_I;
-typedef pcl::PointCloud<pt_OS1>   PC_OS1;
+typedef pcl::PointXYZ                pt_XYZ;
+typedef pcl::PointXYZI               pt_XYZI;
+typedef ouster_ros::OS1::PointOS1    pt_OS1;
+typedef pcl::PointCloud<pt_XYZ>      PC;
+typedef pcl::PointCloud<pt_XYZI>     PC_I;
+typedef pcl::PointCloud<pcl::Normal> PC_NORM;
+typedef pcl::PointCloud<pt_OS1>      PC_OS1;
 //}

@@ -28,6 +28,9 @@ void PCL2MapRegistration::onInit() {
   _pc_map  = load_pc(path_map);
   _pc_slam = load_pc(path_pcl);
 
+  _pc_map_normals  = boost::make_shared<PC_NORM>();
+  _map_has_normals = load_pc_normals(path_map, _pc_map_normals);
+
   pcl::toROSMsg(*_pc_map, *_pc_map_msg);
   pcl::toROSMsg(*_pc_slam, *_pc_slam_msg);
 
@@ -149,11 +152,12 @@ std::tuple<bool, float, Eigen::Matrix4f, PC::Ptr> PCL2MapRegistration::pcl2map_n
 /*//}*/
 
 /*//{ load_pc() */
-PC::Ptr PCL2MapRegistration::load_pc(std::string path) {
+PC::Ptr PCL2MapRegistration::load_pc(const std::string &path) {
+
   PC::Ptr pc = boost::make_shared<PC>();
 
   ROS_INFO("[PCL2MapRegistration] Reading pointcloud from path %s", path.c_str());
-  if (pcl::io::loadPCDFile<pt_XYZ>(path, *pc) == -1) {
+  if (pcl::io::loadPCDFile<pt_XYZ>(path, *pc) < 0) {
     ROS_ERROR("[PCL2MapRegistration] Couldn't read PCD file from path: %s.", path.c_str());
     ros::shutdown();
   } else {
@@ -161,6 +165,44 @@ PC::Ptr PCL2MapRegistration::load_pc(std::string path) {
   }
 
   return pc;
+}
+/*//}*/
+
+/*//{ load_pc_normals() */
+bool PCL2MapRegistration::load_pc_normals(const std::string &path, PC_NORM::Ptr &cloud) {
+  ROS_INFO("[PCL2MapRegistration] Reading normals of pointcloud from path %s", path.c_str());
+
+  // Read header of PCD file
+  pcl::PCDReader      reader_pcd;
+  pcl::PCLPointCloud2 pc_fields;
+  if (reader_pcd.readHeader(path, pc_fields) < 0) {
+    ROS_ERROR("[PCL2MapRegistration] Couldn't read header of PCD file: %s.", path.c_str());
+    return false;
+  }
+
+  // Check header for normals (normal_x, normal_y, normal_z, curvature)
+  unsigned int normal_fields   = 0;
+  bool         curvature_field = false;
+  for (auto field : pc_fields.fields) {
+    if (field.name.rfind("normal", 0) == 0) {
+      normal_fields++;
+    } else if (field.name == "curvature") {
+      curvature_field = true;
+    }
+  }
+  if (normal_fields != 3 || !curvature_field) {
+    ROS_WARN("[PCL2MapRegistration] No normals in PCD file at path: %s.", path.c_str());
+    return false;
+  }
+
+  // Load PCD file
+  if (reader_pcd.read(path, *cloud) < 0) {
+    ROS_ERROR("[PCL2MapRegistration] Couldn't read normals of PCD file: %s.", path.c_str());
+    return false;
+  }
+
+  ROS_INFO("[PCL2MapRegistration] Loaded PCL normals with %ld points.", cloud->points.size());
+  return true;
 }
 /*//}*/
 

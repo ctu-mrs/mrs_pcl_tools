@@ -49,12 +49,16 @@ private:
   typedef dynamic_reconfigure::Server<Config>                ReconfigureServer;
   boost::shared_ptr<ReconfigureServer>                       reconfigure_server_;
 
-  PC::Ptr                       _pc_map;
-  PC::Ptr                       _pc_slam;
+  PC::Ptr      _pc_map;
+  PC::Ptr      _pc_slam;
+  PC_NORM::Ptr _pc_map_normals;
+  bool         _map_has_normals;
+
   sensor_msgs::PointCloud2::Ptr _pc_map_msg  = boost::make_shared<sensor_msgs::PointCloud2>();
   sensor_msgs::PointCloud2::Ptr _pc_slam_msg = boost::make_shared<sensor_msgs::PointCloud2>();
 
-  PC::Ptr load_pc(std::string path);
+  PC::Ptr load_pc(const std::string &path);
+  bool    load_pc_normals(const std::string &path, PC_NORM::Ptr &cloud);
 
   void callbackRegistration([[maybe_unused]] const ros::TimerEvent &event);
   void callbackReconfigure(Config &config, [[maybe_unused]] uint32_t level);
