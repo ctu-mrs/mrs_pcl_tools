@@ -3,16 +3,22 @@
   <!-- Filtration parameters -->
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
 
-  <arg name="ouster_republish" default="true" />
-  <arg name="realsense_republish" default="false" />
+  <arg name="lidar3d_republish" default="true" />
+  <arg name="depth_republish" default="true" />
   <arg name="rplidar_republish" default="false" />
 
-  <arg name="ouster_publish_cloud_over_max_range" default="false" />
-  <arg name="ouster_min_range" default="0.45" />
-  <arg name="ouster_max_range" default="20.0" />
-  <arg name="ouster_filter_intensity_en" default="false" />
-  <arg name="ouster_filter_intensity_thrd" default="100" />
-  <arg name="ouster_filter_intensity_range" default="10.0" />
+  <arg name="lidar3d_publish_cloud_over_max_range" default="false" />
+  <arg name="lidar3d_min_range" default="0.45" />
+  <arg name="lidar3d_max_range" default="20.0" />
+  <arg name="lidar3d_filter_intensity_en" default="false" />
+  <arg name="lidar3d_filter_intensity_thrd" default="100" />
+  <arg name="lidar3d_filter_intensity_range" default="10.0" />
+  
+  <arg name="depth_publish_cloud_over_max_range" default="false" />
+  <arg name="depth_min_range" default="0.4" />
+  <arg name="depth_max_range" default="5.0" />
+  <arg name="depth_voxel_resolution" default="0.05" />
+  <arg name="depth_minimum_grid_resolution" default="0.0" />
 
   <arg name="nodelet" default="standalone" />
   <arg name="nodelet_manager" default="" />
@@ -22,39 +28,50 @@
     <node pkg="nodelet" type="nodelet" name="pcl_filtration" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
 
       <!-- Parameters -->
-      <param name="ouster/republish" type="bool" value="$(arg ouster_republish)" />
-      <param name="ouster/pcl2_over_max_range" type="bool" value="$(arg ouster_publish_cloud_over_max_range)" />
-      <param name="ouster/min_range" type="double" value="$(arg ouster_min_range)" />
-      <param name="ouster/max_range" type="double" value="$(arg ouster_max_range)" />
-      <param name="ouster/filter/intensity/enable" type="bool" value="$(arg ouster_filter_intensity_en)" />
-      <param name="ouster/filter/intensity/threshold" type="int" value="$(arg ouster_filter_intensity_thrd)" />
-      <param name="ouster/filter/intensity/range" type="double" value="$(arg ouster_filter_intensity_range)" />
+      <param name="lidar3d/republish" type="bool" value="$(arg lidar3d_republish)" />
+      <param name="lidar3d/pcl2_over_max_range" type="bool" value="$(arg lidar3d_publish_cloud_over_max_range)" />
+      <param name="lidar3d/min_range" type="double" value="$(arg lidar3d_min_range)" />
+      <param name="lidar3d/max_range" type="double" value="$(arg lidar3d_max_range)" />
+      <param name="lidar3d/filter/intensity/enable" type="bool" value="$(arg lidar3d_filter_intensity_en)" />
+      <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d_filter_intensity_thrd)" />
+      <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d_filter_intensity_range)" />
 
-      <param name="realsense/republish" type="bool" value="$(arg realsense_republish)" />
-      <param name="realsense/voxel_resolution" type="double" value="0.0" />
-      <param name="realsense/min_range" type="double" value="0.4" />
-      <param name="realsense/max_range" type="double" value="5.0" />
-      <param name="realsense/minimum_grid_resolution" type="double" value="0.03" />
-      <param name="realsense/use_bilateral" type="bool" value="false" />
-      <param name="realsense/bilateral_sigma_S" type="double" value="5.0" />
-      <param name="realsense/bilateral_sigma_R" type="double" value="5e-3" />
-      <param name="realsense/frame" type="string" value="depth/optical" />
+      <param name="depth/republish" type="bool" value="$(arg depth_republish)" />
+      <param name="depth/pcl2_over_max_range" type="bool" value="$(arg depth_publish_cloud_over_max_range)" />
+      <param name="depth/min_range" type="double" value="$(arg depth_min_range)" />
+      <param name="depth/max_range" type="double" value="$(arg depth_max_range)" />
+      <param name="depth/voxel_resolution" type="double" value="$(arg depth_voxel_resolution)" />
+      <param name="depth/minimum_grid_resolution" type="double" value="$(arg depth_minimum_grid_resolution)" />
+      <param name="depth/use_bilateral" type="bool" value="false" />
+      <param name="depth/bilateral_sigma_S" type="double" value="5.0" />
+      <param name="depth/bilateral_sigma_R" type="double" value="5e-3" />
 
       <param name="rplidar/republish" type="bool" value="$(arg rplidar_republish)" />
       <param name="rplidar/voxel_resolution" type="double" value="0.05" />
 
       <!-- Subscribers -->
-      <remap from="~ouster_in" to="os1_cloud_node/points" />
-      <remap from="~realsense_in" to="rs_d435/pointcloud" />
+      <remap from="~lidar3d_in" to="os1_cloud_node/points" />
+      <remap from="~depth_in" to="rs_d435/points" />
       <remap from="~rplidar_in" to="rplidar/scan_raw" />
 
       <!-- Publishers -->
-      <remap from="~ouster_out" to="os1_cloud_node/points_processed" />
-      <remap from="~ouster_over_max_range_out" to="os1_cloud_node/points_over_max_range" />
-      <remap from="~realsense_out" to="rs_d435/pointcloud_processed" />
+      <remap from="~lidar3d_out" to="os1_cloud_node/points_processed" />
+      <remap from="~lidar3d_over_max_range_out" to="os1_cloud_node/points_over_max_range" />
+      <remap from="~depth_out" to="rs_d435/points_processed" />
+      <remap from="~depth_over_max_range_out" to="rs_d435/points_over_max_range" />
       <remap from="~rplidar_out" to="rplidar/scan_processed" />
 
     </node>
+
+    <!-- Convert depth image to point cloud -->
+    <node if="$(arg depth_republish)" pkg="nodelet" type="nodelet" name="depth2cloud" args="$(arg nodelet) depth_image_proc/point_cloud_xyz $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
+      <!-- Subscribers -->
+      <remap from="camera_info" to="rs_d435/aligned_depth_to_color/camera_info"/>
+      <remap from="image_rect" to="rs_d435/aligned_depth_to_color/image_raw"/>
+      <!-- Publishers -->
+      <remap from="points" to="rs_d435/points"/>
+    </node>
+
   </group>
 
 </launch>

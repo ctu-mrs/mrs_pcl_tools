@@ -23,13 +23,14 @@ public:
 private:
   bool is_initialized = false;
 
-  ros::Subscriber _sub_ouster;
-  ros::Subscriber _sub_realsense;
+  ros::Subscriber _sub_lidar3d;
+  ros::Subscriber _sub_depth;
   ros::Subscriber _sub_rplidar;
 
-  ros::Publisher _pub_ouster;
-  ros::Publisher _pub_ouster_over_max_range;
-  ros::Publisher _pub_realsense;
+  ros::Publisher _pub_lidar3d;
+  ros::Publisher _pub_lidar3d_over_max_range;
+  ros::Publisher _pub_depth;
+  ros::Publisher _pub_depth_over_max_range;
   ros::Publisher _pub_rplidar;
 
   ros::Timer _timer_check_subscribers;
@@ -42,30 +43,30 @@ private:
 
   void callbackReconfigure(mrs_pcl_tools::pcl_filtration_dynparamConfig &config, uint32_t level);
 
-  /* Ouster */
-  void     ousterCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
-  bool     _ouster_republish;
-  bool     _ouster_pcl2_over_max_range;
-  bool     _ouster_filter_intensity_en;
-  float    _ouster_min_range_sq;
-  float    _ouster_max_range_sq;
-  float    _ouster_filter_intensity_range_sq;
-  int      _ouster_filter_intensity_thrd;
-  uint32_t _ouster_min_range_mm;
-  uint32_t _ouster_max_range_mm;
-  uint32_t _ouster_filter_intensity_range_mm;
+  /* 3D LIDAR */
+  void     lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
+  bool     _lidar3d_republish;
+  bool     _lidar3d_pcl2_over_max_range;
+  bool     _lidar3d_filter_intensity_en;
+  float    _lidar3d_min_range_sq;
+  float    _lidar3d_max_range_sq;
+  float    _lidar3d_filter_intensity_range_sq;
+  int      _lidar3d_filter_intensity_thrd;
+  uint32_t _lidar3d_min_range_mm;
+  uint32_t _lidar3d_max_range_mm;
+  uint32_t _lidar3d_filter_intensity_range_mm;
 
-  /* Realsense */
-  void        realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
-  bool        _realsense_republish;
-  bool        _realsense_use_bilateral;
-  float       _realsense_min_range_sq;
-  float       _realsense_max_range_sq;
-  float       _realsense_minimum_grid_resolution;
-  float       _realsense_bilateral_sigma_S;
-  float       _realsense_bilateral_sigma_R;
-  float       _realsense_voxel_resolution;
-  std::string _realsense_frame;
+  /* Depth camera */
+  void        depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
+  bool        _depth_republish;
+  bool        _depth_pcl2_over_max_range;
+  bool        _depth_use_bilateral;
+  float       _depth_min_range_sq;
+  float       _depth_max_range_sq;
+  float       _depth_minimum_grid_resolution;
+  float       _depth_bilateral_sigma_S;
+  float       _depth_bilateral_sigma_R;
+  float       _depth_voxel_resolution;
 
   /* RPLidar */
   void  rplidarCallback(const sensor_msgs::LaserScan::ConstPtr msg);
@@ -82,13 +83,13 @@ private:
                                    const sensor_msgs::PointCloud2::ConstPtr &msg, const bool ret_cloud_over_max_range, const float min_range_sq,
                                    const float max_range_sq);
 
-  std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range,
+  std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool ret_cloud_over_max_range,
                                                              const float min_range_sq, const float max_range_sq);
 
   template <typename T>
   void publishCloud(const ros::Publisher pub, const pcl::PointCloud<T> cloud);
 
-  bool hasField(const std::string field, const sensor_msgs::PointCloud2::ConstPtr& msg);
+  bool hasField(const std::string field, const sensor_msgs::PointCloud2::ConstPtr &msg);
 };
 //}
 
