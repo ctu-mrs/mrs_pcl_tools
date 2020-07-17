@@ -4,9 +4,10 @@
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
 
   <arg name="lidar3d_republish" default="true" />
-  <arg name="depth_republish" default="true" />
+  <arg name="depth_republish" default="false" />
   <arg name="rplidar_republish" default="false" />
 
+  <arg name="lidar3d_topic_in" default="os1_cloud_node/points" />
   <arg name="lidar3d_publish_cloud_over_max_range" default="false" />
   <arg name="lidar3d_min_range" default="0.45" />
   <arg name="lidar3d_max_range" default="20.0" />
@@ -14,6 +15,10 @@
   <arg name="lidar3d_filter_intensity_thrd" default="100" />
   <arg name="lidar3d_filter_intensity_range" default="10.0" />
   
+  <arg name="depth_topic_in" default="rs_d435/points" />
+  <arg name="depth_image_format" default="true" doc="if depth data come in sensor_msgs/Image format" />
+  <arg name="depth_image_rect_in" default="rs_d435/aligned_depth_to_color/image_raw" />
+  <arg name="depth_image_camera_info_in" default="rs_d435/aligned_depth_to_color/camera_info" />
   <arg name="depth_publish_cloud_over_max_range" default="false" />
   <arg name="depth_min_range" default="0.4" />
   <arg name="depth_max_range" default="5.0" />
@@ -50,26 +55,29 @@
       <param name="rplidar/voxel_resolution" type="double" value="0.05" />
 
       <!-- Subscribers -->
-      <remap from="~lidar3d_in" to="os1_cloud_node/points" />
-      <remap from="~depth_in" to="rs_d435/points" />
+      <remap from="~lidar3d_in" to="$(arg lidar3d_topic_in)" />
+      <remap from="~depth_in" to="$(arg depth_topic_in)" />
       <remap from="~rplidar_in" to="rplidar/scan_raw" />
 
       <!-- Publishers -->
-      <remap from="~lidar3d_out" to="os1_cloud_node/points_processed" />
-      <remap from="~lidar3d_over_max_range_out" to="os1_cloud_node/points_over_max_range" />
-      <remap from="~depth_out" to="rs_d435/points_processed" />
-      <remap from="~depth_over_max_range_out" to="rs_d435/points_over_max_range" />
+      <remap from="~lidar3d_out" to="$(arg lidar3d_topic_in)_processed" />
+      <remap from="~lidar3d_over_max_range_out" to="$(arg lidar3d_topic_in)_over_max_range" />
+      <remap from="~depth_out" to="$(arg depth_topic_in)_processed" />
+      <remap from="~depth_over_max_range_out" to="$(arg depth_topic_in)_over_max_range" />
       <remap from="~rplidar_out" to="rplidar/scan_processed" />
 
     </node>
 
     <!-- Convert depth image to point cloud -->
-    <node if="$(arg depth_republish)" pkg="nodelet" type="nodelet" name="depth2cloud" args="$(arg nodelet) depth_image_proc/point_cloud_xyz $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
+    <node if="$(eval arg('depth_republish') and arg('depth_image_format'))" pkg="nodelet" type="nodelet" name="depth2cloud" args="$(arg nodelet) depth_image_proc/point_cloud_xyz $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
+
       <!-- Subscribers -->
-      <remap from="camera_info" to="rs_d435/aligned_depth_to_color/camera_info"/>
-      <remap from="image_rect" to="rs_d435/aligned_depth_to_color/image_raw"/>
+      <remap from="camera_info" to="$(arg depth_image_camera_info_in)"/>
+      <remap from="image_rect" to="$(arg depth_image_rect_in)"/>
+
       <!-- Publishers -->
-      <remap from="points" to="rs_d435/points"/>
+      <remap from="points" to="$(arg depth_topic_in)"/>
+
     </node>
 
   </group>
