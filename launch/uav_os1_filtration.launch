@@ -14,7 +14,7 @@
   <arg name="lidar3d_filter_intensity_en" default="false" />
   <arg name="lidar3d_filter_intensity_thrd" default="100" />
   <arg name="lidar3d_filter_intensity_range" default="10.0" />
-  
+
   <arg name="depth_topic_in" default="rs_d435/points" />
   <arg name="depth_image_format" default="true" doc="if depth data come in sensor_msgs/Image format" />
   <arg name="depth_image_rect_in" default="rs_d435/aligned_depth_to_color/image_raw" />
@@ -24,6 +24,8 @@
   <arg name="depth_max_range" default="5.0" />
   <arg name="depth_voxel_resolution" default="0.05" />
   <arg name="depth_minimum_grid_resolution" default="0.0" />
+  <arg name="depth_radius_outlier_radius" default="0.0" />
+  <arg name="depth_radius_outlier_neighbors" default="0" />
 
   <arg name="nodelet" default="standalone" />
   <arg name="nodelet_manager" default="" />
@@ -50,6 +52,8 @@
       <param name="depth/use_bilateral" type="bool" value="false" />
       <param name="depth/bilateral_sigma_S" type="double" value="5.0" />
       <param name="depth/bilateral_sigma_R" type="double" value="5e-3" />
+      <param name="depth/radius_outlier_filter/radius" type="double" value="$(arg depth_radius_outlier_radius)" />
+      <param name="depth/radius_outlier_filter/neighbors" type="int" value="$(arg depth_radius_outlier_neighbors)" />
 
       <param name="rplidar/republish" type="bool" value="$(arg rplidar_republish)" />
       <param name="rplidar/voxel_resolution" type="double" value="0.05" />

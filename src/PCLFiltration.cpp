@@ -38,8 +38,11 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("depth/use_bilateral", _depth_use_bilateral, false);
   param_loader.loadParam("depth/bilateral_sigma_S", _depth_bilateral_sigma_S, 5.0f);
   param_loader.loadParam("depth/bilateral_sigma_R", _depth_bilateral_sigma_R, 5e-3f);
+  param_loader.loadParam("depth/radius_outlier_filter/radius", _depth_radius_outlier_filter_radius, 0.0f);
+  param_loader.loadParam("depth/radius_outlier_filter/neighbors", _depth_radius_outlier_filter_neighbors, 0);
   _depth_min_range_sq *= _depth_min_range_sq;
   _depth_max_range_sq *= _depth_max_range_sq;
+  _depth_use_radius_outlier_filter = _depth_radius_outlier_filter_radius > 0.0f && _depth_radius_outlier_filter_neighbors > 0;
 
   /* RPLidar */
   param_loader.loadParam("rplidar/republish", _rplidar_republish, false);
@@ -148,6 +151,16 @@ void PCLFiltration::depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg)
       vg.setInputCloud(pcl);
       vg.setLeafSize(_depth_voxel_resolution, _depth_voxel_resolution, _depth_voxel_resolution);
       vg.filter(*pcl);
+    }
+
+    // Radius outlier filter
+    if (_depth_use_radius_outlier_filter) {
+      pcl::RadiusOutlierRemoval<pt_XYZ> outrem;
+      outrem.setInputCloud(pcl);
+      outrem.setRadiusSearch(_depth_radius_outlier_filter_radius);
+      outrem.setMinNeighborsInRadius(_depth_radius_outlier_filter_neighbors);
+      outrem.setKeepOrganized(true);
+      outrem.filter(*pcl);
     }
 
     // Bilateral filter
@@ -368,7 +381,7 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const 
     if (k != cloud_size) {
       cloud_over_max_range->points.resize(k);
     }
-    cloud_over_max_range->header = cloud->header;
+    cloud_over_max_range->header   = cloud->header;
     cloud_over_max_range->height   = 1;
     cloud_over_max_range->width    = static_cast<uint32_t>(k);
     cloud_over_max_range->is_dense = false;

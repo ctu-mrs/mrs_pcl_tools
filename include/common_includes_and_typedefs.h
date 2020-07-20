@@ -15,6 +15,7 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/fast_bilateral_omp.h>
 #include <pcl/filters/grid_minimum.h>
+#include <pcl/filters/radius_outlier_removal.h>
 
 // mrs_lib
 #include <mrs_lib/param_loader.h>
