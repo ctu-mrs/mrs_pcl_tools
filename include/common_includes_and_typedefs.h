@@ -7,6 +7,8 @@
 #include <pluginlib/class_list_macros.h>
 
 // timing
+#include <ctime>
+#include <cstdlib>
 #include <chrono>
 
 // pcl
@@ -31,11 +33,42 @@
 //}
 
 /*//{ typedefs */
-typedef pcl::PointXYZ                pt_XYZ;
-typedef pcl::PointXYZI               pt_XYZI;
-typedef ouster_ros::OS1::PointOS1    pt_OS1;
-typedef pcl::PointCloud<pt_XYZ>      PC;
-typedef pcl::PointCloud<pt_XYZI>     PC_I;
-typedef pcl::PointCloud<pcl::Normal> PC_NORM;
-typedef pcl::PointCloud<pt_OS1>      PC_OS1;
+
+typedef pcl::PointXYZ             pt_XYZ;
+typedef pcl::PointXYZI            pt_XYZI;
+typedef pcl::PointNormal          pt_NORM;
+typedef ouster_ros::OS1::PointOS1 pt_OS1;
+typedef pcl::PointCloud<pt_XYZ>   PC;
+typedef pcl::PointCloud<pt_XYZI>  PC_I;
+typedef pcl::PointCloud<pt_NORM>  PC_NORM;
+typedef pcl::PointCloud<pt_OS1>   PC_OS1;
+
 //}
+
+
+/*//{ class TicToc */
+
+class TicToc {
+public:
+  TicToc() {
+    tic();
+  }
+
+  void tic() {
+    start = std::chrono::system_clock::now();
+  }
+
+  double toc() {
+    std::chrono::duration<double> elapsed_seconds = std::chrono::system_clock::now() - start;
+    return elapsed_seconds.count() * 1000;
+  }
+
+  void toc_print(const std::string text) {
+    ROS_INFO("%s: %0.2f ms", text.c_str(), toc());
+  }
+
+private:
+  std::chrono::time_point<std::chrono::system_clock> start;
+};
+
+/*//}*/
