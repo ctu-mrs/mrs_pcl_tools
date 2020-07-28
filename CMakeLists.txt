@@ -20,11 +20,17 @@ find_package(catkin REQUIRED COMPONENTS
     roscpp
     nodelet
     message_generation
+    std_msgs
     sensor_msgs
+    geometry_msgs
     pcl_ros
     mrs_lib
     dynamic_reconfigure
     os1_driver
+)
+
+add_service_files(DIRECTORY srv/registration FILES
+  SrvRegisterPointCloud2.srv
 )
 
 find_package(PCL REQUIRED COMPONENTS)
@@ -53,6 +59,7 @@ generate_dynamic_reconfigure_options(
   cfg/pcl_filtration_dynparam.cfg
   cfg/pcl2map_registration_dynparam.cfg
 )
+generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 
 ###################################
 ## catkin specific configuration ##
@@ -61,7 +68,7 @@ generate_dynamic_reconfigure_options(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES PCLFiltration PCL2MapRegistration
-  CATKIN_DEPENDS roscpp sensor_msgs pcl_ros mrs_lib
+  CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs pcl_ros mrs_lib
   DEPENDS Eigen
 )
 
@@ -101,7 +108,7 @@ add_library(PCLFiltration
   src/PCLFiltration.cpp
   )
 
-add_dependencies(PCLFiltration mrs_pcl_tools_gencfg)
+add_dependencies(PCLFiltration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(
@@ -115,7 +122,7 @@ add_library(PCL2MapRegistration
   src/PCL2MapRegistration.cpp
   )
 
-add_dependencies(PCL2MapRegistration mrs_pcl_tools_gencfg)
+add_dependencies(PCL2MapRegistration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(

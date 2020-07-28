@@ -46,7 +46,8 @@ void PCL2MapRegistration::onInit() {
   NODELET_INFO_ONCE("[PCL2MapRegistration] Nodelet initialized");
 
   /* _timer_registration = nh.createTimer(ros::Duration(_registration_period), &PCL2MapRegistration::callbackRegistration, this, true, false); */
-  _srv_server_registration = nh.advertiseService("srv_register", &PCL2MapRegistration::callbackSrvRegister, this);
+  _srv_server_registration_offline     = nh.advertiseService("srv_register_offline", &PCL2MapRegistration::callbackSrvRegisterOffline, this);
+  _srv_server_registration_pointcloud2 = nh.advertiseService("srv_register_online", &PCL2MapRegistration::callbackSrvRegisterPointCloud2, this);
 
   is_initialized = true;
 }
@@ -66,7 +67,7 @@ void PCL2MapRegistration::callbackRegistration([[maybe_unused]] const ros::Timer
     applyVoxelGridFilter(pc_map_filt, _pc_map, _clouds_voxel_leaf);
     applyVoxelGridFilter(pc_slam_filt, _pc_slam, _clouds_voxel_leaf);
   }
-  matchPcCenters(pc_slam_filt, pc_map_filt);
+  correlateCloudToCloud(pc_slam_filt, pc_map_filt);
 
   // Publish data
   std::uint64_t stamp;
@@ -83,8 +84,8 @@ void PCL2MapRegistration::callbackRegistration([[maybe_unused]] const ros::Timer
 }
 /*//}*/
 
-/* callbackSrvRegister() //{*/
-bool PCL2MapRegistration::callbackSrvRegister([[maybe_unused]] std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res) {
+/* callbackSrvRegisterOffline() //{*/
+bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res) {
   if (!is_initialized) {
     res.success = false;
     res.message = "Registration unitialized.";
@@ -98,8 +99,11 @@ bool PCL2MapRegistration::callbackSrvRegister([[maybe_unused]] std_srvs::Trigger
     std::scoped_lock lock(_mutex_registration);
     applyVoxelGridFilter(pc_map_filt, _pc_map, _clouds_voxel_leaf);
     applyVoxelGridFilter(pc_slam_filt, _pc_slam, _clouds_voxel_leaf);
+
+    // for debugging: apply random translation on the slam pc
+    applyRandomTransformation(pc_slam_filt);
   }
-  matchPcCenters(pc_slam_filt, pc_map_filt);
+  correlateCloudToCloud(pc_slam_filt, pc_map_filt);
 
   // Publish data
   std::uint64_t stamp;
@@ -112,16 +116,66 @@ bool PCL2MapRegistration::callbackSrvRegister([[maybe_unused]] std_srvs::Trigger
   publishCloud(_pub_cloud_target, pc_map_filt);
 
   // Register given pc to map cloud
-  std::pair<bool, std::string> ret = registerCloudToCloud(pc_slam_filt, pc_map_filt);
-  res.success                      = ret.first;
-  res.message                      = ret.second;
+  /* std::tie(res.success, res.message, std::ignore) = registerCloudToCloud(pc_slam_filt, pc_map_filt); */
+  std::tie(res.success, res.message, std::ignore) = registerCloudToCloudSampledHeading(pc_slam_filt, pc_map_filt);
+
+  return res.success;
+}
+/*//}*/
+
+/* callbackSrvRegisterPointCloud2() //{*/
+bool PCL2MapRegistration::callbackSrvRegisterPointCloud2(mrs_pcl_tools::SrvRegisterPointCloud2::Request & req,
+                                                         mrs_pcl_tools::SrvRegisterPointCloud2::Response &res) {
+  if (!is_initialized) {
+    res.success = false;
+    res.message = "Registration unitialized.";
+    return false;
+  }
+
+  // Preprocess data
+  PC_NORM::Ptr pc_map_filt  = boost::make_shared<PC_NORM>();
+  PC_NORM::Ptr pc_slam_filt = boost::make_shared<PC_NORM>();
+  PC_NORM::Ptr pc_slam      = boost::make_shared<PC_NORM>();
+  pcl::fromROSMsg(req.cloud, *pc_slam);
+  {
+    std::scoped_lock lock(_mutex_registration);
+    applyVoxelGridFilter(pc_map_filt, _pc_map, _clouds_voxel_leaf);
+  }
+  applyVoxelGridFilter(pc_slam_filt, pc_slam, _clouds_voxel_leaf);
+  correlateCloudToCloud(pc_slam_filt, pc_map_filt);
+
+  // Publish data
+  std::uint64_t stamp;
+  pcl_conversions::toPCL(ros::Time::now(), stamp);
+  pc_slam_filt->header.stamp    = stamp;
+  pc_slam_filt->header.frame_id = _frame_map;
+  pc_map_filt->header.stamp     = stamp;
+  pc_map_filt->header.frame_id  = _frame_map;
+  publishCloud(_pub_cloud_source, pc_slam_filt);
+  publishCloud(_pub_cloud_target, pc_map_filt);
+
+  // Register given pc to map cloud
+  Eigen::Matrix4f T;
+  std::tie(res.success, res.message, T) = registerCloudToCloud(pc_slam_filt, pc_map_filt);
+
+  // Convert transformation T to geometry_msgs/Pose
+  if (res.success) {
+    geometry_msgs::Pose              pose;
+    const Eigen::Matrix3d            R = T.block<3, 3>(0, 0).cast<double>();
+    const mrs_lib::AttitudeConverter atti(R);
+    pose.orientation   = atti;
+    pose.position.x    = T(0, 3);
+    pose.position.y    = T(1, 3);
+    pose.position.z    = T(2, 3);
+    res.transformation = pose;
+  }
 
   return res.success;
 }
 /*//}*/
 
 /*//{ registerCloudToCloud() */
-std::pair<bool, std::string> PCL2MapRegistration::registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
+std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
   bool            converged;
   float           score;
   Eigen::Matrix4f T_init;
@@ -150,18 +204,19 @@ std::pair<bool, std::string> PCL2MapRegistration::registerCloudToCloud(const PC_
     default:
       ROS_ERROR("[PCL2MapRegistration] Unknown registration (initial) method of type: %d. Allowed: {0=FPFH, 1=NDT, 2=GICP, 3=ICPN}",
                 _registration_method_initial);
-      return std::make_pair<bool, std::string>(false, "Unknown registration (initial) method.");
+      return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (initial) method.", Eigen::Matrix4f::Identity());
   }
   /*//}*/
 
-  std::pair<bool, std::string> ret;
-  ret.second = "Registration successfull.";
+  std::tuple<bool, std::string, Eigen::Matrix4f> ret;
+  std::get<1>(ret) = "Registration successfull.";
 
   if (converged) {
 
     // Print transformation matrix
     ROS_INFO("[PCL2MapRegistration] Registration (initial) converged with score: %0.2f", score);
     printEigenMatrix(T_init, "Transformation matrix (initial):");
+    std::get<2>(ret) = T_init;
 
     // Publish initially aligned cloud
     pc_aligned->header.stamp    = pc_src->header.stamp;
@@ -194,7 +249,7 @@ std::pair<bool, std::string> PCL2MapRegistration::registerCloudToCloud(const PC_
       default:
         ROS_ERROR("[PCL2MapRegistration] Unknown registration (fine tuning) method of type: %d. Allowed: {0=None, 1=FPFH, 2=NDT, 3=GICP, 4=ICPN}",
                   _registration_method_fine_tune);
-        return std::make_pair<bool, std::string>(false, "Unknown registration (fine tuning) method.");
+        return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (fine tuning) method.", Eigen::Matrix4f::Identity());
     }
     /*//}*/
 
@@ -212,21 +267,108 @@ std::pair<bool, std::string> PCL2MapRegistration::registerCloudToCloud(const PC_
 
       } else {
         ROS_ERROR("[PCL2MapRegistration] Registration (fine tuning) did not converge -- try to change registration (fine tuning) parameters.");
-        ret.second = "Registered (fine tuning) dit not converge.";
+        std::get<1>(ret) = "Registered (fine tuning) dit not converge.";
       }
     }
 
     // Print final transformation matrix
     const Eigen::Matrix4f T = T_fine * T_init;
+    std::get<2>(ret)        = T;
     printEigenMatrix(T, "Transformation matrix (final):");
 
   } else {
     ROS_ERROR("[PCL2MapRegistration] Registration (initial) did not converge -- try to change registration (initial) parameters.");
-    return std::make_pair<bool, std::string>(false, "Registered (initial) dit not converge.");
+    return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Registered (initial) dit not converge.", Eigen::Matrix4f::Identity());
   }
 
-  ret.first = converged;
+  std::get<0>(ret) = converged;
   return ret;
+}
+/*//}*/
+
+/*//{ registerCloudToCloudSampledHeading() */
+std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerCloudToCloudSampledHeading(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
+
+  float           score_best = std::numeric_limits<float>::infinity();
+  Eigen::Matrix4f T_best;
+  PC_NORM::Ptr    pc_aligned_best = boost::make_shared<PC_NORM>();
+
+  Eigen::Vector4f centroid_pc_src;
+  pcl::compute3DCentroid(*pc_src, centroid_pc_src);
+
+  const unsigned int heading_samples = 8;
+  std::scoped_lock   lock(_mutex_registration);
+
+  for (unsigned int i = 0; i < heading_samples; i++) {
+
+    PC_NORM::Ptr            pc_src_R = boost::make_shared<PC_NORM>();
+    const float             heading  = (float)i * 2.0f * M_PI / (float)heading_samples;
+    const Eigen::AngleAxisf heading_ax(heading, Eigen::Vector3f::UnitZ());
+    ROS_INFO("%0.2f", heading);
+
+    rotateCloudAroundPoint(pc_src, pc_src_R, heading_ax.matrix(), centroid_pc_src);
+
+    bool            converged;
+    float           score;
+    Eigen::Matrix4f T;
+    PC_NORM::Ptr    pc_aligned;
+
+    /*//{ Perform fine tuning registration */
+    switch (_registration_method_initial) {
+      case 0:
+        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: FPFH");
+        std::tie(converged, score, T, pc_aligned) = pcl2map_fpfh(pc_src_R, pc_targ, false);
+        break;
+      case 1:
+        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: NDT");
+        std::tie(converged, score, T, pc_aligned) = pcl2map_ndt(pc_src_R, pc_targ, false);
+        break;
+      case 2:
+        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: GICP");
+        std::tie(converged, score, T, pc_aligned) = pcl2map_gicp(pc_src_R, pc_targ, false);
+        break;
+      case 3:
+        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: ICPN");
+        std::tie(converged, score, T, pc_aligned) = pcl2map_icpn(pc_src_R, pc_targ, false);
+        break;
+      default:
+        ROS_ERROR("[PCL2MapRegistration] Unknown registration (initial) method of type: %d. Allowed: {0=FPFH, 1=NDT, 2=GICP, 3=ICPN}",
+                  _registration_method_initial);
+        return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (initial) method.", Eigen::Matrix4f::Identity());
+    }
+    /*//}*/
+
+    // Store best score
+    if (converged) {
+      ROS_INFO("[PCL2MapRegistration] Registration (heading sample: %0.2f) converged with score: %0.2f", heading, score);
+      if (score < score_best) {
+        score_best      = score;
+        T_best          = T;  // TODO: include initial rotation R
+        pc_aligned_best = pc_aligned;
+      }
+    }
+  }
+
+  if (std::isfinite(score_best)) {
+    // Print transformation matrix
+    ROS_INFO("[PCL2MapRegistration] Registration (heading samples) converged with score: %0.2f", score_best);
+    printEigenMatrix(T_best, "Transformation matrix (final):");
+
+    // Publish aligned cloud
+    pc_aligned_best->header.stamp    = pc_src->header.stamp;
+    pc_aligned_best->header.frame_id = _frame_map;
+    publishCloud(_pub_cloud_aligned, pc_aligned_best);
+
+    std::tuple<bool, std::string, Eigen::Matrix4f> ret;
+    std::get<0>(ret) = true;
+    std::get<1>(ret) = "Registration successfull.";
+    std::get<2>(ret) = T_best;
+
+    return ret;
+  }
+
+  ROS_ERROR("[PCL2MapRegistration] Registration (heading samples) did not converge -- try to change registration (heading samples) parameters.");
+  return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Registered (heading samples) dit not converge.", Eigen::Matrix4f::Identity());
 }
 /*//}*/
 
@@ -248,10 +390,10 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
   // Re-estimate normals
   if (std::fabs(_normal_estimation_radius - config.norm_estim_rad) > 1e-5) {
     _normal_estimation_radius = config.norm_estim_rad;
-    if (!pcdFileHasNormals(_path_map)) {
+    if (!hasNormals(_path_map)) {
       _pc_map = loadPcWithNormals(_path_map);
     }
-    if (!pcdFileHasNormals(_path_pcl)) {
+    if (!hasNormals(_path_pcl)) {
       _pc_slam = loadPcWithNormals(_path_pcl);
     }
   }
@@ -461,8 +603,8 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 }
 /*//}*/
 
-/*//{ matchPcCenters() */
-void PCL2MapRegistration::matchPcCenters(PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
+/*//{ correlateCloudToCloud() */
+void PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ) {
 
   // Compute centroids of both clouds
   Eigen::Vector4f centroid_src;
@@ -474,9 +616,10 @@ void PCL2MapRegistration::matchPcCenters(PC_NORM::Ptr pc_src, const PC_NORM::Ptr
   // Compute min/max Z axis points
   pt_NORM pt_min_src;
   pt_NORM pt_min_targ;
-  pt_NORM pt_max;
-  pcl::getMinMax3D(*pc_src, pt_min_src, pt_max);
-  pcl::getMinMax3D(*pc_targ, pt_min_targ, pt_max);
+  pt_NORM pt_max_src;
+  pt_NORM pt_max_targ;
+  pcl::getMinMax3D(*pc_src, pt_min_src, pt_max_src);
+  pcl::getMinMax3D(*pc_targ, pt_min_targ, pt_max_targ);
 
   // Build transformation matrix
   Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
@@ -484,8 +627,17 @@ void PCL2MapRegistration::matchPcCenters(PC_NORM::Ptr pc_src, const PC_NORM::Ptr
   T(1, 3)           = centroid_diff.y();
   T(2, 3)           = pt_min_targ.z - pt_min_src.z;
 
-  // Transform pc_src
+  // Transform pc_src to pc_targ
   pcl::transformPointCloud(*pc_src, *pc_src, T);
+  pcl::getMinMax3D(*pc_src, pt_min_src, pt_max_src);
+
+  // Crop pc_targ in z-axis w.r.t. pc_src (assumption that we takeoff from ground and clouds roll/pitch angles can be neglected)
+  const float           z_pos_offset = 1.5f;
+  pcl::CropBox<pt_NORM> box;
+  box.setMin(Eigen::Vector4f(pt_min_targ.x, pt_min_targ.y, pt_min_targ.z, 1.0f));
+  box.setMax(Eigen::Vector4f(pt_max_targ.x, pt_max_targ.y, pt_max_src.z + z_pos_offset, 1.0f));
+  box.setInputCloud(pc_targ);
+  box.filter(*pc_targ);
 }
 /*//}*/
 
@@ -512,7 +664,7 @@ PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &path) {
 
   PC_NORM::Ptr pc_norm = boost::make_shared<PC_NORM>();
 
-  if (pcdFileHasNormals(path)) {
+  if (hasNormals(path)) {
 
     // Load points with normals
     if (pcl::io::loadPCDFile<pt_NORM>(path, *pc_norm) < 0) {
@@ -546,7 +698,7 @@ PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &path) {
 bool PCL2MapRegistration::loadPcNormals(const std::string &path, PC_NORM::Ptr &cloud) {
 
   // Check if normals are present in the PCD file by looking at the header
-  if (!pcdFileHasNormals(path)) {
+  if (!hasNormals(path)) {
     return false;
   }
 
@@ -562,8 +714,8 @@ bool PCL2MapRegistration::loadPcNormals(const std::string &path, PC_NORM::Ptr &c
 }
 /*//}*/
 
-/*//{ pcdFileHasNormals() */
-bool PCL2MapRegistration::pcdFileHasNormals(const std::string path) {
+/*//{ hasNormals(std::string) */
+bool PCL2MapRegistration::hasNormals(const std::string path) {
 
   // Read header of PCD file
   pcl::PCDReader      reader_pcd;
@@ -585,6 +737,27 @@ bool PCL2MapRegistration::pcdFileHasNormals(const std::string path) {
   }
   if (normal_fields != 3 || !curvature_field) {
     ROS_INFO("[PCL2MapRegistration] No normals in PCD file: %s.", path.c_str());
+    return false;
+  }
+
+  return true;
+}
+/*//}*/
+
+/*//{ hasNormals(sensor_msgs::PointCloud2)*/
+bool PCL2MapRegistration::hasNormals(const sensor_msgs::PointCloud2::ConstPtr &cloud) {
+
+  // Check header for normals (normal_x, normal_y, normal_z, curvature)
+  unsigned int normal_fields   = 0;
+  bool         curvature_field = false;
+  for (auto field : cloud->fields) {
+    if (field.name.rfind("normal", 0) == 0) {
+      normal_fields++;
+    } else if (field.name == "curvature") {
+      curvature_field = true;
+    }
+  }
+  if (normal_fields != 3 || !curvature_field) {
     return false;
   }
 
@@ -615,6 +788,54 @@ void PCL2MapRegistration::applyVoxelGridFilter(PC_NORM::Ptr cloud_out, const PC_
   grid.setLeafSize(leaf_size, leaf_size, leaf_size);
   grid.setInputCloud(cloud_in);
   grid.filter(*cloud_out);
+}
+/*//}*/
+
+/*//{ applyRandomTransformation() */
+void PCL2MapRegistration::applyRandomTransformation(PC_NORM::Ptr cloud) {
+
+  Eigen::Matrix4f T;
+
+  // Random rotation in some random interval (for debugging)
+  const Eigen::AngleAxisf roll(-0.03f * M_PI + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (0.06f * M_PI))), Eigen::Vector3f::UnitX());
+  const Eigen::AngleAxisf yaw(-0.03f * M_PI + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (0.06f * M_PI))), Eigen::Vector3f::UnitY());
+  const Eigen::AngleAxisf pitch(-M_PI + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (2.0f * M_PI))), Eigen::Vector3f::UnitZ());
+  T.block<3, 3>(0, 0) = (yaw * pitch * roll).matrix();
+
+  // Random translation in some random interval (for debugging)
+  T(0, 3) = -25.0f + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / 50.0f));
+  T(1, 3) = -25.0f + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / 50.0f));
+  T(2, 3) = -15.0f + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / 30.0f));
+
+  // Transform cloud
+  pcl::transformPointCloud(*cloud, *cloud, T);
+}
+/*//}*/
+
+/*//{ rotateCloudAroundPoint() */
+void PCL2MapRegistration::rotateCloudAroundPoint(const PC_NORM::Ptr cloud_in, PC_NORM::Ptr cloud_out, const Eigen::Matrix3f rotation,
+                                                 const Eigen::Vector4f point) {
+  // TODO: is equivalent to one matrix transformation
+  Eigen::Matrix4f T;
+
+  // Translate cloud to the point
+  T       = Eigen::Matrix4f::Identity();
+  T(0, 3) = -point.x();
+  T(1, 3) = -point.y();
+  T(2, 3) = -point.z();
+  pcl::transformPointCloud(*cloud_in, *cloud_out, T);
+
+  // Rotate the cloud
+  T                   = Eigen::Matrix4f::Identity();
+  T.block<3, 3>(0, 0) = rotation;
+  pcl::transformPointCloud(*cloud_out, *cloud_out, T);
+
+  // Translate cloud back to the origin
+  T       = Eigen::Matrix4f::Identity();
+  T(0, 3) = point.x();
+  T(1, 3) = point.y();
+  T(2, 3) = point.z();
+  pcl::transformPointCloud(*cloud_out, *cloud_out, T);
 }
 /*//}*/
 

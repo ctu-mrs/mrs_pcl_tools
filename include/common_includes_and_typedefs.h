@@ -22,6 +22,7 @@
 
 // mrs_lib
 #include <mrs_lib/param_loader.h>
+#include <mrs_lib/attitude_converter.h>
 
 // dynamic reconfigure
 #include <dynamic_reconfigure/server.h>

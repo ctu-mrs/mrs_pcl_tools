@@ -13,7 +13,7 @@
 
   <group ns="$(arg UAV_NAME)">
 
-    <node pkg="nodelet" type="nodelet" name="pcl_to_map_registration" args="$(arg nodelet) mrs_pcl_tools/PCL2MapRegistration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
+    <node pkg="nodelet" type="nodelet" name="pc2map" args="$(arg nodelet) mrs_pcl_tools/PCL2MapRegistration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
 
       <!-- Parameters -->
       <param name="map" type="string" value="$(arg map)" />
@@ -29,7 +29,8 @@
       <remap from="~cloud_aligned_out" to="registration/aligned" />
       
       <!-- Service servers -->
-      <remap from="~srv_register" to="registration/register" />
+      <remap from="~srv_register_offline" to="~register/offline" />
+      <remap from="~srv_register_online" to="~register/pointcloud2" />
 
     </node>
 
