@@ -45,44 +45,12 @@ void PCL2MapRegistration::onInit() {
 
   NODELET_INFO_ONCE("[PCL2MapRegistration] Nodelet initialized");
 
-  /* _timer_registration = nh.createTimer(ros::Duration(_registration_period), &PCL2MapRegistration::callbackRegistration, this, true, false); */
   _srv_server_registration_offline     = nh.advertiseService("srv_register_offline", &PCL2MapRegistration::callbackSrvRegisterOffline, this);
   _srv_server_registration_pointcloud2 = nh.advertiseService("srv_register_online", &PCL2MapRegistration::callbackSrvRegisterPointCloud2, this);
 
   is_initialized = true;
 }
 //}
-
-/* callbackRegistration() //{*/
-void PCL2MapRegistration::callbackRegistration([[maybe_unused]] const ros::TimerEvent &event) {
-  if (!is_initialized) {
-    return;
-  }
-
-  // Preprocess data
-  PC_NORM::Ptr pc_map_filt  = boost::make_shared<PC_NORM>();
-  PC_NORM::Ptr pc_slam_filt = boost::make_shared<PC_NORM>();
-  {
-    std::scoped_lock lock(_mutex_registration);
-    applyVoxelGridFilter(pc_map_filt, _pc_map, _clouds_voxel_leaf);
-    applyVoxelGridFilter(pc_slam_filt, _pc_slam, _clouds_voxel_leaf);
-  }
-  correlateCloudToCloud(pc_slam_filt, pc_map_filt);
-
-  // Publish data
-  std::uint64_t stamp;
-  pcl_conversions::toPCL(ros::Time::now(), stamp);
-  pc_slam_filt->header.stamp    = stamp;
-  pc_slam_filt->header.frame_id = _frame_map;
-  pc_map_filt->header.stamp     = stamp;
-  pc_map_filt->header.frame_id  = _frame_map;
-  publishCloud(_pub_cloud_source, pc_slam_filt);
-  publishCloud(_pub_cloud_target, pc_map_filt);
-
-  // Register given pc to map cloud
-  registerCloudToCloud(pc_slam_filt, pc_map_filt);
-}
-/*//}*/
 
 /* callbackSrvRegisterOffline() //{*/
 bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res) {
@@ -288,6 +256,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
 
 /*//{ registerCloudToCloudSampledHeading() */
 std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerCloudToCloudSampledHeading(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
+  // TODO: this approach as new method
 
   float           score_best = std::numeric_limits<float>::infinity();
   Eigen::Matrix4f T_best;
@@ -304,9 +273,8 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     PC_NORM::Ptr            pc_src_R = boost::make_shared<PC_NORM>();
     const float             heading  = (float)i * 2.0f * M_PI / (float)heading_samples;
     const Eigen::AngleAxisf heading_ax(heading, Eigen::Vector3f::UnitZ());
-    ROS_INFO("%0.2f", heading);
 
-    rotateCloudAroundPoint(pc_src, pc_src_R, heading_ax.matrix(), centroid_pc_src);
+    Eigen::Matrix4f T_rot = rotateCloudAroundPoint(pc_src, pc_src_R, heading_ax.matrix(), centroid_pc_src);
 
     bool            converged;
     float           score;
@@ -343,7 +311,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
       ROS_INFO("[PCL2MapRegistration] Registration (heading sample: %0.2f) converged with score: %0.2f", heading, score);
       if (score < score_best) {
         score_best      = score;
-        T_best          = T;  // TODO: include initial rotation R
+        T_best          = T * T_rot;  // include initial heading rotation
         pc_aligned_best = pc_aligned;
       }
     }
@@ -385,7 +353,6 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
   _registration_method_fine_tune = config.fine_tune_reg_method;
   _clouds_voxel_leaf             = config.clouds_voxel_leaf;
 
-  _timer_registration.setPeriod(ros::Duration(config.reg_period));
 
   // Re-estimate normals
   if (std::fabs(_normal_estimation_radius - config.norm_estim_rad) > 1e-5) {
@@ -435,10 +402,6 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
   Eigen::AngleAxisf    init_rotation(config.init_guess_yaw, Eigen::Vector3f::UnitZ());
   Eigen::Translation3f init_translation(0, 0, 0);
   _initial_guess = (init_translation * init_rotation).matrix();
-
-  /* if ((bool)config.reg_enabled) { */
-  /*   _timer_registration.start(); */
-  /* } */
 }
 //}
 
@@ -813,29 +776,31 @@ void PCL2MapRegistration::applyRandomTransformation(PC_NORM::Ptr cloud) {
 /*//}*/
 
 /*//{ rotateCloudAroundPoint() */
-void PCL2MapRegistration::rotateCloudAroundPoint(const PC_NORM::Ptr cloud_in, PC_NORM::Ptr cloud_out, const Eigen::Matrix3f rotation,
-                                                 const Eigen::Vector4f point) {
-  // TODO: is equivalent to one matrix transformation
+Eigen::Matrix4f PCL2MapRegistration::rotateCloudAroundPoint(const PC_NORM::Ptr cloud_in, PC_NORM::Ptr cloud_out, const Eigen::Matrix3f rotation,
+                                                            const Eigen::Vector4f point) {
   Eigen::Matrix4f T;
+  Eigen::Matrix4f T1 = Eigen::Matrix4f::Identity();
+  Eigen::Matrix4f T2 = Eigen::Matrix4f::Identity();
+  Eigen::Matrix4f T3 = Eigen::Matrix4f::Identity();
 
-  // Translate cloud to the point
-  T       = Eigen::Matrix4f::Identity();
-  T(0, 3) = -point.x();
-  T(1, 3) = -point.y();
-  T(2, 3) = -point.z();
+  // To the point
+  T1(0, 3) = -point.x();
+  T1(1, 3) = -point.y();
+  T1(2, 3) = -point.z();
+
+  // Rotate
+  T2.block<3, 3>(0, 0) = rotation;
+
+  // Back to the origin
+  T3(0, 3) = point.x();
+  T3(1, 3) = point.y();
+  T3(2, 3) = point.z();
+
+  // Transform the cloud
+  T = T3 * T2 * T1;
   pcl::transformPointCloud(*cloud_in, *cloud_out, T);
 
-  // Rotate the cloud
-  T                   = Eigen::Matrix4f::Identity();
-  T.block<3, 3>(0, 0) = rotation;
-  pcl::transformPointCloud(*cloud_out, *cloud_out, T);
-
-  // Translate cloud back to the origin
-  T       = Eigen::Matrix4f::Identity();
-  T(0, 3) = point.x();
-  T(1, 3) = point.y();
-  T(2, 3) = point.z();
-  pcl::transformPointCloud(*cloud_out, *cloud_out, T);
+  return T;
 }
 /*//}*/
 
@@ -862,11 +827,13 @@ void PCL2MapRegistration::publishCloudMsg(const ros::Publisher pub, const sensor
 
 /*//{ printEigenMatrix() */
 void PCL2MapRegistration::printEigenMatrix(const Eigen::Matrix4f mat, const std::string prefix) {
-  const std::string st = (prefix.size() > 0) ? prefix : "Eigen matrix:";
+  const std::string          st = (prefix.size() > 0) ? prefix : "Eigen matrix:";
+  mrs_lib::AttitudeConverter atti(mat.block<3, 3>(0, 0).cast<double>());
   ROS_INFO("[PCL2MapRegistration] %s", st.c_str());
   ROS_INFO("    | %2.3f %2.3f %2.3f |", mat(0, 0), mat(0, 1), mat(0, 2));
   ROS_INFO("R = | %2.3f %2.3f %2.3f |", mat(1, 0), mat(1, 1), mat(1, 2));
   ROS_INFO("    | %2.3f %2.3f %2.3f |", mat(2, 0), mat(2, 1), mat(2, 2));
+  ROS_INFO("E = | %2.3f %2.3f %2.3f |", atti.getRoll(), atti.getPitch(), atti.getYaw());
   ROS_INFO("t = < %2.3f, %2.3f, %2.3f >", mat(0, 3), mat(1, 3), mat(2, 3));
 }
 /*//}*/
