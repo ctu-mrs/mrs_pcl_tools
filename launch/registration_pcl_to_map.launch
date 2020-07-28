@@ -27,6 +27,9 @@
       <remap from="~cloud_source_out" to="registration/source" />
       <remap from="~cloud_target_out" to="registration/target" />
       <remap from="~cloud_aligned_out" to="registration/aligned" />
+      
+      <!-- Service servers -->
+      <remap from="~srv_register" to="registration/register" />
 
     </node>
 

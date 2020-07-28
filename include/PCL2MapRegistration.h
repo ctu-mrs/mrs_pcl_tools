@@ -6,11 +6,15 @@
 #include <mutex>
 #include <tuple>
 
+#include <std_srvs/Trigger.h>
+
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/features/fpfh_omp.h>
 #include <pcl/filters/approximate_voxel_grid.h>
 #include <pcl/registration/sample_consensus_prerejective.h>
 #include <pcl/registration/ndt.h>
+#include <pcl/registration/gicp.h>
+#include <pcl/registration/icp.h>
 #include <pcl/segmentation/sac_segmentation.h>
 
 #include "mrs_pcl_tools/pcl2map_registration_dynparamConfig.h"
@@ -31,6 +35,8 @@ public:
 private:
   bool is_initialized = false;
 
+  ros::ServiceServer _srv_server_registration;
+
   ros::Publisher _pub_cloud_source;
   ros::Publisher _pub_cloud_target;
   ros::Publisher _pub_cloud_aligned;
@@ -39,27 +45,43 @@ private:
   std::string _path_map;
   std::string _path_pcl;
 
-  int  _registration_method = 0;
-  bool _use_init_guess      = false;
+  int   _registration_method_initial   = 0;
+  int   _registration_method_fine_tune = 4;
+  bool  _use_init_guess                = false;
+  float _clouds_voxel_leaf             = 0.8f;
+  float _normal_estimation_radius      = 0.5f;
 
   std::mutex _mutex_registration;
   ros::Timer _timer_registration;
-  float      _registration_period = 5.0f;
+  float _registration_period = 5.0f;
 
-  float _fpfh_voxel_leaf           = 0.2;
-  float _fpfh_search_rad           = 0.4;
+  float _fpfh_search_rad           = 2.5;
   float _fpfh_similarity_threshold = 0.9;
-  float _fpfh_inlier_fraction      = 0.25;
-  int   _fpfh_ransac_max_iter      = 500;
-  int   _fpfh_number_of_samples    = 3;
-  int   _fpfh_corr_randomness      = 5;
+  float _fpfh_inlier_fraction      = 0.1;
+  int   _fpfh_ransac_max_iter      = 50000;
+  int   _fpfh_number_of_samples    = 4;
+  int   _fpfh_corr_randomness      = 10;
 
   float _ndt_transformation_epsilon = 0.01f;
   float _ndt_step_size              = 0.2f;
   float _ndt_resolution             = 0.1f;
   int   _ndt_maximum_iterations     = 50;
 
-  float _normal_estimation_radius = 0.02f;
+  float _gicp_max_corr_dist        = 5.0f;
+  float _gicp_ransac_outl_rej_thrd = 0.3f;
+  float _gicp_trans_eps            = 0.1f;
+  int   _gicp_max_iter             = 50;
+  int   _gicp_max_opt_iter         = 20;
+  int   _gicp_ransac_iter          = 30;
+  bool  _gicp_use_recip_corr       = false;
+
+  float _icpn_max_corr_dist        = 5.0f;
+  float _icpn_ransac_outl_rej_thrd = 0.3f;
+  float _icpn_trans_eps            = 0.1f;
+  float _icpn_eucld_fitn_eps       = 0.1f;
+  int   _icpn_max_iter             = 100;
+  int   _icpn_ransac_iter          = 30;
+  bool  _icpn_use_recip_corr       = false;
 
   Eigen::Matrix4f _initial_guess = Eigen::Matrix4f::Identity();
 
@@ -74,18 +96,24 @@ private:
   sensor_msgs::PointCloud2::Ptr _pc_map_msg  = boost::make_shared<sensor_msgs::PointCloud2>();
   sensor_msgs::PointCloud2::Ptr _pc_slam_msg = boost::make_shared<sensor_msgs::PointCloud2>();
 
-  PC::Ptr      load_pc(const std::string &path);
-  PC_NORM::Ptr load_pc_norm(const std::string &path);
-  bool         load_pc_normals(const std::string &path, PC_NORM::Ptr &cloud);
-  bool         pcd_file_has_normals(const std::string path);
+  PC::Ptr      loadPcXYZ(const std::string &path);
+  PC_NORM::Ptr loadPcWithNormals(const std::string &path);
+  bool         loadPcNormals(const std::string &path, PC_NORM::Ptr &cloud);
+  bool         pcdFileHasNormals(const std::string path);
+  void         matchPcCenters(PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
 
+  std::pair<bool, std::string> registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
   void callbackRegistration([[maybe_unused]] const ros::TimerEvent &event);
+  bool callbackSrvRegister([[maybe_unused]] std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res);
   void callbackReconfigure(Config &config, [[maybe_unused]] uint32_t level);
 
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_ndt(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_fpfh(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_ndt(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_fpfh(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_gicp(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_icpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
 
-  PC_NORM::Ptr estimate_normals(const PC::Ptr cloud, const float nest_radius);
+  PC_NORM::Ptr estimateNormals(const PC::Ptr cloud, const float nest_radius);
+  void applyVoxelGridFilter(PC_NORM::Ptr cloud_in, const PC_NORM::Ptr cloud_out, const float leaf_size);
 
   void publishCloud(const ros::Publisher pub, const PC_NORM::Ptr cloud);
   void publishCloudMsg(const ros::Publisher pub, const sensor_msgs::PointCloud2::Ptr cloud_msg);
