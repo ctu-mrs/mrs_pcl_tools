@@ -47,11 +47,13 @@ private:
   std::string _path_map;
   std::string _path_pcl;
 
-  int   _registration_method_initial   = 3;
-  int   _registration_method_fine_tune = 0;
-  bool  _use_init_guess                = false;
-  float _clouds_voxel_leaf             = 0.6f;
-  float _normal_estimation_radius      = 0.25f;
+  int   _registration_method_initial     = 4;
+  int   _registration_method_fine_tune   = 3;
+  bool  _use_init_guess                  = false;
+  float _clouds_voxel_leaf               = 0.6f;
+  float _normal_estimation_radius        = 0.25f;
+  float _cloud_correlation_z_crop_offset = 2.0f;
+  float _min_convergence_score           = 0.5f;
 
   std::mutex _mutex_registration;
   ros::Timer _timer_registration;
@@ -76,13 +78,22 @@ private:
   int   _gicp_ransac_iter          = 30;
   bool  _gicp_use_recip_corr       = false;
 
-  float _icpn_max_corr_dist        = 7.0f;
-  float _icpn_ransac_outl_rej_thrd = 0.7f;
-  float _icpn_trans_eps            = 0.05f;
-  float _icpn_eucld_fitn_eps       = 0.05f;
-  int   _icpn_max_iter             = 500;
-  int   _icpn_ransac_iter          = 150;
+  float _icpn_max_corr_dist        = 4.0f;
+  float _icpn_ransac_outl_rej_thrd = 0.95f;
+  float _icpn_trans_eps            = 0.01f;
+  float _icpn_eucld_fitn_eps       = 0.01f;
+  int   _icpn_max_iter             = 1000;
+  int   _icpn_ransac_iter          = 300;
   bool  _icpn_use_recip_corr       = false;
+
+  unsigned int _sicpn_number_of_samples    = 8;
+  float        _sicpn_max_corr_dist        = 7.0f;
+  float        _sicpn_ransac_outl_rej_thrd = 0.8f;
+  float        _sicpn_trans_eps            = 0.1;
+  float        _sicpn_eucld_fitn_eps       = 0.1;
+  int          _sicpn_max_iter             = 500;
+  int          _sicpn_ransac_iter          = 150;
+  bool         _sicpn_use_recip_corr       = false;
 
   Eigen::Matrix4f _initial_guess = Eigen::Matrix4f::Identity();
 
@@ -105,7 +116,6 @@ private:
   void         correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
 
   std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
-  std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloudSampledHeading(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
   bool                                           callbackSrvRegisterOffline([[maybe_unused]] std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res);
   bool callbackSrvRegisterPointCloud2(mrs_pcl_tools::SrvRegisterPointCloud2::Request &req, mrs_pcl_tools::SrvRegisterPointCloud2::Response &res);
   void callbackReconfigure(Config &config, [[maybe_unused]] uint32_t level);
@@ -114,11 +124,12 @@ private:
   std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_fpfh(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
   std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_gicp(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
   std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_icpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_sicpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map);
 
   PC_NORM::Ptr    estimateNormals(const PC::Ptr cloud, const float nest_radius);
   void            applyVoxelGridFilter(PC_NORM::Ptr cloud_in, const PC_NORM::Ptr cloud_out, const float leaf_size);
   void            applyRandomTransformation(PC_NORM::Ptr cloud);
-  Eigen::Matrix4f rotateCloudAroundPoint(const PC_NORM::Ptr cloud_in, PC_NORM::Ptr cloud_out, const Eigen::Matrix3f rotation, const Eigen::Vector4f point);
+  Eigen::Matrix4f getRotationMatrixAroundPoint(const Eigen::Matrix3f rotation, const Eigen::Vector4f point);
 
   void publishCloud(const ros::Publisher pub, const PC_NORM::Ptr cloud);
   void publishCloudMsg(const ros::Publisher pub, const sensor_msgs::PointCloud2::Ptr cloud_msg);

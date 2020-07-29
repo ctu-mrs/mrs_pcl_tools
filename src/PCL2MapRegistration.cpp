@@ -73,7 +73,7 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
   }
   correlateCloudToCloud(pc_slam_filt, pc_map_filt);
 
-  // Publish data
+  // Publish input data
   std::uint64_t stamp;
   pcl_conversions::toPCL(ros::Time::now(), stamp);
   pc_slam_filt->header.stamp    = stamp;
@@ -84,8 +84,7 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
   publishCloud(_pub_cloud_target, pc_map_filt);
 
   // Register given pc to map cloud
-  /* std::tie(res.success, res.message, std::ignore) = registerCloudToCloud(pc_slam_filt, pc_map_filt); */
-  std::tie(res.success, res.message, std::ignore) = registerCloudToCloudSampledHeading(pc_slam_filt, pc_map_filt);
+  std::tie(res.success, res.message, std::ignore) = registerCloudToCloud(pc_slam_filt, pc_map_filt);
 
   return res.success;
 }
@@ -149,30 +148,35 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
   Eigen::Matrix4f T_init;
   PC_NORM::Ptr    pc_aligned;
 
-  std::scoped_lock lock(_mutex_registration);
-
   /*//{ Perform initial registration */
-  switch (_registration_method_initial) {
-    case 0:
-      ROS_INFO("[PCL2MapRegistration] Registration (initial) with: FPFH");
-      std::tie(converged, score, T_init, pc_aligned) = pcl2map_fpfh(pc_src, pc_targ);
-      break;
-    case 1:
-      ROS_INFO("[PCL2MapRegistration] Registration (initial) with: NDT");
-      std::tie(converged, score, T_init, pc_aligned) = pcl2map_ndt(pc_src, pc_targ);
-      break;
-    case 2:
-      ROS_INFO("[PCL2MapRegistration] Registration (initial) with: GICP");
-      std::tie(converged, score, T_init, pc_aligned) = pcl2map_gicp(pc_src, pc_targ);
-      break;
-    case 3:
-      ROS_INFO("[PCL2MapRegistration] Registration (initial) with: ICPN");
-      std::tie(converged, score, T_init, pc_aligned) = pcl2map_icpn(pc_src, pc_targ);
-      break;
-    default:
-      ROS_ERROR("[PCL2MapRegistration] Unknown registration (initial) method of type: %d. Allowed: {0=FPFH, 1=NDT, 2=GICP, 3=ICPN}",
-                _registration_method_initial);
-      return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (initial) method.", Eigen::Matrix4f::Identity());
+  {
+    std::scoped_lock lock(_mutex_registration);
+    switch (_registration_method_initial) {
+      case 0:
+        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: FPFH");
+        std::tie(converged, score, T_init, pc_aligned) = pcl2map_fpfh(pc_src, pc_targ);
+        break;
+      case 1:
+        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: NDT");
+        std::tie(converged, score, T_init, pc_aligned) = pcl2map_ndt(pc_src, pc_targ);
+        break;
+      case 2:
+        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: GICP");
+        std::tie(converged, score, T_init, pc_aligned) = pcl2map_gicp(pc_src, pc_targ);
+        break;
+      case 3:
+        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: ICPN");
+        std::tie(converged, score, T_init, pc_aligned) = pcl2map_icpn(pc_src, pc_targ);
+        break;
+      case 4:
+        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: SICPN");
+        std::tie(converged, score, T_init, pc_aligned) = pcl2map_sicpn(pc_src, pc_targ);
+        break;
+      default:
+        ROS_ERROR("[PCL2MapRegistration] Unknown registration (initial) method of type: %d. Allowed: {0=FPFH, 1=NDT, 2=GICP, 3=ICPN, 4=SICPN}",
+                  _registration_method_initial);
+        return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (initial) method.", Eigen::Matrix4f::Identity());
+    }
   }
   /*//}*/
 
@@ -192,32 +196,43 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     publishCloud(_pub_cloud_aligned, pc_aligned);
 
     /*//{ Perform fine tuning registration */
-    const bool      perform_fine_tuning = _registration_method_fine_tune >= 1 && _registration_method_fine_tune <= 4;
     Eigen::Matrix4f T_fine              = Eigen::Matrix4f::Identity();
-    switch (_registration_method_fine_tune) {
-      case 0:
-        ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: None");
-        break;
-      case 1:
-        ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: FPFH");
-        std::tie(converged, score, T_fine, pc_aligned) = pcl2map_fpfh(pc_aligned, pc_targ, false);
-        break;
-      case 2:
-        ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: NDT");
-        std::tie(converged, score, T_fine, pc_aligned) = pcl2map_ndt(pc_aligned, pc_targ, false);
-        break;
-      case 3:
-        ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: GICP");
-        std::tie(converged, score, T_fine, pc_aligned) = pcl2map_gicp(pc_aligned, pc_targ, false);
-        break;
-      case 4:
-        ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: ICPN");
-        std::tie(converged, score, T_fine, pc_aligned) = pcl2map_icpn(pc_aligned, pc_targ, false);
-        break;
-      default:
-        ROS_ERROR("[PCL2MapRegistration] Unknown registration (fine tuning) method of type: %d. Allowed: {0=None, 1=FPFH, 2=NDT, 3=GICP, 4=ICPN}",
-                  _registration_method_fine_tune);
-        return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (fine tuning) method.", Eigen::Matrix4f::Identity());
+    const bool      perform_fine_tuning = _registration_method_fine_tune >= 0 && _registration_method_fine_tune <= 4;
+
+    if (_registration_method_fine_tune == _registration_method_initial) {
+      ROS_INFO("[PCL2MapRegistration] No registration (fine tuning) as method matches registration (initial).");
+    } else {
+
+      std::scoped_lock lock(_mutex_registration);
+      switch (_registration_method_fine_tune) {
+        case -1:
+          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: None");
+          break;
+        case 0:
+          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: FPFH");
+          std::tie(converged, score, T_fine, pc_aligned) = pcl2map_fpfh(pc_aligned, pc_targ, false);
+          break;
+        case 1:
+          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: NDT");
+          std::tie(converged, score, T_fine, pc_aligned) = pcl2map_ndt(pc_aligned, pc_targ, false);
+          break;
+        case 2:
+          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: GICP");
+          std::tie(converged, score, T_fine, pc_aligned) = pcl2map_gicp(pc_aligned, pc_targ, false);
+          break;
+        case 3:
+          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: ICPN");
+          std::tie(converged, score, T_fine, pc_aligned) = pcl2map_icpn(pc_aligned, pc_targ, false);
+          break;
+        case 4:
+          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: SICPN");
+          std::tie(converged, score, T_fine, pc_aligned) = pcl2map_sicpn(pc_aligned, pc_targ);
+          break;
+        default:
+          ROS_ERROR("[PCL2MapRegistration] Unknown registration (fine tuning) method of type: %d. Allowed: {-1=None, 0=FPFH, 1=NDT, 2=GICP, 3=ICPN, 4=SICPN}",
+                    _registration_method_fine_tune);
+          return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (fine tuning) method.", Eigen::Matrix4f::Identity());
+      }
     }
     /*//}*/
 
@@ -237,6 +252,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
         ROS_ERROR("[PCL2MapRegistration] Registration (fine tuning) did not converge -- try to change registration (fine tuning) parameters.");
         std::get<1>(ret) = "Registered (fine tuning) dit not converge.";
       }
+
     }
 
     // Print final transformation matrix
@@ -249,94 +265,13 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Registered (initial) dit not converge.", Eigen::Matrix4f::Identity());
   }
 
+  if (converged && score > _min_convergence_score) {
+    converged = false;
+    ROS_ERROR("[PCL2MapRegistration] Registration (final) converged with low score (score: %0.2f, min_score: %0.2f)", score, _min_convergence_score);
+  }
+
   std::get<0>(ret) = converged;
   return ret;
-}
-/*//}*/
-
-/*//{ registerCloudToCloudSampledHeading() */
-std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerCloudToCloudSampledHeading(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
-  // TODO: this approach as new method
-
-  float           score_best = std::numeric_limits<float>::infinity();
-  Eigen::Matrix4f T_best;
-  PC_NORM::Ptr    pc_aligned_best = boost::make_shared<PC_NORM>();
-
-  Eigen::Vector4f centroid_pc_src;
-  pcl::compute3DCentroid(*pc_src, centroid_pc_src);
-
-  const unsigned int heading_samples = 8;
-  std::scoped_lock   lock(_mutex_registration);
-
-  for (unsigned int i = 0; i < heading_samples; i++) {
-
-    PC_NORM::Ptr            pc_src_R = boost::make_shared<PC_NORM>();
-    const float             heading  = (float)i * 2.0f * M_PI / (float)heading_samples;
-    const Eigen::AngleAxisf heading_ax(heading, Eigen::Vector3f::UnitZ());
-
-    Eigen::Matrix4f T_rot = rotateCloudAroundPoint(pc_src, pc_src_R, heading_ax.matrix(), centroid_pc_src);
-
-    bool            converged;
-    float           score;
-    Eigen::Matrix4f T;
-    PC_NORM::Ptr    pc_aligned;
-
-    /*//{ Perform fine tuning registration */
-    switch (_registration_method_initial) {
-      case 0:
-        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: FPFH");
-        std::tie(converged, score, T, pc_aligned) = pcl2map_fpfh(pc_src_R, pc_targ, false);
-        break;
-      case 1:
-        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: NDT");
-        std::tie(converged, score, T, pc_aligned) = pcl2map_ndt(pc_src_R, pc_targ, false);
-        break;
-      case 2:
-        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: GICP");
-        std::tie(converged, score, T, pc_aligned) = pcl2map_gicp(pc_src_R, pc_targ, false);
-        break;
-      case 3:
-        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: ICPN");
-        std::tie(converged, score, T, pc_aligned) = pcl2map_icpn(pc_src_R, pc_targ, false);
-        break;
-      default:
-        ROS_ERROR("[PCL2MapRegistration] Unknown registration (initial) method of type: %d. Allowed: {0=FPFH, 1=NDT, 2=GICP, 3=ICPN}",
-                  _registration_method_initial);
-        return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (initial) method.", Eigen::Matrix4f::Identity());
-    }
-    /*//}*/
-
-    // Store best score
-    if (converged) {
-      ROS_INFO("[PCL2MapRegistration] Registration (heading sample: %0.2f) converged with score: %0.2f", heading, score);
-      if (score < score_best) {
-        score_best      = score;
-        T_best          = T * T_rot;  // include initial heading rotation
-        pc_aligned_best = pc_aligned;
-      }
-    }
-  }
-
-  if (std::isfinite(score_best)) {
-    // Print transformation matrix
-    ROS_INFO("[PCL2MapRegistration] Registration (heading samples) converged with score: %0.2f", score_best);
-    printEigenMatrix(T_best, "Transformation matrix (final):");
-
-    // Publish aligned cloud
-    pc_aligned_best->header.stamp    = pc_src->header.stamp;
-    pc_aligned_best->header.frame_id = _frame_map;
-    publishCloud(_pub_cloud_aligned, pc_aligned_best);
-
-    std::tuple<bool, std::string, Eigen::Matrix4f> ret;
-    std::get<0>(ret) = true;
-    std::get<1>(ret) = "Registration successfull.";
-    std::get<2>(ret) = T_best;
-
-    return ret;
-  }
-
-  ROS_ERROR("[PCL2MapRegistration] Registration (heading samples) did not converge -- try to change registration (heading samples) parameters.");
-  return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Registered (heading samples) dit not converge.", Eigen::Matrix4f::Identity());
 }
 /*//}*/
 
@@ -349,10 +284,11 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
 
   std::scoped_lock lock(_mutex_registration);
 
-  _registration_method_initial   = config.init_reg_method;
-  _registration_method_fine_tune = config.fine_tune_reg_method;
-  _clouds_voxel_leaf             = config.clouds_voxel_leaf;
-
+  _registration_method_initial     = config.init_reg_method;
+  _registration_method_fine_tune   = config.fine_tune_reg_method;
+  _clouds_voxel_leaf               = config.clouds_voxel_leaf;
+  _cloud_correlation_z_crop_offset = config.cloud_correlation_z_crop_offset;
+  _min_convergence_score           = config.min_convergence_score;
 
   // Re-estimate normals
   if (std::fabs(_normal_estimation_radius - config.norm_estim_rad) > 1e-5) {
@@ -396,6 +332,16 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
   _icpn_eucld_fitn_eps       = config.icpn_eucld_fitn_eps;
   _icpn_ransac_iter          = config.icpn_ransac_iter;
   _icpn_use_recip_corr       = config.icpn_use_recip_corr;
+
+  // SICPN registration parameters
+  _sicpn_number_of_samples    = config.sicpn_number_of_samples;
+  _sicpn_max_corr_dist        = config.sicpn_max_corr_dist;
+  _sicpn_ransac_outl_rej_thrd = config.sicpn_ransac_outl_rej_thrd;
+  _sicpn_trans_eps            = config.sicpn_trans_eps;
+  _sicpn_max_iter             = config.sicpn_max_iter;
+  _sicpn_eucld_fitn_eps       = config.sicpn_eucld_fitn_eps;
+  _sicpn_ransac_iter          = config.sicpn_ransac_iter;
+  _sicpn_use_recip_corr       = config.sicpn_use_recip_corr;
 
   // Initial guess for registration
   _use_init_guess = config.use_init_guess;
@@ -537,12 +483,9 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   // Create filtered objects
   PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
 
-  ROS_INFO("[PCL2MapRegistration] ICPN -- aligning");
   pcl::IterativeClosestPointWithNormals<pt_NORM, pt_NORM> icpn;
   icpn.setInputSource(pc_src);
   icpn.setInputTarget(pc_targ);
-
-  icpn.setTransformationEpsilon(1e-8);
 
   icpn.setMaxCorrespondenceDistance(_icpn_max_corr_dist);
   icpn.setMaximumIterations(_icpn_max_iter);
@@ -563,6 +506,81 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   t.toc_print("[PCL2MapRegistration] ICPN registration run time");
 
   return std::make_tuple(icpn.hasConverged(), icpn.getFitnessScore(), icpn.getFinalTransformation(), pc_aligned);
+}
+/*//}*/
+
+/* pcl2map_sicpn() //{*/
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_sicpn(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
+
+  TicToc t;
+
+  // Prepare best-score variables
+  float           score_best = std::numeric_limits<float>::infinity();
+  Eigen::Matrix4f T_best;
+  PC_NORM::Ptr    pc_aligned_best = boost::make_shared<PC_NORM>();
+
+  // Compute src cloud centroid
+  Eigen::Vector4f centroid_pc_src;
+  pcl::compute3DCentroid(*pc_src, centroid_pc_src);
+
+  // Prepare ICP object
+  pcl::IterativeClosestPointWithNormals<pt_NORM, pt_NORM> sicpn;
+  sicpn.setInputSource(pc_src);
+  sicpn.setInputTarget(pc_targ);
+  sicpn.setMaxCorrespondenceDistance(_icpn_max_corr_dist);
+  sicpn.setMaximumIterations(_icpn_max_iter);
+  sicpn.setTransformationEpsilon(_icpn_trans_eps);
+  sicpn.setEuclideanFitnessEpsilon(_icpn_eucld_fitn_eps);
+  sicpn.setRANSACIterations(_icpn_ransac_iter);
+  sicpn.setRANSACOutlierRejectionThreshold(_icpn_ransac_outl_rej_thrd);
+  sicpn.setUseReciprocalCorrespondences(_icpn_use_recip_corr);
+
+  for (unsigned int i = 0; i < _sicpn_number_of_samples; i++) {
+
+    // Create initial guess as a rotation by `heading` around pc_src centroid
+    const float             heading = (float)i * 2.0f * M_PI / (float)_sicpn_number_of_samples;
+    const Eigen::AngleAxisf heading_ax(heading, Eigen::Vector3f::UnitZ());
+    const Eigen::Matrix4f   T_rot = getRotationMatrixAroundPoint(heading_ax.matrix(), centroid_pc_src);
+
+    // Perform fine tuning registration
+    PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
+    sicpn.align(*pc_aligned, T_rot);
+
+    // Store best score
+    if (sicpn.hasConverged()) {
+      const float score = sicpn.getFitnessScore();
+      ROS_INFO("[PCL2MapRegistration] Registration (heading: %0.2f) converged with score: %0.2f", heading, score);
+      if (score < score_best) {
+        score_best      = score;
+        T_best          = sicpn.getFinalTransformation();
+        pc_aligned_best = pc_aligned;
+      }
+    }
+  }
+
+  // Return tuple
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> ret;
+  std::get<0>(ret) = std::isfinite(score_best);
+  std::get<1>(ret) = score_best;
+  std::get<2>(ret) = T_best;
+  std::get<3>(ret) = pc_aligned_best;
+
+  if (std::get<0>(ret)) {
+
+    ROS_INFO("[PCL2MapRegistration] Registration (SICPN) converged with score: %0.2f", score_best);
+
+    // Publish aligned cloud
+    pc_aligned_best->header.stamp    = pc_src->header.stamp;
+    pc_aligned_best->header.frame_id = _frame_map;
+    publishCloud(_pub_cloud_aligned, pc_aligned_best);
+
+  } else {
+    ROS_ERROR("[PCL2MapRegistration] Registration (SICPN) did not converge -- try to change registration (SICPN) parameters.");
+  }
+
+  t.toc_print("[PCL2MapRegistration] SICPN registration run time");
+
+  return ret;
 }
 /*//}*/
 
@@ -595,10 +613,9 @@ void PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Pt
   pcl::getMinMax3D(*pc_src, pt_min_src, pt_max_src);
 
   // Crop pc_targ in z-axis w.r.t. pc_src (assumption that we takeoff from ground and clouds roll/pitch angles can be neglected)
-  const float           z_pos_offset = 1.5f;
   pcl::CropBox<pt_NORM> box;
   box.setMin(Eigen::Vector4f(pt_min_targ.x, pt_min_targ.y, pt_min_targ.z, 1.0f));
-  box.setMax(Eigen::Vector4f(pt_max_targ.x, pt_max_targ.y, pt_max_src.z + z_pos_offset, 1.0f));
+  box.setMax(Eigen::Vector4f(pt_max_targ.x, pt_max_targ.y, pt_max_src.z + _cloud_correlation_z_crop_offset, 1.0f));
   box.setInputCloud(pc_targ);
   box.filter(*pc_targ);
 }
@@ -775,10 +792,8 @@ void PCL2MapRegistration::applyRandomTransformation(PC_NORM::Ptr cloud) {
 }
 /*//}*/
 
-/*//{ rotateCloudAroundPoint() */
-Eigen::Matrix4f PCL2MapRegistration::rotateCloudAroundPoint(const PC_NORM::Ptr cloud_in, PC_NORM::Ptr cloud_out, const Eigen::Matrix3f rotation,
-                                                            const Eigen::Vector4f point) {
-  Eigen::Matrix4f T;
+/*//{ getRotationMatrixAroundPoint() */
+Eigen::Matrix4f PCL2MapRegistration::getRotationMatrixAroundPoint(const Eigen::Matrix3f rotation, const Eigen::Vector4f point) {
   Eigen::Matrix4f T1 = Eigen::Matrix4f::Identity();
   Eigen::Matrix4f T2 = Eigen::Matrix4f::Identity();
   Eigen::Matrix4f T3 = Eigen::Matrix4f::Identity();
@@ -796,11 +811,7 @@ Eigen::Matrix4f PCL2MapRegistration::rotateCloudAroundPoint(const PC_NORM::Ptr c
   T3(1, 3) = point.y();
   T3(2, 3) = point.z();
 
-  // Transform the cloud
-  T = T3 * T2 * T1;
-  pcl::transformPointCloud(*cloud_in, *cloud_out, T);
-
-  return T;
+  return T3 * T2 * T1;
 }
 /*//}*/
 
