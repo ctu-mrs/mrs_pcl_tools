@@ -30,7 +30,7 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 add_service_files(DIRECTORY srv/registration FILES
-  SrvRegisterPointCloud2.srv
+  SrvRegisterPointCloudByName.srv
 )
 
 find_package(PCL REQUIRED COMPONENTS)

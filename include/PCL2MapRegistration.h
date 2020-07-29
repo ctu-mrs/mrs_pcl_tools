@@ -18,7 +18,7 @@
 #include <pcl/segmentation/sac_segmentation.h>
 
 #include "mrs_pcl_tools/pcl2map_registration_dynparamConfig.h"
-#include "mrs_pcl_tools/SrvRegisterPointCloud2.h"
+#include "mrs_pcl_tools/SrvRegisterPointCloudByName.h"
 
 typedef pcl::FPFHSignature33       feat_FPFH;
 typedef pcl::PointCloud<feat_FPFH> PC_FPFH;
@@ -34,7 +34,9 @@ public:
   virtual void onInit();
 
 private:
-  bool is_initialized = false;
+  ros::NodeHandle _nh;
+  bool            _is_initialized = false;
+  bool            _map_available  = false;
 
   ros::ServiceServer _srv_server_registration_offline;
   ros::ServiceServer _srv_server_registration_pointcloud2;
@@ -46,6 +48,8 @@ private:
   std::string _frame_map;
   std::string _path_map;
   std::string _path_pcl;
+
+  const ros::Duration _SUBSCRIBE_MSG_TIMEOUT = ros::Duration(2.0f);
 
   int   _registration_method_initial     = 4;
   int   _registration_method_fine_tune   = 3;
@@ -105,19 +109,17 @@ private:
   PC_NORM::Ptr _pc_map;
   PC_NORM::Ptr _pc_slam;
 
-  sensor_msgs::PointCloud2::Ptr _pc_map_msg  = boost::make_shared<sensor_msgs::PointCloud2>();
-  sensor_msgs::PointCloud2::Ptr _pc_slam_msg = boost::make_shared<sensor_msgs::PointCloud2>();
-
-  PC::Ptr      loadPcXYZ(const std::string &path);
-  PC_NORM::Ptr loadPcWithNormals(const std::string &path);
-  bool         loadPcNormals(const std::string &path, PC_NORM::Ptr &cloud);
-  bool         hasNormals(const std::string path);
-  bool         hasNormals(const sensor_msgs::PointCloud2::ConstPtr &cloud);
-  void         correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
+  PC::Ptr                     loadPcXYZ(const std::string &path);
+  PC_NORM::Ptr                loadPcWithNormals(const std::string &path);
+  std::optional<PC_NORM::Ptr> subscribeSinglePointCloudMsg(const std::string &topic);
+  bool                        loadPcNormals(const std::string &path, PC_NORM::Ptr &cloud);
+  bool                        hasNormals(const std::string path);
+  bool                        hasNormals(const sensor_msgs::PointCloud2::ConstPtr &cloud);
+  void                        correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
 
   std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
   bool                                           callbackSrvRegisterOffline([[maybe_unused]] std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res);
-  bool callbackSrvRegisterPointCloud2(mrs_pcl_tools::SrvRegisterPointCloud2::Request &req, mrs_pcl_tools::SrvRegisterPointCloud2::Response &res);
+  bool callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegisterPointCloudByName::Request &req, mrs_pcl_tools::SrvRegisterPointCloudByName::Response &res);
   void callbackReconfigure(Config &config, [[maybe_unused]] uint32_t level);
 
   std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_ndt(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);

@@ -6,11 +6,11 @@ namespace mrs_pcl_tools
 /* onInit() //{ */
 void PCL2MapRegistration::onInit() {
 
-  ros::NodeHandle nh = nodelet::Nodelet::getMTPrivateNodeHandle();
+  _nh = nodelet::Nodelet::getMTPrivateNodeHandle();
   ros::Time::waitForValid();
 
   // Get parameters from config file
-  mrs_lib::ParamLoader param_loader(nh, "PCL2MapRegistration");
+  mrs_lib::ParamLoader param_loader(_nh, "PCL2MapRegistration");
 
   std::string path_save_as;
   param_loader.loadParam("map", _path_map);
@@ -28,114 +28,137 @@ void PCL2MapRegistration::onInit() {
     _pc_map  = loadPcWithNormals(_path_map);
     _pc_slam = loadPcWithNormals(_path_pcl);
 
-    pcl::toROSMsg(*_pc_map, *_pc_map_msg);
-    pcl::toROSMsg(*_pc_slam, *_pc_slam_msg);
+    _map_available = _pc_map->points.size() > 0;
   }
 
-  _pc_map_msg->header.frame_id  = _frame_map;
-  _pc_slam_msg->header.frame_id = _frame_map;
+  _pub_cloud_source  = _nh.advertise<sensor_msgs::PointCloud2>("cloud_source_out", 1);
+  _pub_cloud_target  = _nh.advertise<sensor_msgs::PointCloud2>("cloud_target_out", 1);
+  _pub_cloud_aligned = _nh.advertise<sensor_msgs::PointCloud2>("cloud_aligned_out", 1);
 
-  _pub_cloud_source  = nh.advertise<sensor_msgs::PointCloud2>("cloud_source_out", 1);
-  _pub_cloud_target  = nh.advertise<sensor_msgs::PointCloud2>("cloud_target_out", 1);
-  _pub_cloud_aligned = nh.advertise<sensor_msgs::PointCloud2>("cloud_aligned_out", 1);
-
-  reconfigure_server_.reset(new ReconfigureServer(config_mutex_, nh));
+  reconfigure_server_.reset(new ReconfigureServer(config_mutex_, _nh));
   ReconfigureServer::CallbackType f = boost::bind(&PCL2MapRegistration::callbackReconfigure, this, _1, _2);
   reconfigure_server_->setCallback(f);
 
   NODELET_INFO_ONCE("[PCL2MapRegistration] Nodelet initialized");
 
-  _srv_server_registration_offline     = nh.advertiseService("srv_register_offline", &PCL2MapRegistration::callbackSrvRegisterOffline, this);
-  _srv_server_registration_pointcloud2 = nh.advertiseService("srv_register_online", &PCL2MapRegistration::callbackSrvRegisterPointCloud2, this);
+  _srv_server_registration_offline     = _nh.advertiseService("srv_register_offline", &PCL2MapRegistration::callbackSrvRegisterOffline, this);
+  _srv_server_registration_pointcloud2 = _nh.advertiseService("srv_register_online", &PCL2MapRegistration::callbackSrvRegisterPointCloud, this);
 
-  is_initialized = true;
+  _is_initialized = true;
 }
 //}
 
 /* callbackSrvRegisterOffline() //{*/
 bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res) {
-  if (!is_initialized) {
+  if (!_is_initialized) {
     res.success = false;
     res.message = "Registration unitialized.";
+    return false;
+  } else if (!_map_available) {
+    res.success = false;
+    res.message = "Reference map has 0 points.";
     return false;
   }
 
   // Preprocess data
-  PC_NORM::Ptr pc_map_filt  = boost::make_shared<PC_NORM>();
-  PC_NORM::Ptr pc_slam_filt = boost::make_shared<PC_NORM>();
+  PC_NORM::Ptr pc_targ_filt = boost::make_shared<PC_NORM>();
+  PC_NORM::Ptr pc_src_filt  = boost::make_shared<PC_NORM>();
   {
     std::scoped_lock lock(_mutex_registration);
-    applyVoxelGridFilter(pc_map_filt, _pc_map, _clouds_voxel_leaf);
-    applyVoxelGridFilter(pc_slam_filt, _pc_slam, _clouds_voxel_leaf);
+    applyVoxelGridFilter(pc_targ_filt, _pc_map, _clouds_voxel_leaf);
+    applyVoxelGridFilter(pc_src_filt, _pc_slam, _clouds_voxel_leaf);
 
     // for debugging: apply random translation on the slam pc
-    applyRandomTransformation(pc_slam_filt);
+    applyRandomTransformation(pc_src_filt);
   }
-  correlateCloudToCloud(pc_slam_filt, pc_map_filt);
+  correlateCloudToCloud(pc_src_filt, pc_targ_filt);
 
   // Publish input data
   std::uint64_t stamp;
   pcl_conversions::toPCL(ros::Time::now(), stamp);
-  pc_slam_filt->header.stamp    = stamp;
-  pc_slam_filt->header.frame_id = _frame_map;
-  pc_map_filt->header.stamp     = stamp;
-  pc_map_filt->header.frame_id  = _frame_map;
-  publishCloud(_pub_cloud_source, pc_slam_filt);
-  publishCloud(_pub_cloud_target, pc_map_filt);
+  pc_src_filt->header.stamp     = stamp;
+  pc_src_filt->header.frame_id  = _frame_map;
+  pc_targ_filt->header.stamp    = stamp;
+  pc_targ_filt->header.frame_id = _frame_map;
+  publishCloud(_pub_cloud_source, pc_src_filt);
+  publishCloud(_pub_cloud_target, pc_targ_filt);
 
   // Register given pc to map cloud
-  std::tie(res.success, res.message, std::ignore) = registerCloudToCloud(pc_slam_filt, pc_map_filt);
+  std::tie(res.success, res.message, std::ignore) = registerCloudToCloud(pc_src_filt, pc_targ_filt);
 
   return res.success;
 }
 /*//}*/
 
-/* callbackSrvRegisterPointCloud2() //{*/
-bool PCL2MapRegistration::callbackSrvRegisterPointCloud2(mrs_pcl_tools::SrvRegisterPointCloud2::Request & req,
-                                                         mrs_pcl_tools::SrvRegisterPointCloud2::Response &res) {
-  if (!is_initialized) {
+/* callbackSrvRegisterPointCloud() //{*/
+bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegisterPointCloudByName::Request & req,
+                                                        mrs_pcl_tools::SrvRegisterPointCloudByName::Response &res) {
+  if (!_is_initialized) {
     res.success = false;
     res.message = "Registration unitialized.";
+    return false;
+  } else if (!_map_available) {
+    res.success = false;
+    res.message = "Reference map has 0 points.";
     return false;
   }
 
   // Preprocess data
-  PC_NORM::Ptr pc_map_filt  = boost::make_shared<PC_NORM>();
-  PC_NORM::Ptr pc_slam_filt = boost::make_shared<PC_NORM>();
-  PC_NORM::Ptr pc_slam      = boost::make_shared<PC_NORM>();
-  pcl::fromROSMsg(req.cloud, *pc_slam);
+  PC_NORM::Ptr pc_src_filt  = boost::make_shared<PC_NORM>();
+  PC_NORM::Ptr pc_targ_filt = boost::make_shared<PC_NORM>();
+
+  // Catch the latest msg and store it as source cloud
+  PC_NORM::Ptr      pc_src;
+  const std::string topic   = std::string("/") + req.uav_name + std::string("/cloudTODO");
+  auto              msg_ret = subscribeSinglePointCloudMsg(topic);
+
+  if (msg_ret) {
+    pc_src = msg_ret.value();
+  } else {
+    res.success = false;
+    res.message = "No point cloud data available.";
+    ROS_ERROR("[PCL2MapRegistration] Requested cloud registration to map, but did not receive data (for %0.2f sec) on topic: %s.",
+              _SUBSCRIBE_MSG_TIMEOUT.toSec(), topic.c_str());
+    return false;
+  }
+
+  // Voxelize both clouds
   {
     std::scoped_lock lock(_mutex_registration);
-    applyVoxelGridFilter(pc_map_filt, _pc_map, _clouds_voxel_leaf);
+    applyVoxelGridFilter(pc_targ_filt, _pc_map, _clouds_voxel_leaf);
   }
-  applyVoxelGridFilter(pc_slam_filt, pc_slam, _clouds_voxel_leaf);
-  correlateCloudToCloud(pc_slam_filt, pc_map_filt);
+  applyVoxelGridFilter(pc_src_filt, pc_src, _clouds_voxel_leaf);
 
-  // Publish data
+  // Match centroids and move pc_src min-z to pc_targ min-z
+  correlateCloudToCloud(pc_src_filt, pc_targ_filt);
+
+  // Publish data (TODO: correct frames)
   std::uint64_t stamp;
   pcl_conversions::toPCL(ros::Time::now(), stamp);
-  pc_slam_filt->header.stamp    = stamp;
-  pc_slam_filt->header.frame_id = _frame_map;
-  pc_map_filt->header.stamp     = stamp;
-  pc_map_filt->header.frame_id  = _frame_map;
-  publishCloud(_pub_cloud_source, pc_slam_filt);
-  publishCloud(_pub_cloud_target, pc_map_filt);
+  pc_src_filt->header.stamp     = stamp;
+  pc_src_filt->header.frame_id  = _frame_map;
+  pc_targ_filt->header.stamp    = stamp;
+  pc_targ_filt->header.frame_id = _frame_map;
+  publishCloud(_pub_cloud_source, pc_src_filt);
+  publishCloud(_pub_cloud_target, pc_targ_filt);
 
   // Register given pc to map cloud
   Eigen::Matrix4f T;
-  std::tie(res.success, res.message, T) = registerCloudToCloud(pc_slam_filt, pc_map_filt);
+  std::tie(res.success, res.message, T) = registerCloudToCloud(pc_src_filt, pc_targ_filt);
 
-  // Convert transformation T to geometry_msgs/Pose
-  if (res.success) {
-    geometry_msgs::Pose              pose;
-    const Eigen::Matrix3d            R = T.block<3, 3>(0, 0).cast<double>();
-    const mrs_lib::AttitudeConverter atti(R);
-    pose.orientation   = atti;
-    pose.position.x    = T(0, 3);
-    pose.position.y    = T(1, 3);
-    pose.position.z    = T(2, 3);
-    res.transformation = pose;
-  }
+  // TODO: Publish transformation as tf pc_src.frame -> pc_targ.frame
+  
+  /* // Convert transformation T to geometry_msgs/Pose */
+  /* if (res.success) { */
+  /*   geometry_msgs::Pose              pose; */
+  /*   const Eigen::Matrix3d            R = T.block<3, 3>(0, 0).cast<double>(); */
+  /*   const mrs_lib::AttitudeConverter atti(R); */
+  /*   pose.orientation   = atti; */
+  /*   pose.position.x    = T(0, 3); */
+  /*   pose.position.y    = T(1, 3); */
+  /*   pose.position.z    = T(2, 3); */
+  /*   res.transformation = pose; */
+  /* } */
 
   return res.success;
 }
@@ -252,7 +275,6 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
         ROS_ERROR("[PCL2MapRegistration] Registration (fine tuning) did not converge -- try to change registration (fine tuning) parameters.");
         std::get<1>(ret) = "Registered (fine tuning) dit not converge.";
       }
-
     }
 
     // Print final transformation matrix
@@ -277,7 +299,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
 
 /* callbackReconfigure() //{ */
 void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_t level) {
-  if (!is_initialized) {
+  if (!_is_initialized) {
     return;
   }
   NODELET_INFO("[PCL2MapRegistration] Reconfigure callback.");
@@ -294,7 +316,8 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
   if (std::fabs(_normal_estimation_radius - config.norm_estim_rad) > 1e-5) {
     _normal_estimation_radius = config.norm_estim_rad;
     if (!hasNormals(_path_map)) {
-      _pc_map = loadPcWithNormals(_path_map);
+      _pc_map        = loadPcWithNormals(_path_map);
+      _map_available = _pc_map->points.size() > 0;
     }
     if (!hasNormals(_path_pcl)) {
       _pc_slam = loadPcWithNormals(_path_pcl);
@@ -691,6 +714,20 @@ bool PCL2MapRegistration::loadPcNormals(const std::string &path, PC_NORM::Ptr &c
 
   ROS_INFO("[PCL2MapRegistration] Loaded PCL normals with %ld points.", cloud->points.size());
   return true;
+}
+/*//}*/
+
+/*//{ subscribeSinglePointCloudMsg() */
+std::optional<PC_NORM::Ptr> PCL2MapRegistration::subscribeSinglePointCloudMsg(const std::string &topic) {
+  sensor_msgs::PointCloud2::ConstPtr cloud_msg = ros::topic::waitForMessage<sensor_msgs::PointCloud2>(topic, _nh, _SUBSCRIBE_MSG_TIMEOUT);
+
+  if (cloud_msg) {
+    PC_NORM::Ptr cloud = boost::make_shared<PC_NORM>();
+    pcl::fromROSMsg(*cloud_msg, *cloud);
+    return cloud;
+  }
+
+  return std::nullopt;
 }
 /*//}*/
 
