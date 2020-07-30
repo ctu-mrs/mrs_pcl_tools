@@ -48,6 +48,7 @@ private:
   std::string _frame_map;
   std::string _path_map;
   std::string _path_pcl;
+  std::string _topic_pc2;
 
   const ros::Duration _SUBSCRIBE_MSG_TIMEOUT = ros::Duration(2.0f);
 
@@ -115,7 +116,7 @@ private:
   bool                        loadPcNormals(const std::string &path, PC_NORM::Ptr &cloud);
   bool                        hasNormals(const std::string path);
   bool                        hasNormals(const sensor_msgs::PointCloud2::ConstPtr &cloud);
-  void                        correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
+  Eigen::Matrix4f             correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
 
   std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
   bool                                           callbackSrvRegisterOffline([[maybe_unused]] std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res);

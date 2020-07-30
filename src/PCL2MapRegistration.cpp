@@ -17,6 +17,7 @@ void PCL2MapRegistration::onInit() {
   param_loader.loadParam("pcl", _path_pcl);
   param_loader.loadParam("save_as", path_save_as);
   param_loader.loadParam<std::string>("map_frame", _frame_map, "origin");
+  param_loader.loadParam<std::string>("topic_pointcloud2", _topic_pc2, "");
 
   if (!param_loader.loadedSuccessfully()) {
     NODELET_ERROR("[PCL2MapRegistration]: Some compulsory parameters were not loaded successfully, ending the node");
@@ -101,6 +102,10 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
     res.success = false;
     res.message = "Reference map has 0 points.";
     return false;
+  } else if (_topic_pc2.size() == 0) {
+    res.success = false;
+    res.message = "No topic with msg type 'sensor_msgs/PointCloud2' specified.";
+    return false;
   }
 
   // Preprocess data
@@ -109,14 +114,14 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
 
   // Catch the latest msg and store it as source cloud
   PC_NORM::Ptr      pc_src;
-  const std::string topic   = std::string("/") + req.uav_name + std::string("/cloudTODO");
+  const std::string topic   = std::string("/") + req.uav_name + std::string("/") + _topic_pc2;
   auto              msg_ret = subscribeSinglePointCloudMsg(topic);
 
   if (msg_ret) {
     pc_src = msg_ret.value();
   } else {
     res.success = false;
-    res.message = "No point cloud data available.";
+    res.message = "No point cloud data received.";
     ROS_ERROR("[PCL2MapRegistration] Requested cloud registration to map, but did not receive data (for %0.2f sec) on topic: %s.",
               _SUBSCRIBE_MSG_TIMEOUT.toSec(), topic.c_str());
     return false;
@@ -130,14 +135,12 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   applyVoxelGridFilter(pc_src_filt, pc_src, _clouds_voxel_leaf);
 
   // Match centroids and move pc_src min-z to pc_targ min-z
-  correlateCloudToCloud(pc_src_filt, pc_targ_filt);
+  Eigen::Matrix4f T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
 
   // Publish data (TODO: correct frames)
-  std::uint64_t stamp;
-  pcl_conversions::toPCL(ros::Time::now(), stamp);
-  pc_src_filt->header.stamp     = stamp;
+  pc_src_filt->header.stamp     = pc_src->header.stamp;
   pc_src_filt->header.frame_id  = _frame_map;
-  pc_targ_filt->header.stamp    = stamp;
+  pc_targ_filt->header.stamp    = pc_src->header.stamp;
   pc_targ_filt->header.frame_id = _frame_map;
   publishCloud(_pub_cloud_source, pc_src_filt);
   publishCloud(_pub_cloud_target, pc_targ_filt);
@@ -146,8 +149,12 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   Eigen::Matrix4f T;
   std::tie(res.success, res.message, T) = registerCloudToCloud(pc_src_filt, pc_targ_filt);
 
+  // Include initial correlation matrix
+  T = T * T_corr;
+  printEigenMatrix(T, "Transformation matrix (after correlation):");
+
   // TODO: Publish transformation as tf pc_src.frame -> pc_targ.frame
-  
+
   /* // Convert transformation T to geometry_msgs/Pose */
   /* if (res.success) { */
   /*   geometry_msgs::Pose              pose; */
@@ -608,7 +615,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /*//{ correlateCloudToCloud() */
-void PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ) {
+Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ) {
 
   // Compute centroids of both clouds
   Eigen::Vector4f centroid_src;
@@ -633,14 +640,16 @@ void PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Pt
 
   // Transform pc_src to pc_targ
   pcl::transformPointCloud(*pc_src, *pc_src, T);
-  pcl::getMinMax3D(*pc_src, pt_min_src, pt_max_src);
 
   // Crop pc_targ in z-axis w.r.t. pc_src (assumption that we takeoff from ground and clouds roll/pitch angles can be neglected)
   pcl::CropBox<pt_NORM> box;
+  pcl::getMinMax3D(*pc_src, pt_min_src, pt_max_src);
   box.setMin(Eigen::Vector4f(pt_min_targ.x, pt_min_targ.y, pt_min_targ.z, 1.0f));
   box.setMax(Eigen::Vector4f(pt_max_targ.x, pt_max_targ.y, pt_max_src.z + _cloud_correlation_z_crop_offset, 1.0f));
   box.setInputCloud(pc_targ);
   box.filter(*pc_targ);
+
+  return T;
 }
 /*//}*/
 
