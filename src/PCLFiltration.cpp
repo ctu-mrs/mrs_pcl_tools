@@ -12,34 +12,37 @@ void PCLFiltration::onInit() {
   // Get parameters from config file
   mrs_lib::ParamLoader param_loader(nh, "PCLFiltration");
 
-  /* Ouster */
-  param_loader.loadParam("ouster/republish", _ouster_republish, false);
-  param_loader.loadParam("ouster/pcl2_over_max_range", _ouster_pcl2_over_max_range, false);
-  param_loader.loadParam("ouster/min_range", _ouster_min_range_sq, 0.4f);
-  param_loader.loadParam("ouster/max_range", _ouster_max_range_sq, 100.0f);
-  _ouster_min_range_mm = _ouster_min_range_sq * 1000;
-  _ouster_max_range_mm = _ouster_max_range_sq * 1000;
-  _ouster_min_range_sq *= _ouster_min_range_sq;
-  _ouster_max_range_sq *= _ouster_max_range_sq;
+  /* 3D LIDAR */
+  param_loader.loadParam("lidar3d/republish", _lidar3d_republish, false);
+  param_loader.loadParam("lidar3d/pcl2_over_max_range", _lidar3d_pcl2_over_max_range, false);
+  param_loader.loadParam("lidar3d/min_range", _lidar3d_min_range_sq, 0.4f);
+  param_loader.loadParam("lidar3d/max_range", _lidar3d_max_range_sq, 100.0f);
+  _lidar3d_min_range_mm = _lidar3d_min_range_sq * 1000;
+  _lidar3d_max_range_mm = _lidar3d_max_range_sq * 1000;
+  _lidar3d_min_range_sq *= _lidar3d_min_range_sq;
+  _lidar3d_max_range_sq *= _lidar3d_max_range_sq;
 
-  param_loader.loadParam("ouster/filter/intensity/enable", _ouster_filter_intensity_en, false);
-  param_loader.loadParam("ouster/filter/intensity/threshold", _ouster_filter_intensity_thrd, std::numeric_limits<int>::max());
-  param_loader.loadParam("ouster/filter/intensity/range", _ouster_filter_intensity_range_sq, std::numeric_limits<float>::max());
-  _ouster_filter_intensity_range_mm = _ouster_filter_intensity_range_sq * 1000;
-  _ouster_filter_intensity_range_sq *= _ouster_filter_intensity_range_sq;
+  param_loader.loadParam("lidar3d/filter/intensity/enable", _lidar3d_filter_intensity_en, false);
+  param_loader.loadParam("lidar3d/filter/intensity/threshold", _lidar3d_filter_intensity_thrd, std::numeric_limits<int>::max());
+  param_loader.loadParam("lidar3d/filter/intensity/range", _lidar3d_filter_intensity_range_sq, std::numeric_limits<float>::max());
+  _lidar3d_filter_intensity_range_mm = _lidar3d_filter_intensity_range_sq * 1000;
+  _lidar3d_filter_intensity_range_sq *= _lidar3d_filter_intensity_range_sq;
 
-  /* Realsense */
-  param_loader.loadParam("realsense/republish", _realsense_republish, true);
-  param_loader.loadParam("realsense/min_range", _realsense_min_range_sq, 0.0f);
-  param_loader.loadParam("realsense/max_range", _realsense_max_range_sq, 8.0f);
-  param_loader.loadParam("realsense/voxel_resolution", _realsense_voxel_resolution, 0.0f);
-  param_loader.loadParam("realsense/minimum_grid_resolution", _realsense_minimum_grid_resolution, 0.03f);
-  param_loader.loadParam("realsense/use_bilateral", _realsense_use_bilateral, false);
-  param_loader.loadParam("realsense/bilateral_sigma_S", _realsense_bilateral_sigma_S, 5.0f);
-  param_loader.loadParam("realsense/bilateral_sigma_R", _realsense_bilateral_sigma_R, 5e-3f);
-  param_loader.loadParam("realsense/frame", _realsense_frame, std::string(""));
-  _realsense_min_range_sq *= _realsense_min_range_sq;
-  _realsense_max_range_sq *= _realsense_max_range_sq;
+  /* Depth camera */
+  param_loader.loadParam("depth/republish", _depth_republish, true);
+  param_loader.loadParam("depth/pcl2_over_max_range", _depth_pcl2_over_max_range, false);
+  param_loader.loadParam("depth/min_range", _depth_min_range_sq, 0.0f);
+  param_loader.loadParam("depth/max_range", _depth_max_range_sq, 8.0f);
+  param_loader.loadParam("depth/voxel_resolution", _depth_voxel_resolution, 0.0f);
+  param_loader.loadParam("depth/minimum_grid_resolution", _depth_minimum_grid_resolution, 0.03f);
+  param_loader.loadParam("depth/use_bilateral", _depth_use_bilateral, false);
+  param_loader.loadParam("depth/bilateral_sigma_S", _depth_bilateral_sigma_S, 5.0f);
+  param_loader.loadParam("depth/bilateral_sigma_R", _depth_bilateral_sigma_R, 5e-3f);
+  param_loader.loadParam("depth/radius_outlier_filter/radius", _depth_radius_outlier_filter_radius, 0.0f);
+  param_loader.loadParam("depth/radius_outlier_filter/neighbors", _depth_radius_outlier_filter_neighbors, 0);
+  _depth_min_range_sq *= _depth_min_range_sq;
+  _depth_max_range_sq *= _depth_max_range_sq;
+  _depth_use_radius_outlier_filter = _depth_radius_outlier_filter_radius > 0.0f && _depth_radius_outlier_filter_neighbors > 0;
 
   /* RPLidar */
   param_loader.loadParam("rplidar/republish", _rplidar_republish, false);
@@ -50,15 +53,16 @@ void PCLFiltration::onInit() {
     ros::shutdown();
   }
 
-  if (_ouster_republish) {
-    _sub_ouster                = nh.subscribe("ouster_in", 10, &PCLFiltration::ousterCallback, this, ros::TransportHints().tcpNoDelay());
-    _pub_ouster                = nh.advertise<sensor_msgs::PointCloud2>("ouster_out", 10);
-    _pub_ouster_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("ouster_over_max_range_out", 10);
+  if (_lidar3d_republish) {
+    _sub_lidar3d                = nh.subscribe("lidar3d_in", 10, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());
+    _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 10);
+    _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 10);
   }
 
-  if (_realsense_republish) {
-    _sub_realsense = nh.subscribe("realsense_in", 1, &PCLFiltration::realsenseCallback, this, ros::TransportHints().tcpNoDelay());
-    _pub_realsense = nh.advertise<sensor_msgs::PointCloud2>("realsense_out", 10);
+  if (_depth_republish) {
+    _sub_depth                = nh.subscribe("depth_in", 1, &PCLFiltration::depthCallback, this, ros::TransportHints().tcpNoDelay());
+    _pub_depth                = nh.advertise<sensor_msgs::PointCloud2>("depth_out", 10);
+    _pub_depth_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("depth_over_max_range_out", 10);
   }
 
   if (_rplidar_republish) {
@@ -84,15 +88,15 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
   }
   NODELET_INFO("[PCLFiltration] Reconfigure callback.");
 
-  _ouster_filter_intensity_en       = config.ouster_filter_intensity_en;
-  _ouster_filter_intensity_thrd     = config.ouster_filter_intensity_thrd;
-  _ouster_filter_intensity_range_sq = std::pow(config.ouster_filter_intensity_rng, 2);
+  _lidar3d_filter_intensity_en       = config.lidar3d_filter_intensity_en;
+  _lidar3d_filter_intensity_thrd     = config.lidar3d_filter_intensity_thrd;
+  _lidar3d_filter_intensity_range_sq = std::pow(config.lidar3d_filter_intensity_rng, 2);
 }
 //}
 
-/* ousterCallback() //{ */
-void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
-  if (is_initialized && _ouster_republish) {
+/* lidar3dCallback() //{ */
+void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
+  if (is_initialized && _lidar3d_republish) {
 
     std::chrono::time_point<std::chrono::system_clock> start_time = std::chrono::system_clock::now();
 
@@ -103,73 +107,91 @@ void PCLFiltration::ousterCallback(const sensor_msgs::PointCloud2::ConstPtr &msg
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
 
     if (hasField("range", msg)) {
-      NODELET_INFO_ONCE("[PCLFiltration] Subscribing Ouster messages. Point type: ouster_ros::OS1::PointOS1.");
-      removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, msg, _ouster_pcl2_over_max_range, _ouster_min_range_mm, _ouster_max_range_mm,
-                                     _ouster_filter_intensity_en, _ouster_filter_intensity_range_mm, _ouster_filter_intensity_thrd);
+      NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::OS1::PointOS1.");
+      removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm, _lidar3d_max_range_mm,
+                                     _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);
     } else {
-      NODELET_INFO_ONCE("[PCLFiltration] Subscribing Ouster messages. Point type: pcl::PointXYZI.");
-      removeCloseAndFarPointCloud(pcl_variant, pcl_over_max_range_variant, msg, _ouster_pcl2_over_max_range, _ouster_min_range_sq, _ouster_max_range_sq);
+      NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: pcl::PointXYZI.");
+      removeCloseAndFarPointCloud(pcl_variant, pcl_over_max_range_variant, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_sq, _lidar3d_max_range_sq);
     }
 
     auto cloud_visitor = [&](const auto &pc) {
       points_after = pc->points.size();
-      publishCloud(_pub_ouster, *pc);
+      publishCloud(_pub_lidar3d, *pc);
     };
     std::visit(cloud_visitor, pcl_variant);
 
-    if (_ouster_pcl2_over_max_range) {
-      std::visit([&](const auto &pc) { publishCloud(_pub_ouster_over_max_range, *pc); }, pcl_over_max_range_variant);
+    if (_lidar3d_pcl2_over_max_range) {
+      std::visit([&](const auto &pc) { publishCloud(_pub_lidar3d_over_max_range, *pc); }, pcl_over_max_range_variant);
     }
 
     std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
-    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed OS1 data (run time: %0.1f ms; points before: %d, after: %d).", elapsed_ms.count() * 1000,
+    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %d, after: %d).", elapsed_ms.count() * 1000,
                           points_before, points_after);
   }
 }
 //}
 
-/* realsenseCallback() //{ */
-void PCLFiltration::realsenseCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
-  if (is_initialized && _realsense_republish) {
-    NODELET_INFO_ONCE("[PCLFiltration] Subscribing Realsense messages.");
+/* depthCallback() //{ */
+void PCLFiltration::depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
+  if (is_initialized && _depth_republish) {
+    NODELET_INFO_ONCE("[PCLFiltration] Subscribing depth camera messages.");
     std::chrono::time_point<std::chrono::system_clock> start_time = std::chrono::system_clock::now();
 
     unsigned int points_before = msg->height * msg->width;
 
-    PC::Ptr pcl = removeCloseAndFarPointCloudXYZ(msg, false, _realsense_min_range_sq, _realsense_max_range_sq).first;
+    std::pair<PC::Ptr, PC::Ptr> clouds = removeCloseAndFarPointCloudXYZ(msg, _depth_pcl2_over_max_range, _depth_min_range_sq, _depth_max_range_sq);
+
+    PC::Ptr pcl = clouds.first;
+
+    // Voxel grid sampling
+    if (_depth_voxel_resolution > 0.0f) {
+      /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied voxel sampling filter (res: %0.2f m).", _depth_voxel_resolution); */
+      pcl::VoxelGrid<pt_XYZ> vg;
+      vg.setInputCloud(pcl);
+      vg.setLeafSize(_depth_voxel_resolution, _depth_voxel_resolution, _depth_voxel_resolution);
+      vg.filter(*pcl);
+    }
+
+    // Radius outlier filter
+    if (_depth_use_radius_outlier_filter) {
+      pcl::RadiusOutlierRemoval<pt_XYZ> outrem;
+      outrem.setInputCloud(pcl);
+      outrem.setRadiusSearch(_depth_radius_outlier_filter_radius);
+      outrem.setMinNeighborsInRadius(_depth_radius_outlier_filter_neighbors);
+      outrem.setKeepOrganized(true);
+      outrem.filter(*pcl);
+    }
 
     // Bilateral filter
-    if (_realsense_use_bilateral) {
-      NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applying fast bilateral OMP filter.");
+    if (_depth_use_bilateral) {
+      /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied fast bilateral OMP filter (sigma S: %0.2f, sigma R: %0.2f).", _depth_bilateral_sigma_S, */
+      /*                       _depth_bilateral_sigma_R); */
       pcl::FastBilateralFilterOMP<pt_XYZ> fbf;
       fbf.setInputCloud(pcl);
-      fbf.setSigmaS(_realsense_bilateral_sigma_S);
-      fbf.setSigmaR(_realsense_bilateral_sigma_R);
+      fbf.setSigmaS(_depth_bilateral_sigma_S);
+      fbf.setSigmaR(_depth_bilateral_sigma_R);
       fbf.applyFilter(*pcl);
     }
 
     // Grid minimum
-    if (_realsense_minimum_grid_resolution > 0.0f) {
-      NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applying minimum grid filter.");
-      pcl::GridMinimum<pt_XYZ> gmf(_realsense_minimum_grid_resolution);
+    if (_depth_minimum_grid_resolution > 0.0f) {
+      /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied minimum grid filter (res: %0.2f m).", _depth_minimum_grid_resolution); */
+      pcl::GridMinimum<pt_XYZ> gmf(_depth_minimum_grid_resolution);
       gmf.setInputCloud(pcl);
       gmf.filter(*pcl);
     }
 
-    // Voxel grid sampling
-    if (_realsense_voxel_resolution > 0.0f) {
-      NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applying voxel sampling filter.");
-      pcl::VoxelGrid<pt_XYZ> vg;
-      vg.setInputCloud(pcl);
-      vg.setLeafSize(_realsense_voxel_resolution, _realsense_voxel_resolution, _realsense_voxel_resolution);
-      vg.filter(*pcl);
+    // Publish data
+    publishCloud(_pub_depth, *pcl);
+
+    // Publish data over max range
+    if (_depth_pcl2_over_max_range) {
+      publishCloud(_pub_depth_over_max_range, *clouds.second);
     }
 
-    // Publish data
-    publishCloud(_pub_realsense, *pcl);
-
     std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
-    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed RealSense data (run time: %0.1f ms; points before: %d, after: %ld).", elapsed_ms.count() * 1000,
+    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed depth camera data (run time: %0.1f ms; points before: %d, after: %ld).", elapsed_ms.count() * 1000,
                           points_before, pcl->points.size());
   }
 }
@@ -190,8 +212,8 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
                                                 const float max_range_sq) {
 
   // Convert to pcl object
-  PC_I::Ptr cloud                = boost::make_shared<PC_I>();
-  PC_I::Ptr cloud_over_max_range = boost::make_shared<PC_I>();
+  PC_I::Ptr cloud = boost::make_shared<PC_I>();
+  PC_I::Ptr cloud_over_max_range;
   pcl::fromROSMsg(*msg, *cloud);
 
   size_t j          = 0;
@@ -199,6 +221,7 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
   size_t cloud_size = cloud->points.size();
 
   if (ret_cloud_over_max_range) {
+    cloud_over_max_range         = boost::make_shared<PC_I>();
     cloud_over_max_range->header = cloud->header;
     cloud_over_max_range->points.resize(cloud_size);
   }
@@ -215,7 +238,7 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
 
       cloud->points.at(j++) = cloud->points.at(i);
 
-    } else if (ret_cloud_over_max_range) {
+    } else if (ret_cloud_over_max_range && cloud->points.at(i).getArray4fMap().allFinite()) {
 
       cloud_over_max_range->points.at(k++) = cloud->points.at(i);
     }
@@ -231,7 +254,7 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
 
   cloud_var.emplace<1>(cloud);
 
-  if (cloud_over_max_range) {
+  if (ret_cloud_over_max_range) {
     if (k != cloud_size) {
       cloud_over_max_range->points.resize(k);
     }
@@ -252,8 +275,8 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_
                                                    const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd) {
 
   // Convert to pcl object
-  PC_OS1::Ptr cloud                = boost::make_shared<PC_OS1>();
-  PC_OS1::Ptr cloud_over_max_range = boost::make_shared<PC_OS1>();
+  PC_OS1::Ptr cloud = boost::make_shared<PC_OS1>();
+  PC_OS1::Ptr cloud_over_max_range;
   pcl::fromROSMsg(*msg, *cloud);
 
   size_t j          = 0;
@@ -261,6 +284,7 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_
   size_t cloud_size = cloud->points.size();
 
   if (ret_cloud_over_max_range) {
+    cloud_over_max_range         = boost::make_shared<PC_OS1>();
     cloud_over_max_range->header = cloud->header;
     cloud_over_max_range->points.resize(cloud_size);
   }
@@ -295,7 +319,7 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_
   cloud->is_dense = false;
   cloud_var.emplace<0>(cloud);
 
-  if (cloud_over_max_range) {
+  if (ret_cloud_over_max_range) {
     if (k != cloud_size) {
       cloud_over_max_range->points.resize(k);
     }
@@ -309,12 +333,12 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_
 /*//}*/
 
 /*//{ removeCloseAndFarPointCloudXYZ() */
-std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr msg, const bool ret_cloud_over_max_range,
+std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool ret_cloud_over_max_range,
                                                                           const float min_range_sq, const float max_range_sq) {
 
   // Convert to pcl object
-  PC::Ptr cloud(new PC());
-  PC::Ptr cloud_over_max_range(new PC());
+  PC::Ptr cloud                = boost::make_shared<PC>();
+  PC::Ptr cloud_over_max_range = boost::make_shared<PC>();
   pcl::fromROSMsg(*msg, *cloud);
 
   size_t j          = 0;
@@ -338,7 +362,8 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const 
 
       cloud->points.at(j++) = cloud->points.at(i);
 
-    } else if (ret_cloud_over_max_range) {
+    } else if (ret_cloud_over_max_range && cloud->points.at(i).getArray3fMap().allFinite()) {
+
       cloud_over_max_range->points.at(k++) = cloud->points.at(i);
     }
   }
@@ -351,10 +376,12 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const 
   cloud->width    = static_cast<uint32_t>(j);
   cloud->is_dense = false;
 
-  if (cloud_over_max_range) {
+
+  if (ret_cloud_over_max_range) {
     if (k != cloud_size) {
       cloud_over_max_range->points.resize(k);
     }
+    cloud_over_max_range->header   = cloud->header;
     cloud_over_max_range->height   = 1;
     cloud_over_max_range->width    = static_cast<uint32_t>(k);
     cloud_over_max_range->is_dense = false;
