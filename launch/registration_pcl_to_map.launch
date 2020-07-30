@@ -4,26 +4,36 @@
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
 
   <arg name="map" default="$(find naki_gazebo_resources)/models/stara_voda/pcd/stara_voda.pcd" />
-  <arg name="pcl" default="$(find naki_gazebo_resources)/models/stara_voda/pcd/stara_voda_aloam_full.pcd" />
+  <arg name="pcl" default="$(find naki_gazebo_resources)/models/stara_voda/pcd/stara_voda_bottom_rot.pcd" />
+  <arg name="save_as" default="$(find naki_gazebo_resources)/models/stara_voda/pcd/stara_voda_pcl_to_map.pcd" />
 
   <arg name="nodelet" default="standalone" />
   <arg name="nodelet_manager" default="" />
   <arg name="launch_prefix" default=""/>
 
   <group ns="$(arg UAV_NAME)">
-    <node pkg="nodelet" type="nodelet" name="pcl_to_map_registration" args="$(arg nodelet) mrs_pcl_tools/PCL2MapRegistration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
+
+    <node pkg="nodelet" type="nodelet" name="pc2map" args="$(arg nodelet) mrs_pcl_tools/PCL2MapRegistration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
 
       <!-- Parameters -->
       <param name="map" type="string" value="$(arg map)" />
       <param name="pcl" type="string" value="$(arg pcl)" />
+      <param name="save_as" type="string" value="$(arg save_as)" />
 
       <!-- Subscribers -->
       <!-- <remap from="~ouster_in" to="os1_cloud_node/points" /> -->
 
       <!-- Publishers -->
-      <!-- <remap from="~ouster_out" to="os1_cloud_node/points_processed" /> -->
+      <remap from="~cloud_source_out" to="registration/source" />
+      <remap from="~cloud_target_out" to="registration/target" />
+      <remap from="~cloud_aligned_out" to="registration/aligned" />
+      
+      <!-- Service servers -->
+      <remap from="~srv_register_offline" to="~register/offline" />
+      <remap from="~srv_register_online" to="~register/pointcloud2" />
 
     </node>
+
   </group>
 
 </launch>

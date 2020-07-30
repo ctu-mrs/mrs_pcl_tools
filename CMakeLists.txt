@@ -3,8 +3,8 @@ project(mrs_pcl_tools)
 
 set(CMAKE_CXX_FLAGS "-g -O3 -DEIGEN_INITIALIZE_MATRICES_BY_NAN -DDEBUG_PARAMS")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O3 -DEIGEN_INITIALIZE_MATRICES_BY_NAN -DDEBUG_PARAMS")
-set(CMAKE_CXX_FLAGS_RELEASE "-Werror -g -O3 -DEIGEN_INITIALIZE_MATRICES_BY_NAN -DDEBUG_PARAMS")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -O3")
+set(CMAKE_CXX_FLAGS_RELEASE "-Werror -g -O0 -DEIGEN_INITIALIZE_MATRICES_BY_NAN -DDEBUG_PARAMS")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -O0")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,11 +20,17 @@ find_package(catkin REQUIRED COMPONENTS
     roscpp
     nodelet
     message_generation
+    std_msgs
     sensor_msgs
+    geometry_msgs
     pcl_ros
     mrs_lib
     dynamic_reconfigure
     os1_driver
+)
+
+add_service_files(DIRECTORY srv/registration FILES
+  SrvRegisterPointCloudByName.srv
 )
 
 find_package(PCL REQUIRED COMPONENTS)
@@ -51,7 +57,9 @@ ENDIF()
 
 generate_dynamic_reconfigure_options(
   cfg/pcl_filtration_dynparam.cfg
+  cfg/pcl2map_registration_dynparam.cfg
 )
+generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 
 ###################################
 ## catkin specific configuration ##
@@ -60,7 +68,7 @@ generate_dynamic_reconfigure_options(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES PCLFiltration PCL2MapRegistration
-  CATKIN_DEPENDS roscpp sensor_msgs pcl_ros mrs_lib
+  CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs pcl_ros mrs_lib
   DEPENDS Eigen
 )
 
@@ -100,7 +108,7 @@ add_library(PCLFiltration
   src/PCLFiltration.cpp
   )
 
-add_dependencies(PCLFiltration mrs_pcl_tools_gencfg)
+add_dependencies(PCLFiltration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(
@@ -114,7 +122,7 @@ add_library(PCL2MapRegistration
   src/PCL2MapRegistration.cpp
   )
 
-# add_dependencies(PCL2MapRegistration PCL2MapRegistration_gencfg)
+add_dependencies(PCL2MapRegistration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(
