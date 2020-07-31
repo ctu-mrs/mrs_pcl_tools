@@ -153,19 +153,21 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   T = T * T_corr;
   printEigenMatrix(T, "Transformation matrix (after correlation):");
 
-  // TODO: Publish transformation as tf pc_src.frame -> pc_targ.frame
+  // Publish result as static TF pc_src.frame -> pc_targ.frame
+  if (res.success) {
+    geometry_msgs::TransformStamped tf_msg;
 
-  /* // Convert transformation T to geometry_msgs/Pose */
-  /* if (res.success) { */
-  /*   geometry_msgs::Pose              pose; */
-  /*   const Eigen::Matrix3d            R = T.block<3, 3>(0, 0).cast<double>(); */
-  /*   const mrs_lib::AttitudeConverter atti(R); */
-  /*   pose.orientation   = atti; */
-  /*   pose.position.x    = T(0, 3); */
-  /*   pose.position.y    = T(1, 3); */
-  /*   pose.position.z    = T(2, 3); */
-  /*   res.transformation = pose; */
-  /* } */
+    // Prepare header
+    pcl_conversions::fromPCL(pc_src->header.stamp, tf_msg.header.stamp);
+    tf_msg.header.frame_id = pc_src->header.frame_id;
+    tf_msg.child_frame_id  = _frame_map;
+
+    // TODO: fix conversion to geometry_msgs/Transform (currently segfault)
+    /* const Eigen::Affine3d T_affine(T.cast<double>()); */
+    /* tf::transformEigenToMsg(T_affine, tf_msg.transform); */
+
+    publishTF(tf_msg);
+  }
 
   return res.success;
 }
@@ -731,9 +733,24 @@ std::optional<PC_NORM::Ptr> PCL2MapRegistration::subscribeSinglePointCloudMsg(co
   sensor_msgs::PointCloud2::ConstPtr cloud_msg = ros::topic::waitForMessage<sensor_msgs::PointCloud2>(topic, _nh, _SUBSCRIBE_MSG_TIMEOUT);
 
   if (cloud_msg) {
-    PC_NORM::Ptr cloud = boost::make_shared<PC_NORM>();
-    pcl::fromROSMsg(*cloud_msg, *cloud);
+
+    PC_NORM::Ptr cloud;
+
+    if (hasNormals(cloud_msg)) {
+
+      cloud = boost::make_shared<PC_NORM>();
+      pcl::fromROSMsg(*cloud_msg, *cloud);
+
+    } else {
+
+      PC::Ptr cloud_xyz = boost::make_shared<PC>();
+      pcl::fromROSMsg(*cloud_msg, *cloud_xyz);
+      cloud = estimateNormals(cloud_xyz, _normal_estimation_radius);
+
+    }
+
     return cloud;
+
   }
 
   return std::nullopt;
@@ -879,6 +896,23 @@ void PCL2MapRegistration::publishCloudMsg(const ros::Publisher pub, const sensor
   catch (...) {
     NODELET_ERROR("[PCL2MapRegistration]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
   }
+}
+/*//}*/
+
+/*//{ publishTF() */
+bool PCL2MapRegistration::publishTF(const geometry_msgs::TransformStamped tf) {
+  tf2_ros::StaticTransformBroadcaster tf_broadcaster;
+  tf2_msgs::TFMessage                 tf_msg;
+  tf_msg.transforms.push_back(tf);
+  try {
+    tf_broadcaster.sendTransform(tf);
+    ROS_INFO("[PCL2MapRegistration]: Published static TF: %s - %s.", tf.child_frame_id.c_str(), tf.header.frame_id.c_str());
+    return true;
+  }
+  catch (...) {
+    ROS_ERROR("[PCL2MapRegistration]: Exception caught during publishing static TF: %s - %s.", tf.child_frame_id.c_str(), tf.header.frame_id.c_str());
+  }
+  return false;
 }
 /*//}*/
 

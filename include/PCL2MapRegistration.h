@@ -6,6 +6,8 @@
 #include <mutex>
 #include <tuple>
 
+#include <tf2_ros/static_transform_broadcaster.h>
+
 #include <std_srvs/Trigger.h>
 
 #include <pcl/features/normal_3d_omp.h>
@@ -136,6 +138,7 @@ private:
 
   void publishCloud(const ros::Publisher pub, const PC_NORM::Ptr cloud);
   void publishCloudMsg(const ros::Publisher pub, const sensor_msgs::PointCloud2::Ptr cloud_msg);
+  bool publishTF(const geometry_msgs::TransformStamped tf);
 
   void printEigenMatrix(const Eigen::Matrix4f mat, const std::string prefix = "");
 };
