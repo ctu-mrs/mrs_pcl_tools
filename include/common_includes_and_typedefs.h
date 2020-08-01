@@ -21,9 +21,6 @@
 #include <pcl/filters/grid_minimum.h>
 #include <pcl/filters/radius_outlier_removal.h>
 
-// Eigen
-#include <eigen_conversions/eigen_msg.h>
-
 // mrs_lib
 #include <mrs_lib/param_loader.h>
 #include <mrs_lib/attitude_converter.h>

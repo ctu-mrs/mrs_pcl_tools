@@ -7,8 +7,10 @@
 #include <tuple>
 
 #include <tf2_ros/static_transform_broadcaster.h>
+#include <tf2_msgs/TFMessage.h>
 
 #include <std_srvs/Trigger.h>
+#include <geometry_msgs/TransformStamped.h>
 
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/features/fpfh_omp.h>
@@ -46,6 +48,7 @@ private:
   ros::Publisher _pub_cloud_source;
   ros::Publisher _pub_cloud_target;
   ros::Publisher _pub_cloud_aligned;
+  ros::Publisher _pub_registration_tf;
 
   std::string _frame_map;
   std::string _path_map;
@@ -63,7 +66,11 @@ private:
   float _min_convergence_score           = 0.5f;
 
   std::mutex _mutex_registration;
-  ros::Timer _timer_registration;
+
+  tf2_ros::StaticTransformBroadcaster tf_broadcaster;
+  tf2_msgs::TFMessage                 _tf_registration_msg;
+  ros::Timer                          _timer_publish_registration_tf;
+  void                                publishRegistrationTF([[maybe_unused]] const ros::TimerEvent &event);
 
   float _fpfh_search_rad           = 3.5;
   float _fpfh_similarity_threshold = 0.9;
@@ -138,7 +145,6 @@ private:
 
   void publishCloud(const ros::Publisher pub, const PC_NORM::Ptr cloud);
   void publishCloudMsg(const ros::Publisher pub, const sensor_msgs::PointCloud2::Ptr cloud_msg);
-  bool publishTF(const geometry_msgs::TransformStamped tf);
 
   void printEigenMatrix(const Eigen::Matrix4f mat, const std::string prefix = "");
 };

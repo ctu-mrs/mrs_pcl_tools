@@ -32,9 +32,10 @@ void PCL2MapRegistration::onInit() {
     _map_available = _pc_map->points.size() > 0;
   }
 
-  _pub_cloud_source  = _nh.advertise<sensor_msgs::PointCloud2>("cloud_source_out", 1);
-  _pub_cloud_target  = _nh.advertise<sensor_msgs::PointCloud2>("cloud_target_out", 1);
-  _pub_cloud_aligned = _nh.advertise<sensor_msgs::PointCloud2>("cloud_aligned_out", 1);
+  _pub_cloud_source    = _nh.advertise<sensor_msgs::PointCloud2>("cloud_source_out", 1);
+  _pub_cloud_target    = _nh.advertise<sensor_msgs::PointCloud2>("cloud_target_out", 1);
+  _pub_cloud_aligned   = _nh.advertise<sensor_msgs::PointCloud2>("cloud_aligned_out", 1);
+  _pub_registration_tf = _nh.advertise<tf2_msgs::TFMessage>("/tf_static", 10);
 
   reconfigure_server_.reset(new ReconfigureServer(config_mutex_, _nh));
   ReconfigureServer::CallbackType f = boost::bind(&PCL2MapRegistration::callbackReconfigure, this, _1, _2);
@@ -44,6 +45,8 @@ void PCL2MapRegistration::onInit() {
 
   _srv_server_registration_offline     = _nh.advertiseService("srv_register_offline", &PCL2MapRegistration::callbackSrvRegisterOffline, this);
   _srv_server_registration_pointcloud2 = _nh.advertiseService("srv_register_online", &PCL2MapRegistration::callbackSrvRegisterPointCloud, this);
+
+  _timer_publish_registration_tf = _nh.createTimer(ros::Rate(1.0), &PCL2MapRegistration::publishRegistrationTF, this, false, false);
 
   _is_initialized = true;
 }
@@ -135,9 +138,9 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   applyVoxelGridFilter(pc_src_filt, pc_src, _clouds_voxel_leaf);
 
   // Match centroids and move pc_src min-z to pc_targ min-z
-  Eigen::Matrix4f T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
+  const Eigen::Matrix4f T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
 
-  // Publish data (TODO: correct frames)
+  // Publish input data
   pc_src_filt->header.stamp     = pc_src->header.stamp;
   pc_src_filt->header.frame_id  = _frame_map;
   pc_targ_filt->header.stamp    = pc_src->header.stamp;
@@ -162,11 +165,19 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
     tf_msg.header.frame_id = pc_src->header.frame_id;
     tf_msg.child_frame_id  = _frame_map;
 
-    // TODO: fix conversion to geometry_msgs/Transform (currently segfault)
-    /* const Eigen::Affine3d T_affine(T.cast<double>()); */
-    /* tf::transformEigenToMsg(T_affine, tf_msg.transform); */
+    // Fill transform
+    const Eigen::Matrix4f T_inv    = T.inverse();
+    tf_msg.transform.translation.x = T_inv(0, 3);
+    tf_msg.transform.translation.y = T_inv(1, 3);
+    tf_msg.transform.translation.z = T_inv(2, 3);
+    mrs_lib::AttitudeConverter R(T_inv.block<3, 3>(0, 0).cast<double>());
+    tf_msg.transform.rotation = R;
 
-    publishTF(tf_msg);
+    // Initialize periodic TF publishing
+    _timer_publish_registration_tf.stop();
+    _tf_registration_msg.transforms.clear();
+    _tf_registration_msg.transforms.push_back(tf_msg);
+    _timer_publish_registration_tf.start();
   }
 
   return res.success;
@@ -746,11 +757,9 @@ std::optional<PC_NORM::Ptr> PCL2MapRegistration::subscribeSinglePointCloudMsg(co
       PC::Ptr cloud_xyz = boost::make_shared<PC>();
       pcl::fromROSMsg(*cloud_msg, *cloud_xyz);
       cloud = estimateNormals(cloud_xyz, _normal_estimation_radius);
-
     }
 
     return cloud;
-
   }
 
   return std::nullopt;
@@ -899,20 +908,17 @@ void PCL2MapRegistration::publishCloudMsg(const ros::Publisher pub, const sensor
 }
 /*//}*/
 
-/*//{ publishTF() */
-bool PCL2MapRegistration::publishTF(const geometry_msgs::TransformStamped tf) {
-  tf2_ros::StaticTransformBroadcaster tf_broadcaster;
-  tf2_msgs::TFMessage                 tf_msg;
-  tf_msg.transforms.push_back(tf);
+/*//{ publishRegistrationTF() */
+void PCL2MapRegistration::publishRegistrationTF([[maybe_unused]] const ros::TimerEvent &event) {
   try {
-    tf_broadcaster.sendTransform(tf);
-    ROS_INFO("[PCL2MapRegistration]: Published static TF: %s - %s.", tf.child_frame_id.c_str(), tf.header.frame_id.c_str());
-    return true;
+    _pub_registration_tf.publish(_tf_registration_msg);
+    ROS_INFO_THROTTLE(10.0, "[PCL2MapRegistration]: Published static TF: %s - %s.", _tf_registration_msg.transforms[0].child_frame_id.c_str(),
+                      _tf_registration_msg.transforms[0].header.frame_id.c_str());
   }
   catch (...) {
-    ROS_ERROR("[PCL2MapRegistration]: Exception caught during publishing static TF: %s - %s.", tf.child_frame_id.c_str(), tf.header.frame_id.c_str());
+    ROS_ERROR("[PCL2MapRegistration]: Exception caught during publishing static TF: %s - %s.", _tf_registration_msg.transforms[0].child_frame_id.c_str(),
+              _tf_registration_msg.transforms[0].header.frame_id.c_str());
   }
-  return false;
 }
 /*//}*/
 
