@@ -12,11 +12,9 @@ void PCL2MapRegistration::onInit() {
   // Get parameters from config file
   mrs_lib::ParamLoader param_loader(_nh, "PCL2MapRegistration");
 
-  std::string path_save_as;
-  param_loader.loadParam("map", _path_map);
-  param_loader.loadParam("pcl", _path_pcl);
-  param_loader.loadParam("save_as", path_save_as);
-  param_loader.loadParam<std::string>("map_frame", _frame_map, "origin");
+  param_loader.loadParam("target_pcd", _path_map);
+  param_loader.loadParam<std::string>("source_pcd", _path_pcl, "");
+  param_loader.loadParam<std::string>("map_frame", _frame_map, "global_origin");
   param_loader.loadParam<std::string>("topic_pointcloud2", _topic_pc2, "");
 
   if (!param_loader.loadedSuccessfully()) {
@@ -26,10 +24,13 @@ void PCL2MapRegistration::onInit() {
 
   {
     std::scoped_lock lock(_mutex_registration);
-    _pc_map  = loadPcWithNormals(_path_map);
-    _pc_slam = loadPcWithNormals(_path_pcl);
-
+    _pc_map        = loadPcWithNormals(_path_map);
     _map_available = _pc_map->points.size() > 0;
+
+    if (_path_pcl.size() > 0) {
+      _pc_offline           = loadPcWithNormals(_path_pcl);
+      _pc_offline_available = _pc_offline->points.size() > 0;
+    }
   }
 
   _pub_cloud_source    = _nh.advertise<sensor_msgs::PointCloud2>("cloud_source_out", 1);
@@ -62,6 +63,10 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
     res.success = false;
     res.message = "Reference map has 0 points.";
     return false;
+  } else if (!_pc_offline_available) {
+    res.success = false;
+    res.message = "No offline PC was pre-loaded to the memory or the pre-loaded PC has 0 points.";
+    return false;
   }
 
   // Preprocess data
@@ -70,7 +75,7 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
   {
     std::scoped_lock lock(_mutex_registration);
     applyVoxelGridFilter(pc_targ_filt, _pc_map, _clouds_voxel_leaf);
-    applyVoxelGridFilter(pc_src_filt, _pc_slam, _clouds_voxel_leaf);
+    applyVoxelGridFilter(pc_src_filt, _pc_offline, _clouds_voxel_leaf);
 
     // for debugging: apply random translation on the slam pc
     applyRandomTransformation(pc_src_filt);
@@ -335,12 +340,15 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
   // Re-estimate normals
   if (std::fabs(_normal_estimation_radius - config.norm_estim_rad) > 1e-5) {
     _normal_estimation_radius = config.norm_estim_rad;
+
     if (!hasNormals(_path_map)) {
       _pc_map        = loadPcWithNormals(_path_map);
       _map_available = _pc_map->points.size() > 0;
     }
-    if (!hasNormals(_path_pcl)) {
-      _pc_slam = loadPcWithNormals(_path_pcl);
+
+    if (_path_pcl.size() > 0 && !hasNormals(_path_pcl)) {
+      _pc_offline           = loadPcWithNormals(_path_pcl);
+      _pc_offline_available = _pc_offline->points.size() > 0;
     }
   }
 

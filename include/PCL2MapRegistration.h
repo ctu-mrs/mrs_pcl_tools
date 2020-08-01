@@ -39,8 +39,9 @@ public:
 
 private:
   ros::NodeHandle _nh;
-  bool            _is_initialized = false;
-  bool            _map_available  = false;
+  bool            _is_initialized       = false;
+  bool            _map_available        = false;
+  bool            _pc_offline_available = false;
 
   ros::ServiceServer _srv_server_registration_offline;
   ros::ServiceServer _srv_server_registration_pointcloud2;
@@ -60,7 +61,7 @@ private:
   int   _registration_method_initial     = 4;
   int   _registration_method_fine_tune   = 3;
   bool  _use_init_guess                  = false;
-  float _clouds_voxel_leaf               = 0.6f;
+  float _clouds_voxel_leaf               = 0.3f;
   float _normal_estimation_radius        = 0.25f;
   float _cloud_correlation_z_crop_offset = 2.0f;
   float _min_convergence_score           = 0.5f;
@@ -117,7 +118,7 @@ private:
   boost::shared_ptr<ReconfigureServer>                       reconfigure_server_;
 
   PC_NORM::Ptr _pc_map;
-  PC_NORM::Ptr _pc_slam;
+  PC_NORM::Ptr _pc_offline;
 
   PC::Ptr                     loadPcXYZ(const std::string &path);
   PC_NORM::Ptr                loadPcWithNormals(const std::string &path);
