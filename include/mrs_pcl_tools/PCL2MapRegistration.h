@@ -12,7 +12,6 @@
 #include <std_srvs/Trigger.h>
 #include <geometry_msgs/TransformStamped.h>
 
-#include <pcl/features/normal_3d_omp.h>
 #include <pcl/features/fpfh_omp.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/registration/sample_consensus_prerejective.h>
@@ -38,12 +37,14 @@ public:
   virtual void onInit();
 
 private:
+  const ros::Duration _SUBSCRIBE_MSG_TIMEOUT = ros::Duration(2.0f);
+
   ros::NodeHandle _nh;
   bool            _is_initialized       = false;
   bool            _map_available        = false;
   bool            _pc_offline_available = false;
 
-  std::shared_ptr<mrs_pcl_tools::PCLHandler> _pc_handler; 
+  std::mutex _mutex_registration;
 
   ros::ServiceServer _srv_server_registration_offline;
   ros::ServiceServer _srv_server_registration_pointcloud2;
@@ -58,8 +59,6 @@ private:
   std::string _path_pcl;
   std::string _topic_pc2;
 
-  const ros::Duration _SUBSCRIBE_MSG_TIMEOUT = ros::Duration(2.0f);
-
   int   _registration_method_initial     = 4;
   int   _registration_method_fine_tune   = 3;
   bool  _use_init_guess                  = false;
@@ -67,8 +66,6 @@ private:
   float _normal_estimation_radius        = 0.25f;
   float _cloud_correlation_z_crop_offset = 2.0f;
   float _min_convergence_score           = 0.5f;
-
-  std::mutex _mutex_registration;
 
   tf2_ros::StaticTransformBroadcaster tf_broadcaster;
   tf2_msgs::TFMessage                 _tf_registration_msg;
@@ -122,12 +119,8 @@ private:
   PC_NORM::Ptr _pc_map;
   PC_NORM::Ptr _pc_offline;
 
-  PC::Ptr                     loadPcXYZ(const std::string &path);
-  PC_NORM::Ptr                loadPcWithNormals(const std::string &path);
+  PC_NORM::Ptr                loadPcWithNormals(const std::string &pcd_file);
   std::optional<PC_NORM::Ptr> subscribeSinglePointCloudMsg(const std::string &topic);
-  bool                        loadPcNormals(const std::string &path, PC_NORM::Ptr &cloud);
-  bool                        hasNormals(const std::string path);
-  bool                        hasNormals(const sensor_msgs::PointCloud2::ConstPtr &cloud);
   Eigen::Matrix4f             correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
 
   std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
@@ -141,15 +134,7 @@ private:
   std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_icpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
   std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_sicpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map);
 
-  PC_NORM::Ptr    estimateNormals(const PC::Ptr cloud, const float nest_radius);
-  void            applyVoxelGridFilter(PC_NORM::Ptr cloud_in, const PC_NORM::Ptr cloud_out, const float leaf_size);
-  void            applyRandomTransformation(PC_NORM::Ptr cloud);
-  Eigen::Matrix4f getRotationMatrixAroundPoint(const Eigen::Matrix3f rotation, const Eigen::Vector4f point);
-
-  void publishCloud(const ros::Publisher pub, const PC_NORM::Ptr cloud);
-  void publishCloudMsg(const ros::Publisher pub, const sensor_msgs::PointCloud2::Ptr cloud_msg);
-
-  void printEigenMatrix(const Eigen::Matrix4f mat, const std::string prefix = "");
+  void applyRandomTransformation(PC_NORM::Ptr cloud);
 };
 //}
 

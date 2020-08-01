@@ -21,8 +21,6 @@ void PCL2MapRegistration::onInit() {
     NODELET_ERROR("[PCL2MapRegistration]: Some compulsory parameters were not loaded successfully, ending the node");
     ros::shutdown();
   }
-  
-  _pc_handler = std::make_shared<mrs_pcl_tools::PCLHandler>();
 
   {
     std::scoped_lock lock(_mutex_registration);
@@ -76,8 +74,8 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
   PC_NORM::Ptr pc_src_filt  = boost::make_shared<PC_NORM>();
   {
     std::scoped_lock lock(_mutex_registration);
-    applyVoxelGridFilter(pc_targ_filt, _pc_map, _clouds_voxel_leaf);
-    applyVoxelGridFilter(pc_src_filt, _pc_offline, _clouds_voxel_leaf);
+    applyVoxelGridFilter(_pc_map, pc_targ_filt, _clouds_voxel_leaf);
+    applyVoxelGridFilter(_pc_offline, pc_src_filt, _clouds_voxel_leaf);
 
     // for debugging: apply random translation on the slam pc
     applyRandomTransformation(pc_src_filt);
@@ -129,6 +127,12 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
 
   if (msg_ret) {
     pc_src = msg_ret.value();
+    if (pc_src->points.size() == 0) {
+      res.success = false;
+      res.message = "Received point cloud with 0 points.";
+      ROS_ERROR("[PCL2MapRegistration] Requested cloud registration to map, but the received data on topic (%s) contain 0 points.", topic.c_str());
+      return false;
+    }
   } else {
     res.success = false;
     res.message = "No point cloud data received.";
@@ -140,9 +144,9 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   // Voxelize both clouds
   {
     std::scoped_lock lock(_mutex_registration);
-    applyVoxelGridFilter(pc_targ_filt, _pc_map, _clouds_voxel_leaf);
+    applyVoxelGridFilter(_pc_map, pc_targ_filt, _clouds_voxel_leaf);
   }
-  applyVoxelGridFilter(pc_src_filt, pc_src, _clouds_voxel_leaf);
+  applyVoxelGridFilter(pc_src, pc_src_filt, _clouds_voxel_leaf);
 
   // Match centroids and move pc_src min-z to pc_targ min-z
   const Eigen::Matrix4f T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
@@ -676,46 +680,34 @@ Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr pc_src, 
 }
 /*//}*/
 
-/*//{ loadPcXYZ() */
-PC::Ptr PCL2MapRegistration::loadPcXYZ(const std::string &path) {
-
-  PC::Ptr pc = boost::make_shared<PC>();
-
-  ROS_INFO("[PCL2MapRegistration] Reading pointcloud from path %s", path.c_str());
-  if (pcl::io::loadPCDFile<pt_XYZ>(path, *pc) < 0) {
-    ROS_ERROR("[PCL2MapRegistration] Couldn't read PCD file from path: %s.", path.c_str());
-    ros::shutdown();
-  } else {
-    ROS_INFO("[PCL2MapRegistration] Loaded XYZ pcl with %ld points.", pc->points.size());
-  }
-
-  return pc;
-}
-/*//}*/
-
 /*//{ loadPcWithNormals() */
-PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &path) {
-  ROS_INFO("[PCL2MapRegistration] Loading PCD file: %s.", path.c_str());
+PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &pcd_file) {
+  ROS_INFO("[PCL2MapRegistration] Loading PCD file: %s.", pcd_file.c_str());
 
   PC_NORM::Ptr pc_norm = boost::make_shared<PC_NORM>();
 
-  if (hasNormals(path)) {
+  if (hasNormals(pcd_file)) {
 
     // Load points with normals
-    if (pcl::io::loadPCDFile<pt_NORM>(path, *pc_norm) < 0) {
-      ROS_ERROR("[PCL2MapRegistration] Couldn't read PCD (PointNormal) file: %s.", path.c_str());
+    if (pcl::io::loadPCDFile<pt_NORM>(pcd_file, *pc_norm) < 0) {
+      ROS_ERROR("[PCL2MapRegistration] Couldn't read PCD (PointNormal) file: %s.", pcd_file.c_str());
       ros::shutdown();
     }
     ROS_INFO("[PCL2MapRegistration] Loaded PointNormal PC with %ld points.", pc_norm->points.size());
 
   } else {
 
-    // Load points
-    PC::Ptr pc_xyz = boost::make_shared<PC>();
-    if (pcl::io::loadPCDFile<pt_XYZ>(path, *pc_xyz) < 0) {
-      ROS_ERROR("[PCL2MapRegistration] Couldn't read PCD (PointXYZ) file: %s.", path.c_str());
+    // Load XYZ points
+    PC::Ptr pc_xyz;
+    auto    ret = loadPcXYZ(pcd_file);
+
+    if (ret) {
+      pc_xyz = ret.value();
+    } else {
+      ROS_ERROR("[PCL2MapRegistration] Couldn't read PCD (PointXYZ) file: %s.", pcd_file.c_str());
       ros::shutdown();
     }
+
     ROS_INFO("[PCL2MapRegistration] Loaded XYZ PC with %ld points. Estimating the PC normals.", pc_xyz->points.size());
 
     // Estimate normals
@@ -726,26 +718,6 @@ PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &path) {
   }
 
   return pc_norm;
-}
-/*//}*/
-
-/*//{ loadPcNormals() */
-bool PCL2MapRegistration::loadPcNormals(const std::string &path, PC_NORM::Ptr &cloud) {
-
-  // Check if normals are present in the PCD file by looking at the header
-  if (!hasNormals(path)) {
-    return false;
-  }
-
-  // Load PCD file
-  ROS_INFO("[PCL2MapRegistration] Loading normals from PCD file: %s.", path.c_str());
-  if (pcl::io::loadPCDFile(path, *cloud) < 0) {
-    ROS_ERROR("[PCL2MapRegistration] Couldn't read normals of PCD file: %s.", path.c_str());
-    return false;
-  }
-
-  ROS_INFO("[PCL2MapRegistration] Loaded PCL normals with %ld points.", cloud->points.size());
-  return true;
 }
 /*//}*/
 
@@ -776,83 +748,6 @@ std::optional<PC_NORM::Ptr> PCL2MapRegistration::subscribeSinglePointCloudMsg(co
 }
 /*//}*/
 
-/*//{ hasNormals(std::string) */
-bool PCL2MapRegistration::hasNormals(const std::string path) {
-
-  // Read header of PCD file
-  pcl::PCDReader      reader_pcd;
-  pcl::PCLPointCloud2 pc_fields;
-  if (reader_pcd.readHeader(path, pc_fields) < 0) {
-    ROS_ERROR("[PCL2MapRegistration] Couldn't read header of PCD file: %s.", path.c_str());
-    return false;
-  }
-
-  // Check header for normals (normal_x, normal_y, normal_z, curvature)
-  unsigned int normal_fields   = 0;
-  bool         curvature_field = false;
-  for (auto field : pc_fields.fields) {
-    if (field.name.rfind("normal", 0) == 0) {
-      normal_fields++;
-    } else if (field.name == "curvature") {
-      curvature_field = true;
-    }
-  }
-  if (normal_fields != 3 || !curvature_field) {
-    ROS_INFO("[PCL2MapRegistration] No normals in PCD file: %s.", path.c_str());
-    return false;
-  }
-
-  return true;
-}
-/*//}*/
-
-/*//{ hasNormals(sensor_msgs::PointCloud2)*/
-bool PCL2MapRegistration::hasNormals(const sensor_msgs::PointCloud2::ConstPtr &cloud) {
-
-  // Check header for normals (normal_x, normal_y, normal_z, curvature)
-  unsigned int normal_fields   = 0;
-  bool         curvature_field = false;
-  for (auto field : cloud->fields) {
-    if (field.name.rfind("normal", 0) == 0) {
-      normal_fields++;
-    } else if (field.name == "curvature") {
-      curvature_field = true;
-    }
-  }
-  if (normal_fields != 3 || !curvature_field) {
-    return false;
-  }
-
-  return true;
-}
-/*//}*/
-
-/*//{ estimateNormals() */
-PC_NORM::Ptr PCL2MapRegistration::estimateNormals(const PC::Ptr cloud, const float nest_radius) {
-
-  // XYZ type to XYZNormal
-  PC_NORM::Ptr cloud_norm = boost::make_shared<PC_NORM>();
-  pcl::copyPointCloud(*cloud, *cloud_norm);
-
-  // Estimate normals
-  pcl::NormalEstimationOMP<pt_NORM, pt_NORM> nest;
-  nest.setRadiusSearch(nest_radius);
-  nest.setInputCloud(cloud_norm);
-  nest.compute(*cloud_norm);
-
-  return cloud_norm;
-}
-/*//}*/
-
-/*//{ applyVoxelGridFilter() */
-void PCL2MapRegistration::applyVoxelGridFilter(PC_NORM::Ptr cloud_out, const PC_NORM::Ptr cloud_in, const float leaf_size) {
-  pcl::VoxelGrid<pt_NORM> grid;
-  grid.setLeafSize(leaf_size, leaf_size, leaf_size);
-  grid.setInputCloud(cloud_in);
-  grid.filter(*cloud_out);
-}
-/*//}*/
-
 /*//{ applyRandomTransformation() */
 void PCL2MapRegistration::applyRandomTransformation(PC_NORM::Ptr cloud) {
 
@@ -874,50 +769,6 @@ void PCL2MapRegistration::applyRandomTransformation(PC_NORM::Ptr cloud) {
 }
 /*//}*/
 
-/*//{ getRotationMatrixAroundPoint() */
-Eigen::Matrix4f PCL2MapRegistration::getRotationMatrixAroundPoint(const Eigen::Matrix3f rotation, const Eigen::Vector4f point) {
-  Eigen::Matrix4f T1 = Eigen::Matrix4f::Identity();
-  Eigen::Matrix4f T2 = Eigen::Matrix4f::Identity();
-  Eigen::Matrix4f T3 = Eigen::Matrix4f::Identity();
-
-  // To the point
-  T1(0, 3) = -point.x();
-  T1(1, 3) = -point.y();
-  T1(2, 3) = -point.z();
-
-  // Rotate
-  T2.block<3, 3>(0, 0) = rotation;
-
-  // Back to the origin
-  T3(0, 3) = point.x();
-  T3(1, 3) = point.y();
-  T3(2, 3) = point.z();
-
-  return T3 * T2 * T1;
-}
-/*//}*/
-
-/*//{ publishCloud() */
-void PCL2MapRegistration::publishCloud(const ros::Publisher pub, const PC_NORM::Ptr cloud) {
-  if (pub.getNumSubscribers() > 0) {
-    sensor_msgs::PointCloud2::Ptr cloud_msg = boost::make_shared<sensor_msgs::PointCloud2>();
-    pcl::toROSMsg(*cloud, *cloud_msg);
-    publishCloudMsg(pub, cloud_msg);
-  }
-}
-/*//}*/
-
-/*//{ publishCloudMsg() */
-void PCL2MapRegistration::publishCloudMsg(const ros::Publisher pub, const sensor_msgs::PointCloud2::Ptr cloud_msg) {
-  try {
-    pub.publish(cloud_msg);
-  }
-  catch (...) {
-    NODELET_ERROR("[PCL2MapRegistration]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
-  }
-}
-/*//}*/
-
 /*//{ publishRegistrationTF() */
 void PCL2MapRegistration::publishRegistrationTF([[maybe_unused]] const ros::TimerEvent &event) {
   try {
@@ -932,20 +783,6 @@ void PCL2MapRegistration::publishRegistrationTF([[maybe_unused]] const ros::Time
 }
 /*//}*/
 
-/*//{ printEigenMatrix() */
-void PCL2MapRegistration::printEigenMatrix(const Eigen::Matrix4f mat, const std::string prefix) {
-  const std::string          st = (prefix.size() > 0) ? prefix : "Eigen matrix:";
-  mrs_lib::AttitudeConverter atti(mat.block<3, 3>(0, 0).cast<double>());
-  ROS_INFO("[PCL2MapRegistration] %s", st.c_str());
-  ROS_INFO("    | %2.3f %2.3f %2.3f |", mat(0, 0), mat(0, 1), mat(0, 2));
-  ROS_INFO("R = | %2.3f %2.3f %2.3f |", mat(1, 0), mat(1, 1), mat(1, 2));
-  ROS_INFO("    | %2.3f %2.3f %2.3f |", mat(2, 0), mat(2, 1), mat(2, 2));
-  ROS_INFO("E = | %2.3f %2.3f %2.3f |", atti.getRoll(), atti.getPitch(), atti.getYaw());
-  ROS_INFO("t = < %2.3f, %2.3f, %2.3f >", mat(0, 3), mat(1, 3), mat(2, 3));
-}
-/*//}*/
-
-//
 }  // namespace mrs_pcl_tools
 
 PLUGINLIB_EXPORT_CLASS(mrs_pcl_tools::PCL2MapRegistration, nodelet::Nodelet);

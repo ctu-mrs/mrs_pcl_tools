@@ -52,8 +52,6 @@ void PCLFiltration::onInit() {
     NODELET_ERROR("[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
     ros::shutdown();
   }
-  
-  _pc_handler = std::make_shared<mrs_pcl_tools::PCLHandler>();
 
   if (_lidar3d_republish) {
     _sub_lidar3d                = nh.subscribe("lidar3d_in", 10, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());
@@ -100,7 +98,7 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
 void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
   if (is_initialized && _lidar3d_republish) {
 
-    std::chrono::time_point<std::chrono::system_clock> start_time = std::chrono::system_clock::now();
+    TicToc t;
 
     unsigned int points_before = msg->height * msg->width;
     unsigned int points_after;
@@ -127,9 +125,8 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
       std::visit([&](const auto &pc) { publishCloud(_pub_lidar3d_over_max_range, *pc); }, pcl_over_max_range_variant);
     }
 
-    std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
-    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %d, after: %d).", elapsed_ms.count() * 1000,
-                          points_before, points_after);
+    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %d, after: %d).", t.toc(), points_before,
+                          points_after);
   }
 }
 //}
@@ -138,7 +135,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
 void PCLFiltration::depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
   if (is_initialized && _depth_republish) {
     NODELET_INFO_ONCE("[PCLFiltration] Subscribing depth camera messages.");
-    std::chrono::time_point<std::chrono::system_clock> start_time = std::chrono::system_clock::now();
+    TicToc t;
 
     unsigned int points_before = msg->height * msg->width;
 
@@ -192,9 +189,8 @@ void PCLFiltration::depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg)
       publishCloud(_pub_depth_over_max_range, *clouds.second);
     }
 
-    std::chrono::duration<float> elapsed_ms = std::chrono::system_clock::now() - start_time;
-    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed depth camera data (run time: %0.1f ms; points before: %d, after: %ld).", elapsed_ms.count() * 1000,
-                          points_before, pcl->points.size());
+    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed depth camera data (run time: %0.1f ms; points before: %d, after: %ld).", t.toc(), points_before,
+                          pcl->points.size());
   }
 }
 //}
@@ -210,8 +206,8 @@ void PCLFiltration::rplidarCallback([[maybe_unused]] const sensor_msgs::LaserSca
 
 /*//{ removeCloseAndFarPointCloud() */
 void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
-                                                const sensor_msgs::PointCloud2::ConstPtr &msg, const bool ret_cloud_over_max_range, const float min_range_sq,
-                                                const float max_range_sq) {
+                                                const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const float &min_range_sq,
+                                                const float &max_range_sq) {
 
   // Convert to pcl object
   PC_I::Ptr cloud = boost::make_shared<PC_I>();
@@ -272,9 +268,9 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
 /*//{ removeCloseAndFarPointCloudOS1() */
 void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &    cloud_var,
                                                    std::variant<PC_OS1::Ptr, PC_I::Ptr> &    cloud_over_max_range_var,
-                                                   const sensor_msgs::PointCloud2::ConstPtr &msg, const bool ret_cloud_over_max_range,
-                                                   const uint32_t min_range_mm, const uint32_t max_range_mm, const bool filter_intensity,
-                                                   const uint32_t filter_intensity_range_mm, const int filter_intensity_thrd) {
+                                                   const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
+                                                   const uint32_t &min_range_mm, const uint32_t &max_range_mm, const bool &filter_intensity,
+                                                   const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd) {
 
   // Convert to pcl object
   PC_OS1::Ptr cloud = boost::make_shared<PC_OS1>();
@@ -335,8 +331,8 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_
 /*//}*/
 
 /*//{ removeCloseAndFarPointCloudXYZ() */
-std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool ret_cloud_over_max_range,
-                                                                          const float min_range_sq, const float max_range_sq) {
+std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
+                                                                          const float &min_range_sq, const float &max_range_sq) {
 
   // Convert to pcl object
   PC::Ptr cloud                = boost::make_shared<PC>();
@@ -395,7 +391,7 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const 
 
 /*//{ publishCloud() */
 template <typename T>
-void PCLFiltration::publishCloud(const ros::Publisher pub, const pcl::PointCloud<T> cloud) {
+void PCLFiltration::publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud) {
   if (pub.getNumSubscribers() > 0) {
     try {
       sensor_msgs::PointCloud2::Ptr pcl_msg = boost::make_shared<sensor_msgs::PointCloud2>();
@@ -406,17 +402,6 @@ void PCLFiltration::publishCloud(const ros::Publisher pub, const pcl::PointCloud
       NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
     }
   }
-}
-/*//}*/
-
-/*//{ hasField() */
-bool PCLFiltration::hasField(const std::string field, const sensor_msgs::PointCloud2::ConstPtr &msg) {
-  for (auto f : msg->fields) {
-    if (f.name == field) {
-      return true;
-    }
-  }
-  return false;
 }
 /*//}*/
 
