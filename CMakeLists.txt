@@ -3,8 +3,8 @@ project(mrs_pcl_tools)
 
 set(CMAKE_CXX_FLAGS "-g -O3 -DEIGEN_INITIALIZE_MATRICES_BY_NAN -DDEBUG_PARAMS")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O3 -DEIGEN_INITIALIZE_MATRICES_BY_NAN -DDEBUG_PARAMS")
-set(CMAKE_CXX_FLAGS_RELEASE "-Werror -g -O0 -DEIGEN_INITIALIZE_MATRICES_BY_NAN -DDEBUG_PARAMS")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -O0")
+set(CMAKE_CXX_FLAGS_RELEASE "-Werror -g -O3 -DEIGEN_INITIALIZE_MATRICES_BY_NAN -DDEBUG_PARAMS")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -O3")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -67,7 +67,7 @@ generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES PCLFiltration PCL2MapRegistration
+  LIBRARIES PCLHandler PCLFiltration PCL2MapRegistration
   CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs pcl_ros mrs_lib
   DEPENDS Eigen
 )
@@ -102,6 +102,15 @@ add_definitions(
 # Define PCL_NO_PRECOMPILE to disable using binary version
 # add_definitions(-DPCL_NO_PRECOMPILE)
 
+# Nodelet library PCLHandler
+add_library(PCLHandler
+  src/support.cpp
+  )
+
+## Specify libraries to link a library or executable target against
+target_link_libraries(
+  PCLHandler ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+)
 
 # Nodelet library PCLFiltration
 add_library(PCLFiltration
@@ -130,3 +139,14 @@ target_link_libraries(
 )
 
 target_include_directories(PCL2MapRegistration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
+
+
+# install(TARGETS PCLSupport
+# 		ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+# 		LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+# 		RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# )
+
+# install(DIRECTORY include/${PROJECT_NAME}/
+# 		DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+# )

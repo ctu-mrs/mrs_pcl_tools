@@ -1,7 +1,7 @@
 #pragma once
 
 /* includes //{ */
-#include "common_includes_and_typedefs.h"
+#include "support.h"
 
 #include <variant>
 
@@ -22,6 +22,8 @@ public:
 
 private:
   bool is_initialized = false;
+
+  std::shared_ptr<mrs_pcl_tools::PCLHandler> _pc_handler; 
 
   ros::Subscriber _sub_lidar3d;
   ros::Subscriber _sub_depth;

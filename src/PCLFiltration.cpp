@@ -1,4 +1,4 @@
-#include "PCLFiltration.h"
+#include "mrs_pcl_tools/PCLFiltration.h"
 
 namespace mrs_pcl_tools
 {
@@ -52,6 +52,8 @@ void PCLFiltration::onInit() {
     NODELET_ERROR("[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
     ros::shutdown();
   }
+  
+  _pc_handler = std::make_shared<mrs_pcl_tools::PCLHandler>();
 
   if (_lidar3d_republish) {
     _sub_lidar3d                = nh.subscribe("lidar3d_in", 10, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());

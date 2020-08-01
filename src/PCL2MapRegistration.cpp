@@ -1,4 +1,4 @@
-#include "PCL2MapRegistration.h"
+#include "mrs_pcl_tools/PCL2MapRegistration.h"
 
 namespace mrs_pcl_tools
 {
@@ -21,6 +21,8 @@ void PCL2MapRegistration::onInit() {
     NODELET_ERROR("[PCL2MapRegistration]: Some compulsory parameters were not loaded successfully, ending the node");
     ros::shutdown();
   }
+  
+  _pc_handler = std::make_shared<mrs_pcl_tools::PCLHandler>();
 
   {
     std::scoped_lock lock(_mutex_registration);

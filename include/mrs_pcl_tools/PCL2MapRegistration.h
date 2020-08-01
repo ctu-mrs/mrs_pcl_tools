@@ -1,7 +1,7 @@
 #pragma once
 
 /* includes and typedefs //{ */
-#include "common_includes_and_typedefs.h"
+#include "mrs_pcl_tools/support.h"
 
 #include <mutex>
 #include <tuple>
@@ -42,6 +42,8 @@ private:
   bool            _is_initialized       = false;
   bool            _map_available        = false;
   bool            _pc_offline_available = false;
+
+  std::shared_ptr<mrs_pcl_tools::PCLHandler> _pc_handler; 
 
   ros::ServiceServer _srv_server_registration_offline;
   ros::ServiceServer _srv_server_registration_pointcloud2;
