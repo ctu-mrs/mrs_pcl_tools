@@ -33,10 +33,9 @@ void PCL2MapRegistration::onInit() {
     }
   }
 
-  _pub_cloud_source    = _nh.advertise<sensor_msgs::PointCloud2>("cloud_source_out", 1);
-  _pub_cloud_target    = _nh.advertise<sensor_msgs::PointCloud2>("cloud_target_out", 1);
-  _pub_cloud_aligned   = _nh.advertise<sensor_msgs::PointCloud2>("cloud_aligned_out", 1);
-  _pub_registration_tf = _nh.advertise<tf2_msgs::TFMessage>("/tf_static", 10);
+  _pub_cloud_source  = _nh.advertise<sensor_msgs::PointCloud2>("cloud_source_out", 1);
+  _pub_cloud_target  = _nh.advertise<sensor_msgs::PointCloud2>("cloud_target_out", 1);
+  _pub_cloud_aligned = _nh.advertise<sensor_msgs::PointCloud2>("cloud_aligned_out", 1);
 
   reconfigure_server_.reset(new ReconfigureServer(config_mutex_, _nh));
   ReconfigureServer::CallbackType f = boost::bind(&PCL2MapRegistration::callbackReconfigure, this, _1, _2);
@@ -46,8 +45,6 @@ void PCL2MapRegistration::onInit() {
 
   _srv_server_registration_offline     = _nh.advertiseService("srv_register_offline", &PCL2MapRegistration::callbackSrvRegisterOffline, this);
   _srv_server_registration_pointcloud2 = _nh.advertiseService("srv_register_online", &PCL2MapRegistration::callbackSrvRegisterPointCloud, this);
-
-  _timer_publish_registration_tf = _nh.createTimer(ros::Rate(1.0), &PCL2MapRegistration::publishRegistrationTF, this, false, false);
 
   _is_initialized = true;
 }
@@ -167,7 +164,7 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   T = T * T_corr;
   printEigenMatrix(T, "Transformation matrix (after correlation):");
 
-  // Publish result as static TF pc_src.frame -> pc_targ.frame
+  // Save result as static TF pc_src.frame -> pc_targ.frame
   if (res.success) {
     geometry_msgs::TransformStamped tf_msg;
 
@@ -184,11 +181,7 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
     mrs_lib::AttitudeConverter R(T_inv.block<3, 3>(0, 0).cast<double>());
     tf_msg.transform.rotation = R;
 
-    // Initialize periodic TF publishing
-    _timer_publish_registration_tf.stop();
-    _tf_registration_msg.transforms.clear();
-    _tf_registration_msg.transforms.push_back(tf_msg);
-    _timer_publish_registration_tf.start();
+    res.transform = tf_msg;
   }
 
   return res.success;
@@ -766,20 +759,6 @@ void PCL2MapRegistration::applyRandomTransformation(PC_NORM::Ptr cloud) {
 
   // Transform cloud
   pcl::transformPointCloud(*cloud, *cloud, T);
-}
-/*//}*/
-
-/*//{ publishRegistrationTF() */
-void PCL2MapRegistration::publishRegistrationTF([[maybe_unused]] const ros::TimerEvent &event) {
-  try {
-    _pub_registration_tf.publish(_tf_registration_msg);
-    ROS_INFO_THROTTLE(10.0, "[PCL2MapRegistration]: Published static TF: %s - %s.", _tf_registration_msg.transforms[0].child_frame_id.c_str(),
-                      _tf_registration_msg.transforms[0].header.frame_id.c_str());
-  }
-  catch (...) {
-    ROS_ERROR("[PCL2MapRegistration]: Exception caught during publishing static TF: %s - %s.", _tf_registration_msg.transforms[0].child_frame_id.c_str(),
-              _tf_registration_msg.transforms[0].header.frame_id.c_str());
-  }
 }
 /*//}*/
 

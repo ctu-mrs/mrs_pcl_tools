@@ -6,9 +6,6 @@
 #include <mutex>
 #include <tuple>
 
-#include <tf2_ros/static_transform_broadcaster.h>
-#include <tf2_msgs/TFMessage.h>
-
 #include <std_srvs/Trigger.h>
 #include <geometry_msgs/TransformStamped.h>
 
@@ -52,7 +49,6 @@ private:
   ros::Publisher _pub_cloud_source;
   ros::Publisher _pub_cloud_target;
   ros::Publisher _pub_cloud_aligned;
-  ros::Publisher _pub_registration_tf;
 
   std::string _frame_map;
   std::string _path_map;
@@ -66,11 +62,6 @@ private:
   float _normal_estimation_radius        = 0.25f;
   float _cloud_correlation_z_crop_offset = 2.0f;
   float _min_convergence_score           = 0.5f;
-
-  tf2_ros::StaticTransformBroadcaster tf_broadcaster;
-  tf2_msgs::TFMessage                 _tf_registration_msg;
-  ros::Timer                          _timer_publish_registration_tf;
-  void                                publishRegistrationTF([[maybe_unused]] const ros::TimerEvent &event);
 
   float _fpfh_search_rad           = 3.5;
   float _fpfh_similarity_threshold = 0.9;
