@@ -52,6 +52,15 @@ std::optional<PC_NORM::Ptr> loadPcNormals(const std::string &pcd_file) {
 }
 /*//}*/
 
+/*//{ savePCDXYZ() */
+void savePCDXYZ(const std::string &pcd_file, const sensor_msgs::PointCloud2::ConstPtr &cloud_msg, const bool &binary) {
+  ROS_INFO("[PCLSupportLibrary] Saving PCD file (%s): %s", (binary) ? "binary" : "ascii", pcd_file.c_str());
+  PC::Ptr cloud = boost::make_shared<PC>();
+  pcl::fromROSMsg(*cloud_msg, *cloud);
+  pcl::io::savePCDFile(pcd_file, *cloud, binary);
+}
+/*//}*/
+
 /*//{ estimateNormals() */
 PC_NORM::Ptr estimateNormals(const PC::Ptr &cloud, const float &normal_est_radius) {
 

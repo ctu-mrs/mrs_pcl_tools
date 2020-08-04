@@ -2,6 +2,7 @@
 
 #include "common_includes_and_typedefs.h"
 
+#include <pcl/io/pcd_io.h>
 #include <pcl/features/normal_3d_omp.h>
 
 namespace mrs_pcl_tools
@@ -13,6 +14,7 @@ void applyVoxelGridFilter(PC_NORM::Ptr &cloud, const float &leaf_size);
 
 std::optional<PC::Ptr>      loadPcXYZ(const std::string &pcd_file);
 std::optional<PC_NORM::Ptr> loadPcNormals(const std::string &pcd_file);
+void                        savePCDXYZ(const std::string &pcd_file, const sensor_msgs::PointCloud2::ConstPtr &cloud, const bool &binary = true);
 
 PC_NORM::Ptr estimateNormals(const PC::Ptr &cloud, const float &normal_est_radius);
 
