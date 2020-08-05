@@ -5,6 +5,11 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/features/normal_3d_omp.h>
 
+#include <octomap_msgs/conversions.h>
+#include <octomap_msgs/Octomap.h>
+
+#include <visualization_msgs/MarkerArray.h>
+
 namespace mrs_pcl_tools
 {
 
@@ -31,6 +36,12 @@ void printEigenMatrix(const Eigen::Matrix4f &mat, const std::string &prefix = ""
 
 // math functions
 Eigen::Matrix4f getRotationMatrixAroundPoint(const Eigen::Matrix3f &rotation, const Eigen::Vector4f &point);
+
+namespace visualization
+{
+visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const std::shared_ptr<octomap::OcTree> &octree, const std::string &frame_id);
+std_msgs::ColorRGBA                  heightToRGBA(const double &height);
+}  // namespace visualization
 
 }  // namespace mrs_pcl_tools
 

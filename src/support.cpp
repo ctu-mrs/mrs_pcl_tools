@@ -191,4 +191,119 @@ Eigen::Matrix4f getRotationMatrixAroundPoint(const Eigen::Matrix3f &rotation, co
 }
 /*//}*/
 
+namespace visualization
+{
+
+/* //{ getVisualizationMsg() */
+visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const std::shared_ptr<octomap::OcTree> &octree, const std::string &frame_id) {
+  visualization_msgs::MarkerArray::Ptr msg = boost::make_shared<visualization_msgs::MarkerArray>();
+
+  const int    tree_depth = octree->getTreeDepth();
+  double       min_x;
+  double       min_y;
+  double       min_z;
+  double       max_x;
+  double       max_y;
+  double       max_z;
+  const double visualization_color_factor = 1.0;
+
+  msg->markers.resize(tree_depth + 1);
+  octree->getMetricMin(min_x, min_y, min_z);
+  octree->getMetricMax(max_x, max_y, max_z);
+
+  for (octomap::OcTree::iterator it = octree->begin(tree_depth), end = octree->end(); it != end; ++it) {
+    if (octree->isNodeOccupied(*it)) {
+      const unsigned int idx = it.getDepth();
+
+      geometry_msgs::Point cube_center;
+      cube_center.x = it.getX();
+      cube_center.y = it.getY();
+      cube_center.z = it.getZ();
+
+      const double height = (1.0 - std::min(std::max((cube_center.z - min_z) / (max_z - min_z), 0.0), 1.0)) * visualization_color_factor;
+      msg->markers[idx].colors.push_back(heightToRGBA(height));
+      msg->markers[idx].points.push_back(cube_center);
+    }
+  }
+
+  ros::Time ros_time = ros::Time::now();
+  for (unsigned i = 0; i < msg->markers.size(); ++i) {
+    const double size               = octree->getNodeSize(i);
+    msg->markers[i].header.frame_id = frame_id;
+    msg->markers[i].header.stamp    = ros_time;
+    msg->markers[i].ns              = "marker";
+    msg->markers[i].id              = i;
+    msg->markers[i].type            = visualization_msgs::Marker::CUBE_LIST;
+    msg->markers[i].scale.x         = size;
+    msg->markers[i].scale.y         = size;
+    msg->markers[i].scale.z         = size;
+    if (msg->markers[i].points.size() > 0) {
+      msg->markers[i].action = visualization_msgs::Marker::ADD;
+    } else {
+      msg->markers[i].action = visualization_msgs::Marker::DELETE;
+    }
+  }
+
+  return msg;
+}
+//}/*
+
+/*//{ heightToRGBA() */
+std_msgs::ColorRGBA heightToRGBA(const double &height) {
+  std_msgs::ColorRGBA color;
+  color.a              = 1.0;
+  double             h = (height - floor(height)) * 6;
+  const double       s = 1.0;
+  const double       v = 1.0;
+  const unsigned int i = floor(h);
+  double             f = h - i;
+  if (!(i & 1)) {
+    f = 1 - f;
+  }
+  const double m = v * (1 - s);
+  const double n = v * (1 - s * f);
+  switch (i) {
+    case 6:
+    case 0:
+      color.r = v;
+      color.g = n;
+      color.b = m;
+      break;
+    case 1:
+      color.r = n;
+      color.g = v;
+      color.b = m;
+      break;
+    case 2:
+      color.r = m;
+      color.g = v;
+      color.b = n;
+      break;
+    case 3:
+      color.r = m;
+      color.g = n;
+      color.b = v;
+      break;
+    case 4:
+      color.r = n;
+      color.g = m;
+      color.b = v;
+      break;
+    case 5:
+      color.r = v;
+      color.g = m;
+      color.b = n;
+      break;
+    default:
+      color.r = 1;
+      color.g = 0.5;
+      color.b = 0.5;
+      break;
+  }
+  return color;
+}
+/*//}*/
+
+}  // namespace visualization
+
 }  // namespace mrs_pcl_tools
