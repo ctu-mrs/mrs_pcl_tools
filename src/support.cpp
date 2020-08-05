@@ -52,12 +52,12 @@ std::optional<PC_NORM::Ptr> loadPcNormals(const std::string &pcd_file) {
 }
 /*//}*/
 
-/*//{ savePCDXYZ() */
-void savePCDXYZ(const std::string &pcd_file, const sensor_msgs::PointCloud2::ConstPtr &cloud_msg, const bool &binary) {
+/*//{ savePCD() */
+void savePCD(const std::string &pcd_file, sensor_msgs::PointCloud2::ConstPtr &cloud_msg, const bool &binary) {
   ROS_INFO("[PCLSupportLibrary] Saving PCD file (%s): %s", (binary) ? "binary" : "ascii", pcd_file.c_str());
-  PC::Ptr cloud = boost::make_shared<PC>();
-  pcl::fromROSMsg(*cloud_msg, *cloud);
-  pcl::io::savePCDFile(pcd_file, *cloud, binary);
+  pcl::PCLPointCloud2 cloud;
+  pcl_conversions::toPCL(*cloud_msg, cloud);
+  pcl::io::savePCDFile(pcd_file, cloud, Eigen::Vector4f::Zero(), Eigen::Quaternionf::Identity(), binary);
 }
 /*//}*/
 

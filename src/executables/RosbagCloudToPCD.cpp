@@ -14,6 +14,7 @@ struct DATA
 {
   sensor_msgs::PointCloud2::ConstPtr cloud;
   ros::Time                          t;
+  bool                               cloud_valid;
 };
 
 void printHelp() {
@@ -25,10 +26,17 @@ void printHelp() {
 sensor_msgs::PointCloud2::Ptr vis_msg_to_cloud_msg(visualization_msgs::MarkerArray::ConstPtr vis_msg) {
   sensor_msgs::PointCloud2::Ptr cloud_msg = boost::make_shared<sensor_msgs::PointCloud2>();
 
-  PC::Ptr cloud = boost::make_shared<PC>();
+  PC_RGB::Ptr cloud = boost::make_shared<PC_RGB>();
   for (auto marker : vis_msg->markers) {
-    for (auto point : marker.points) {
-      pt_XYZ p(point.x, point.y, point.z);
+    for (unsigned int i = 0; i < marker.points.size(); i++) {
+      uint8_t r = 255.0f * marker.colors[i].r;
+      uint8_t g = 255.0f * marker.colors[i].g;
+      uint8_t b = 255.0f * marker.colors[i].b;
+
+      pt_XYZRGB p(r, g, b);
+      p.x = marker.points[i].x;
+      p.y = marker.points[i].y;
+      p.z = marker.points[i].z;
       cloud->points.push_back(p);
     }
   }
@@ -69,24 +77,27 @@ int main(int argc, char** argv) {
   ROS_INFO("Reading topic: %s", topic.c_str());
   BOOST_FOREACH (rosbag::MessageInstance const msg, view) {
     if (msg.getDataType() == TYPE_SENSOR_MSGS_PC2) {
-      data.cloud = msg.instantiate<sensor_msgs::PointCloud2>();
-      if (data.cloud) {
+      sensor_msgs::PointCloud2::ConstPtr cloud = msg.instantiate<sensor_msgs::PointCloud2>();
+      if (cloud) {
         ROS_INFO_ONCE("Found atleast one valid %s message.", TYPE_SENSOR_MSGS_PC2.c_str());
-        data.t = data.cloud->header.stamp;
+        data.cloud       = cloud;
+        data.t           = data.cloud->header.stamp;
+        data.cloud_valid = true;
       }
     } else if (msg.getDataType() == TYPE_VIS_MSGS_MARK_ARR) {
       visualization_msgs::MarkerArray::ConstPtr ma = msg.instantiate<visualization_msgs::MarkerArray>();
       if (ma) {
         ROS_INFO_ONCE("Found atleast one valid %s message.", TYPE_VIS_MSGS_MARK_ARR.c_str());
-        data.cloud = vis_msg_to_cloud_msg(ma);
-        data.t     = data.cloud->header.stamp;
+        data.cloud       = vis_msg_to_cloud_msg(ma);
+        data.t           = data.cloud->header.stamp;
+        data.cloud_valid = true;
       }
     }
   }
   bag.close();
 
-  if (data.cloud) {
-    mrs_pcl_tools::savePCDXYZ(pcd_filename, data.cloud);
+  if (data.cloud_valid) {
+    mrs_pcl_tools::savePCD(pcd_filename, data.cloud);
   }
 
   return 0;

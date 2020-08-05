@@ -15,6 +15,7 @@
 // pcl
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/PCLPointCloud2.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/voxel_grid.h>
@@ -36,13 +37,15 @@
 
 /*//{ typedefs */
 
-typedef pcl::PointXYZ             pt_XYZ;
-typedef pcl::PointXYZI            pt_XYZI;
-typedef pcl::PointNormal          pt_NORM;
-typedef ouster_ros::OS1::PointOS1 pt_OS1;
-typedef pcl::PointCloud<pt_XYZ>   PC;
-typedef pcl::PointCloud<pt_XYZI>  PC_I;
-typedef pcl::PointCloud<pt_NORM>  PC_NORM;
-typedef pcl::PointCloud<pt_OS1>   PC_OS1;
+typedef pcl::PointXYZ              pt_XYZ;
+typedef pcl::PointXYZI             pt_XYZI;
+typedef pcl::PointXYZRGB           pt_XYZRGB;
+typedef pcl::PointNormal           pt_NORM;
+typedef ouster_ros::OS1::PointOS1  pt_OS1;
+typedef pcl::PointCloud<pt_XYZ>    PC;
+typedef pcl::PointCloud<pt_XYZI>   PC_I;
+typedef pcl::PointCloud<pt_XYZRGB> PC_RGB;
+typedef pcl::PointCloud<pt_NORM>   PC_NORM;
+typedef pcl::PointCloud<pt_OS1>    PC_OS1;
 
 //}
