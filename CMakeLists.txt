@@ -104,12 +104,12 @@ add_definitions(
 # Define PCL_NO_PRECOMPILE to disable using binary version
 # add_definitions(-DPCL_NO_PRECOMPILE)
 
+### LIBRARIES
+
 # Library PCLSupportLib
 add_library(PCLSupportLib
   src/support.cpp
   )
-
-## Specify libraries to link a library or executable target against
 target_link_libraries(
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
 )
@@ -118,31 +118,32 @@ target_link_libraries(
 add_library(PCLFiltration
   src/PCLFiltration.cpp
   )
-
 add_dependencies(PCLFiltration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
-
-## Specify libraries to link a library or executable target against
 target_link_libraries(
   PCLFiltration PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
 )
-
 target_include_directories(PCLFiltration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
 # Nodelet library PCL2MapRegistration
 add_library(PCL2MapRegistration
   src/PCL2MapRegistration.cpp
   )
-
 add_dependencies(PCL2MapRegistration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
-
-## Specify libraries to link a library or executable target against
 target_link_libraries(
   PCL2MapRegistration PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
 )
-
 target_include_directories(PCL2MapRegistration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
-###
+# Nodelet library PCLPublishPCDToNetwork
+add_library(PCLPublishPCDToNetwork
+  src/PCLPublishPCDToNetwork.cpp
+  )
+target_link_libraries(
+  PCLPublishPCDToNetwork PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+)
+target_include_directories(PCLPublishPCDToNetwork SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
+
+### EXECUTABLES
 add_executable(rosbag_cloud_to_pcd src/executables/RosbagCloudToPCD.cpp)
 target_link_libraries(rosbag_cloud_to_pcd
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}

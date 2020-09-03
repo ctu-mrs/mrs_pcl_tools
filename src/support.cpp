@@ -191,8 +191,70 @@ Eigen::Matrix4f getRotationMatrixAroundPoint(const Eigen::Matrix3f &rotation, co
 }
 /*//}*/
 
+/*//{ PcToOctree() */
+std::shared_ptr<octomap::OcTree> PcToOctree(const PC::ConstPtr &cloud, const float &resolution) {
+  if (cloud->points.size() == 0) {
+    ROS_WARN("[%s]: Cannot create octree from 0 points.", ros::this_node::getName().c_str());
+    return nullptr;
+  } else if (!std::isfinite(resolution) || resolution <= 0.0f) {
+    ROS_ERROR("[%s]: Undefined resolution in mrs_pcl_tools::PcToOctree().", ros::this_node::getName().c_str());
+    return nullptr;
+  }
+
+  std::shared_ptr<octomap::OcTree> tree = std::make_shared<octomap::OcTree>(resolution);
+  for (auto p : cloud->points) {
+    tree->updateNode(octomap::point3d(p.x, p.y, p.z), true);
+  }
+  tree->updateInnerOccupancy();
+  return tree;
+}
+/*//}*/
+
+/*//{ overload PcToOctree() */
+std::shared_ptr<octomap::OcTree> PcToOctree(const sensor_msgs::PointCloud2::ConstPtr &cloud, const float &resolution) {
+  PC::Ptr pc = boost::make_shared<PC>();
+  pcl::fromROSMsg(*cloud, *pc);
+
+  return PcToOctree(pc, resolution);
+}
+/*//}*/
+
 namespace visualization
 {
+/*//{ colorizeCloud() */
+PC_RGB::Ptr colorizeCloud(const PC::Ptr &cloud_xyz) {
+  pt_XYZ min_xyz;
+  pt_XYZ max_xyz;
+  pcl::getMinMax3D(*cloud_xyz, min_xyz, max_xyz);
+  const float min_z = min_xyz.z;
+  const float max_z = max_xyz.z;
+
+  const unsigned int size      = cloud_xyz->points.size();
+  PC_RGB::Ptr        cloud_rgb = boost::make_shared<PC_RGB>();
+  cloud_rgb->points.resize(size);
+  cloud_rgb->width    = size;
+  cloud_rgb->height   = 1;
+  cloud_rgb->is_dense = false;
+
+  for (unsigned int i = 0; i < size; i++) {
+    const float         z      = cloud_xyz->points.at(i).z;
+    double              height = (1.0 - std::fmin(std::fmax((z - min_z) / (max_z - min_z), 0.0f), 1.0f));
+    std_msgs::ColorRGBA color  = heightToRGBA(height, 1.0);
+    pt_XYZRGB           p;
+    p.x              = cloud_xyz->points.at(i).x;
+    p.y              = cloud_xyz->points.at(i).y;
+    p.z              = z;
+    p.r              = color.r;
+    p.g              = color.g;
+    p.b              = color.b;
+    p.a              = 1.0;
+    cloud_rgb->at(i) = p;
+  }
+
+  cloud_rgb->header = cloud_xyz->header;
+  return cloud_rgb;
+}
+/*//}*/
 
 /* //{ getVisualizationMsg() */
 visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const std::shared_ptr<octomap::OcTree> &octree, const std::string &frame_id) {
@@ -220,13 +282,13 @@ visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const std::shared_ptr<o
       cube_center.y = it.getY();
       cube_center.z = it.getZ();
 
-      const double height = (1.0 - std::min(std::max((cube_center.z - min_z) / (max_z - min_z), 0.0), 1.0)) * visualization_color_factor;
+      double height = (1.0 - std::min(std::max((cube_center.z - min_z) / (max_z - min_z), 0.0), 1.0)) * visualization_color_factor;
       msg->markers[idx].colors.push_back(heightToRGBA(height));
       msg->markers[idx].points.push_back(cube_center);
     }
   }
 
-  ros::Time ros_time = ros::Time::now();
+  const ros::Time ros_time = ros::Time::now();
   for (unsigned i = 0; i < msg->markers.size(); ++i) {
     const double size               = octree->getNodeSize(i);
     msg->markers[i].header.frame_id = frame_id;
@@ -248,20 +310,37 @@ visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const std::shared_ptr<o
 }
 //}/*
 
+/* //{ overload getVisualizationMsg() */
+visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const sensor_msgs::PointCloud2::Ptr &cloud, const float &resolution, const std::string &frame_id) {
+  return getVisualizationMsg(PcToOctree(cloud, resolution), frame_id);
+}
+visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const PC::Ptr &cloud, const float &resolution, const std::string &frame_id) {
+  return getVisualizationMsg(PcToOctree(cloud, resolution), frame_id);
+}
+//}/*
+
 /*//{ heightToRGBA() */
-std_msgs::ColorRGBA heightToRGBA(const double &height) {
+std_msgs::ColorRGBA heightToRGBA(double &h, const double &a) {
+
   std_msgs::ColorRGBA color;
-  color.a              = 1.0;
-  double             h = (height - floor(height)) * 6;
-  const double       s = 1.0;
-  const double       v = 1.0;
-  const unsigned int i = floor(h);
-  double             f = h - i;
-  if (!(i & 1)) {
-    f = 1 - f;
-  }
-  const double m = v * (1 - s);
-  const double n = v * (1 - s * f);
+  color.a = a;
+  // blend over HSV-values (more colors)
+
+  double s = 1.0;
+  double v = 1.0;
+
+  h -= floor(h);
+  h *= 6;
+  int    i;
+  double m, n, f;
+
+  i = floor(h);
+  f = h - i;
+  if (!(i & 1))
+    f = 1 - f;  // if i is even
+  m = v * (1 - s);
+  n = v * (1 - s * f);
+
   switch (i) {
     case 6:
     case 0:
@@ -300,6 +379,7 @@ std_msgs::ColorRGBA heightToRGBA(const double &height) {
       color.b = 0.5;
       break;
   }
+
   return color;
 }
 /*//}*/

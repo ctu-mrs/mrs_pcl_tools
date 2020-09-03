@@ -1,0 +1,31 @@
+<launch>
+
+  <!-- Filtration parameters -->
+  <arg name="UAV_NAME" default="$(env UAV_NAME)" />
+
+  <!-- <arg name="pcd_path" default="$(find naki_gazebo_resources)/pcd/stara_voda.pcd" /> -->
+  <arg name="pcd_path" default="/home/mrs/git/darpa_core/data/pcd/byci_skala/byci_skala_drone.pcd" />
+  <arg name="publish_rate" default="1.0" />
+  <arg name="frame_id" default="$(arg UAV_NAME)/global_origin" />
+  <arg name="vis_resolution" default="0.2" />
+
+  <arg name="nodelet" default="standalone" />
+  <arg name="nodelet_manager" default="" />
+  <arg name="launch_prefix" default=""/>
+
+  <group ns="$(arg UAV_NAME)">
+    <node pkg="nodelet" type="nodelet" name="pcd_to_ros_network" args="$(arg nodelet) mrs_pcl_tools/PCLPublishPCDToNetwork $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
+
+      <!-- Parameters -->
+      <param name="pcd" type="string" value="$(arg pcd_path)" />
+      <param name="rate" type="double" value="$(arg publish_rate)" />
+      <param name="frame_id" type="string" value="$(arg frame_id)" />
+      <param name="resolution" type="double" value="$(arg vis_resolution)" />
+
+      <!-- Remap -->
+      <remap from="~cloud_out" to="pcd2ros/cloud" />
+      <remap from="~cloud_vis_out" to="pcd2ros/cloud_vis" />
+      
+    </node>
+  </group>
+</launch>

@@ -39,8 +39,11 @@ Eigen::Matrix4f getRotationMatrixAroundPoint(const Eigen::Matrix3f &rotation, co
 
 namespace visualization
 {
+PC_RGB::Ptr                          colorizeCloud(const PC::Ptr &cloud);
+visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const sensor_msgs::PointCloud2::Ptr &cloud, const float &resolution, const std::string &frame_id);
+visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const PC::Ptr &cloud, const float &resolution, const std::string &frame_id);
 visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const std::shared_ptr<octomap::OcTree> &octree, const std::string &frame_id);
-std_msgs::ColorRGBA                  heightToRGBA(const double &height);
+std_msgs::ColorRGBA                  heightToRGBA(double &height, const double &alpha = 1.0);
 }  // namespace visualization
 
 }  // namespace mrs_pcl_tools

@@ -16,3 +16,12 @@
   </class>
 
 </library>
+
+<library path="lib/libPCLPublishPCDToNetwork">
+  <class name="mrs_pcl_tools/PCLPublishPCDToNetwork" type="mrs_pcl_tools::PCLPublishPCDToNetwork" base_class_type="nodelet::Nodelet">
+    <description>
+        Nodelet for publishing a PCD file to the ROS network. 
+    </description>
+  </class>
+
+</library>

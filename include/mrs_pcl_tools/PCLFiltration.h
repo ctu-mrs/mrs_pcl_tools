@@ -33,8 +33,6 @@ private:
   ros::Publisher _pub_depth_over_max_range;
   ros::Publisher _pub_rplidar;
 
-  ros::Timer _timer_check_subscribers;
-
   boost::recursive_mutex                               config_mutex_;
   typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;
   typedef dynamic_reconfigure::Server<Config>          ReconfigureServer;
