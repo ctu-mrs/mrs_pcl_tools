@@ -101,14 +101,14 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
     TicToc t;
 
     PC::Ptr cloud = boost::make_shared<PC>();
-    PC::Ptr cloud2 = boost::make_shared<PC>(16, 1024);
+    PC::Ptr cloud2 = boost::make_shared<PC>(1024, 16);
     pcl::fromROSMsg(*msg, *cloud);
 
     for (int i = 0; i < 64; i++) {
       for (int j = 0; j < 1024; j++) {
-
         if (i % 4 == 0) {
-          cloud2->at(floor(i / 4.0), j) = cloud->at(i, j);
+          cloud2->at(j, floor(i / 4.0)) = cloud->at(j, i);
+
         } 
       }
     }
