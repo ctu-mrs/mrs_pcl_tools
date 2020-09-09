@@ -108,7 +108,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
       for (int j = 0; j < 1024; j++) {
 
         if (i % 4 == 0) {
-          cloud2->at(i, j) = cloud->at(i, j);
+          cloud2->at(floor(i / 4.0), j) = cloud->at(i, j);
         } 
       }
     }
