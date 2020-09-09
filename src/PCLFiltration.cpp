@@ -96,17 +96,34 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
 
 /* lidar3dCallback() //{ */
 void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
+
   if (is_initialized && _lidar3d_republish) {
 
     TicToc t;
 
-    unsigned int points_before = msg->height * msg->width;
+    PC_OS1::Ptr cloud = boost::make_shared<PC_OS1>();
+    PC_OS1::Ptr cloud2 = boost::make_shared<PC_OS1>(16, 1024);
+    pcl::fromROSMsg(*msg, *cloud);
+
+    for (int i = 0; i < 64; i++) {
+      for (int j = 0; j < 1024; j++) {
+
+        if (i % 4 == 0) {
+          cloud2->at(i, j) = cloud->at(i, j);
+        } 
+      }
+    }
+
+    sensor_msgs::PointCloud2 new_msg;
+    pcl::toROSMsg(cloud2.get(), new_msg);
+
+    unsigned int points_before = new_msg.height * new_msg.width;
     unsigned int points_after;
 
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_variant;
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
 
-    if (hasField("range", msg)) {
+    if (hasField("range", new_msg)) {
       NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::OS1::PointOS1.");
       removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm, _lidar3d_max_range_mm,
                                      _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);

@@ -42,7 +42,7 @@ private:
   void callbackReconfigure(mrs_pcl_tools::pcl_filtration_dynparamConfig &config, uint32_t level);
 
   /* 3D LIDAR */
-  void     lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
+  void     lidar3dCallback(const pcl::PointCloud<PC_OS1> &msg);
   bool     _lidar3d_republish;
   bool     _lidar3d_pcl2_over_max_range;
   bool     _lidar3d_filter_intensity_en;
