@@ -143,7 +143,7 @@ target_link_libraries(
 target_include_directories(PCL2MapRegistration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
 ###
-add_executable(rosbag_cloud_to_pcd src/executables/RosbagCloudToPCD.cpp)
-target_link_libraries(rosbag_cloud_to_pcd
-  PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
-)
+# add_executable(rosbag_cloud_to_pcd src/executables/RosbagCloudToPCD.cpp)
+# target_link_libraries(rosbag_cloud_to_pcd
+#   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+# )

@@ -100,6 +100,22 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
 
     TicToc t;
 
+    PC::Ptr cloud;
+    PC::Ptr cloud2 = boost::make_shared<PC>(16, 1024);
+    pcl::fromROSMsg(*msg, *cloud);
+
+    for (int i = 0; i < 64; i++) {
+      for (int j = 0; j < 1024; j++) {
+
+        if (i % 4 == 0) {
+          cloud2->at(i, j) = cloud->at(i, j);
+        } 
+      }
+    }
+
+    sensor_msgs::PointCloud2 _new_msg_;
+    pcl::toROSMsg(*cloud2, _new_msg_);
+    sensor_msgs::PointCloud2::ConstPtr new_msg = boost::make_shared<sensor_msgs::PointCloud2>();
     unsigned int points_before = msg->height * msg->width;
     unsigned int points_after;
 
