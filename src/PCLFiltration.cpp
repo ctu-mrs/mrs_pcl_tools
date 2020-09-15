@@ -100,32 +100,40 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
 
     TicToc t;
 
-    PC_I::Ptr cloud = boost::make_shared<PC_I>();
-    PC_I::Ptr cloud2 = boost::make_shared<PC_I>(1024, 16);
-    cloud2->header = cloud->header;
-    pcl::fromROSMsg(*msg, *cloud);
+    sensor_msgs::PointCloud2::ConstPtr new_msg;
 
-    for (int i = 0; i < 64; i++) {
-      for (int j = 0; j < 1024; j++) {
-        if (i % 4 == 0) {
-          cloud2->at(j, floor(i / 4.0)) = cloud->at(j, i);
-        } 
+    // HOTFIX for subt virtual
+    if (msg->height == 64) {
+      PC_I::Ptr cloud_64_1024 = boost::make_shared<PC_I>();
+      pcl::fromROSMsg(*msg, *cloud_64_1024);
+
+      PC_I::Ptr cloud_16_1024 = boost::make_shared<PC_I>(1024, 16);
+
+      for (int i = 0; i < 64; i++) {
+        for (int j = 0; j < 1024; j++) {
+          if (i % 4 == 0) {
+            cloud_16_1024->at(j, floor(i / 4.0)) = cloud_64_1024->at(j, i);
+          }
+        }
       }
+      sensor_msgs::PointCloud2 msg_cloud_16_1024;
+      pcl::toROSMsg(*cloud_16_1024, msg_cloud_16_1024);
+      msg_cloud_16_1024.header = msg->header;
+
+      new_msg                  = boost::make_shared<sensor_msgs::PointCloud2>(msg_cloud_16_1024);
+    } else {
+      new_msg = msg;
     }
 
-    sensor_msgs::PointCloud2 _new_msg_;
-    pcl::toROSMsg(*cloud2, _new_msg_);
-    _new_msg_.header = msg->header;
-    sensor_msgs::PointCloud2::ConstPtr new_msg = boost::make_shared<sensor_msgs::PointCloud2>(_new_msg_);
-    unsigned int points_before = new_msg->height * new_msg->width;
-    unsigned int points_after;
+    unsigned int                         points_before = new_msg->height * new_msg->width;
+    unsigned int                         points_after;
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_variant;
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
 
     if (hasField("range", msg)) {
       NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::OS1::PointOS1.");
-      removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, new_msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm, _lidar3d_max_range_mm,
-                                     _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);
+      removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, new_msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm,
+                                     _lidar3d_max_range_mm, _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);
     } else {
       NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: pcl::PointXYZI.");
       removeCloseAndFarPointCloud(pcl_variant, pcl_over_max_range_variant, new_msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_sq, _lidar3d_max_range_sq);
