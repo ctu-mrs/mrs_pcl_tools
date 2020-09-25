@@ -238,7 +238,7 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
   const float subt_frame_x_upper       = 0.800 + subt_frame_det_dist_thrd;
   const float subt_frame_y_lower       = 0.800 - subt_frame_det_dist_thrd;
   const float subt_frame_y_upper       = 0.800 + subt_frame_det_dist_thrd;
-  const float subt_frame_z_lower       = 0.265 - 2.0 * subt_frame_det_dist_thrd;
+  const float subt_frame_z_lower       = 0.265 - 3.0 * subt_frame_det_dist_thrd;
   const float subt_frame_z_upper       = 0.265 + subt_frame_det_dist_thrd;
 
   // Convert to pcl object
@@ -246,9 +246,9 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
   PC_I::Ptr cloud_over_max_range;
   pcl::fromROSMsg(*msg, *cloud);
 
-  size_t j          = 0;
-  size_t k          = 0;
-  size_t cloud_size = cloud->points.size();
+  size_t       j          = 0;
+  size_t       k          = 0;
+  const size_t cloud_size = cloud->points.size();
 
   if (ret_cloud_over_max_range) {
     cloud_over_max_range         = boost::make_shared<PC_I>();
