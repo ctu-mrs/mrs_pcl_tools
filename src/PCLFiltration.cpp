@@ -120,7 +120,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
       pcl::toROSMsg(*cloud_16_1024, msg_cloud_16_1024);
       msg_cloud_16_1024.header = msg->header;
 
-      new_msg                  = boost::make_shared<sensor_msgs::PointCloud2>(msg_cloud_16_1024);
+      new_msg = boost::make_shared<sensor_msgs::PointCloud2>(msg_cloud_16_1024);
     } else {
       new_msg = msg;
     }
@@ -130,7 +130,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_variant;
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
 
-    if (hasField("range", msg)) {
+    if (hasField("range", new_msg)) {
       NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::OS1::PointOS1.");
       removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, new_msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm,
                                      _lidar3d_max_range_mm, _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);
@@ -232,6 +232,12 @@ void PCLFiltration::rplidarCallback([[maybe_unused]] const sensor_msgs::LaserSca
 void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
                                                 const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const float &min_range_sq,
                                                 const float &max_range_sq) {
+  // SUBT HOTFIX
+  const float subt_frame_det_dist_thrd = 0.1;
+  const float subt_frame_vert_lower    = 0.265 - 2.0 * subt_frame_det_dist_thrd;
+  const float subt_frame_vert_upper    = 0.265 + subt_frame_det_dist_thrd;
+  const float subt_frame_horz_lower    = 0.800 - subt_frame_det_dist_thrd;
+  const float subt_frame_horz_upper    = 0.800 + subt_frame_det_dist_thrd;
 
   // Convert to pcl object
   PC_I::Ptr cloud = boost::make_shared<PC_I>();
@@ -250,10 +256,18 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
 
   for (size_t i = 0; i < cloud_size; i++) {
 
-    float range_sq =
-        cloud->points.at(i).x * cloud->points.at(i).x + cloud->points.at(i).y * cloud->points.at(i).y + cloud->points.at(i).z * cloud->points.at(i).z;
+    const float range_horz_sq = cloud->points.at(i).x * cloud->points.at(i).x + cloud->points.at(i).y * cloud->points.at(i).y;
+    const float range_vert    = std::fabs(cloud->points.at(i).z);
+    const float range_horz    = std::sqrt(range_horz_sq);
+
+    const float range_sq = range_horz_sq + range_vert * range_vert;
 
     if (range_sq < min_range_sq) {
+      continue;
+
+      // SUBT HOTFIX
+    } else if ((range_vert > subt_frame_vert_lower && range_vert < subt_frame_vert_upper) ||
+               (range_horz > subt_frame_horz_lower && range_horz < subt_frame_horz_upper)) {
       continue;
 
     } else if (range_sq <= max_range_sq) {
