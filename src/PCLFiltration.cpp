@@ -233,7 +233,7 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
                                                 const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const float &min_range_sq,
                                                 const float &max_range_sq) {
   // SUBT HOTFIX
-  const float subt_frame_det_dist_thrd = 0.1;
+  const float subt_frame_det_dist_thrd = 0.15;
   const float subt_frame_x_lower       = 0.800 - subt_frame_det_dist_thrd;
   const float subt_frame_x_upper       = 0.800 + subt_frame_det_dist_thrd;
   const float subt_frame_y_lower       = 0.800 - subt_frame_det_dist_thrd;
