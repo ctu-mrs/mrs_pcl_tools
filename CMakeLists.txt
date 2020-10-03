@@ -24,6 +24,7 @@ find_package(catkin REQUIRED COMPONENTS
     os1_driver
     octomap_ros
     octomap_msgs
+    darpa_mrs_msgs
 )
 
 add_service_files(DIRECTORY srv/registration FILES
