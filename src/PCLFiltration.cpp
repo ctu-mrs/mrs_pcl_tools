@@ -33,6 +33,7 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("tof/pcl2_over_max_range", _tof_pcl2_over_max_range, false);
   param_loader.loadParam("tof/min_range", _tof_min_range_sq, 0.1f);
   param_loader.loadParam("tof/max_range", _tof_max_range_sq, 4.0f);
+  param_loader.loadParam("tof/landing_spot/square_size", _ground_spot_square_size, 0.8f);
   param_loader.loadParam("tof/downsample_scale", _tof_downsample_scale, 0);
   _tof_min_range_sq *= _tof_min_range_sq;
   _tof_max_range_sq *= _tof_max_range_sq;
@@ -555,9 +556,17 @@ PC::Ptr PCLFiltration::getCloudOverMaxRange(const PC::Ptr &cloud, const float &p
 
 /*//{ detectGround() */
 int8_t PCLFiltration::detectGround(const PC::Ptr &cloud) {
-  // TODO: Crop square in data
-  bool has_data = false;
-  if (!has_data) {
+  // Crop square of landing spot size in data
+  PC::Ptr     square = boost::make_shared<PC>();
+  const float d      = _ground_spot_square_size / 2.0f;
+
+  pcl::CropBox<pt_XYZ> filter;
+  filter.setMin(Eigen::Vector4f(-d, -d, 0.0f, 1.0f));
+  filter.setMax(Eigen::Vector4f(d, d, 100.0f, 1.0f));
+  filter.setInputCloud(cloud);
+  filter.filter(*square);
+
+  if (!square->points.size() == 0) {
     return darpa_mrs_msgs::LandingSpot::LANDING_NO_DATA;
   }
 

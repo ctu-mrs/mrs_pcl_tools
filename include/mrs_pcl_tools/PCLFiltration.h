@@ -10,6 +10,8 @@
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 #include "darpa_mrs_msgs/LandingSpot.h"
 
+#include <pcl/filters/crop_box.h>
+
 //}
 
 namespace mrs_pcl_tools
@@ -68,9 +70,10 @@ private:
   void  callbackTof(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &detect_landing_area, const ros::Publisher &pub_over_max_range);
   bool  _tof_republish;
   bool  _tof_pcl2_over_max_range;
+  int   _tof_downsample_scale;
   float _tof_min_range_sq;
   float _tof_max_range_sq;
-  int   _tof_downsample_scale;
+  float _ground_spot_square_size;
 
   /* Depth camera */
   void  depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
