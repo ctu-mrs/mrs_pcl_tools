@@ -33,10 +33,14 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("tof/pcl2_over_max_range", _tof_pcl2_over_max_range, false);
   param_loader.loadParam("tof/min_range", _tof_min_range_sq, 0.1f);
   param_loader.loadParam("tof/max_range", _tof_max_range_sq, 4.0f);
-  param_loader.loadParam("tof/landing_spot/square_size", _ground_spot_square_size, 0.8f);
   param_loader.loadParam("tof/downsample_scale", _tof_downsample_scale, 0);
   _tof_min_range_sq *= _tof_min_range_sq;
   _tof_max_range_sq *= _tof_max_range_sq;
+
+  /* Landing spot detection */
+  param_loader.loadParam("tof/ground_detection/square_size", _ground_detection_square_size, 0.8f);
+  param_loader.loadParam("tof/ground_detection/ransac_dist_thrd", _ground_detection_ransac_distance_thrd, 0.05f);
+  param_loader.loadParam("tof/ground_detection/n_z_max_diff", _ground_detection_n_z_max_diff, 0.1f);
 
   /* Depth camera */
   param_loader.loadParam("depth/republish", _depth_republish, true);
@@ -556,10 +560,12 @@ PC::Ptr PCLFiltration::getCloudOverMaxRange(const PC::Ptr &cloud, const float &p
 
 /*//{ detectGround() */
 int8_t PCLFiltration::detectGround(const PC::Ptr &cloud) {
+
   // Crop square of landing spot size in data
   PC::Ptr     square = boost::make_shared<PC>();
-  const float d      = _ground_spot_square_size / 2.0f;
+  const float d      = _ground_detection_square_size / 2.0f;
 
+  // TODO: TEST Filter data by xy distance (keep middle-area square of edge size 2*d)
   pcl::CropBox<pt_XYZ> filter;
   filter.setMin(Eigen::Vector4f(-d, -d, 0.0f, 1.0f));
   filter.setMax(Eigen::Vector4f(d, d, 100.0f, 1.0f));
@@ -570,10 +576,28 @@ int8_t PCLFiltration::detectGround(const PC::Ptr &cloud) {
     return darpa_mrs_msgs::LandingSpot::LANDING_NO_DATA;
   }
 
-  // TODO: Match planar surface on cropped data
+  // TODO: Transform data to world
+
+  // TODO: TEST Match planar surface on cropped data
+  pcl::ModelCoefficients       coefficients;
+  pcl::PointIndices            inliers;
+  pcl::SACSegmentation<pt_XYZ> seg;
+  seg.setModelType(pcl::SACMODEL_PLANE);
+  seg.setMethodType(pcl::SAC_RANSAC);
+  seg.setDistanceThreshold(_ground_detection_ransac_distance_thrd);
+  seg.setInputCloud(square);
+  seg.segment(inliers, coefficients);
+
+  if (inliers.indices.size() == 0) {
+    return darpa_mrs_msgs::LandingSpot::LANDING_NO_DATA;
+  }
 
   // TODO: Decide if planar surface is ground or not
-  /* landing_spot = darpa_mrs_msgs::LandingSpot::LANDING_SAFE; */
+  const float n_z = std::fabs(coefficients.values[2]);
+  if (std::fabs(n_z - 1.0f) < _ground_detection_n_z_max_diff) {
+    return darpa_mrs_msgs::LandingSpot::LANDING_SAFE;
+  }
+
   return darpa_mrs_msgs::LandingSpot::LANDING_UNSAFE;
 }
 /*//}*/

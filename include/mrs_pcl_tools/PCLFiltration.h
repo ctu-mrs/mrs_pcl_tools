@@ -11,6 +11,9 @@
 #include "darpa_mrs_msgs/LandingSpot.h"
 
 #include <pcl/filters/crop_box.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
 
 //}
 
@@ -73,7 +76,6 @@ private:
   int   _tof_downsample_scale;
   float _tof_min_range_sq;
   float _tof_max_range_sq;
-  float _ground_spot_square_size;
 
   /* Depth camera */
   void  depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
@@ -94,6 +96,11 @@ private:
   /* void  rplidarCallback(const sensor_msgs::LaserScan::ConstPtr msg); */
   /* bool  _rplidar_republish; */
   /* float _rplidar_voxel_resolution; */
+
+  /* Landing spot detection */
+  float _ground_detection_square_size;
+  float _ground_detection_ransac_distance_thrd;
+  float _ground_detection_n_z_max_diff;
 
   /* Functions */
   void removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
