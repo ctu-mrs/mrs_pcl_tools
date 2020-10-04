@@ -70,7 +70,7 @@ private:
   bool  _tof_pcl2_over_max_range;
   float _tof_min_range_sq;
   float _tof_max_range_sq;
-  float _tof_voxel_resolution;
+  int   _tof_downsample_scale;
 
   /* Depth camera */
   void  depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
@@ -105,7 +105,10 @@ private:
   std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                                              const float &min_range_sq, const float &max_range_sq);
 
-  std::optional<bool> containsPlanarSurface(const PC::Ptr &cloud);
+  PC::Ptr downsampleCloud(const sensor_msgs::PointCloud2::ConstPtr &msg, const unsigned int &keep_every_nth_point = 1);
+  PC::Ptr getCloudOverMaxRange(const PC::Ptr &cloud, const float &placeholder_points_distance = 100.0f);
+
+  int8_t detectGround(const PC::Ptr &cloud);
 
   template <typename T>
   void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);
