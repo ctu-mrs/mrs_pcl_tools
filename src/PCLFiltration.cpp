@@ -29,13 +29,16 @@ void PCLFiltration::onInit() {
   _lidar3d_filter_intensity_range_sq *= _lidar3d_filter_intensity_range_sq;
 
   /* ToF cameras */
-  param_loader.loadParam("top/republish", _tof_republish, true);
-  param_loader.loadParam("tof/pcl2_over_max_range", _tof_pcl2_over_max_range, false);
-  param_loader.loadParam("tof/min_range", _tof_min_range_sq, 0.1f);
-  param_loader.loadParam("tof/max_range", _tof_max_range_sq, 4.0f);
-  param_loader.loadParam("tof/downsample_scale", _tof_downsample_scale, 0);
-  _tof_min_range_sq *= _tof_min_range_sq;
-  _tof_max_range_sq *= _tof_max_range_sq;
+  bool  tof_republish;
+  bool  tof_pcl2_over_max_range;
+  int   tof_downsample_scale;
+  float tof_min_range;
+  float tof_max_range;
+  param_loader.loadParam("tof/republish", tof_republish, true);
+  param_loader.loadParam("tof/pcl2_over_max_range", tof_pcl2_over_max_range, false);
+  param_loader.loadParam("tof/downsample_scale", tof_downsample_scale, 0);
+  param_loader.loadParam("tof/min_range", tof_min_range, 0.1f);
+  param_loader.loadParam("tof/max_range", tof_max_range, 4.0f);
 
   /* Landing spot detection */
   param_loader.loadParam("tof/ground_detection/square_size", _ground_detection_square_size, 0.8f);
@@ -71,26 +74,44 @@ void PCLFiltration::onInit() {
     _sub_lidar3d                = nh.subscribe("lidar3d_in", 10, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());
     _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 10);
     _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 10);
+
+    NODELET_INFO("[PCLFiltration]: Subscribed to topic: %s", _sub_lidar3d.getTopic().c_str());
+    NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_lidar3d.getTopic().c_str());
+    NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_lidar3d_over_max_range.getTopic().c_str());
   }
 
-  if (_tof_republish) {
+  if (tof_republish) {
 
-    _pub_tof_top                = nh.advertise<sensor_msgs::PointCloud2>("tof_top_out", 1);
-    _pub_tof_top_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("tof_top_over_max_range_out", 1);
-    _sub_tof_top =
-        nh.subscribe<sensor_msgs::PointCloud2>("tof_top_in", 1, boost::bind(&PCLFiltration::callbackTof, this, _1, false, _pub_tof_top_over_max_range));
+    _tof_top                              = std::make_shared<Camera>();
+    _tof_top->name                        = std::string("ToF-top");
+    _tof_top->publish_pcl2_over_max_range = tof_pcl2_over_max_range;
+    _tof_top->has_camera_model            = false;
+    _tof_top->detect_landing_area         = false;
+    _tof_top->downsample_scale            = tof_downsample_scale;
+    _tof_top->min_range                   = tof_min_range;
+    _tof_top->max_range                   = tof_max_range;
 
-    _pub_tof_bottom                = nh.advertise<sensor_msgs::PointCloud2>("tof_bottom_out", 1);
-    _pub_tof_bottom_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("tof_bottom_over_max_range_out", 1);
-    _pub_landing_spot              = nh.advertise<darpa_mrs_msgs::LandingSpot>("landing_spot_out", 1);
-    _sub_tof_bottom =
-        nh.subscribe<sensor_msgs::PointCloud2>("tof_bottom_in", 1, boost::bind(&PCLFiltration::callbackTof, this, _1, true, _pub_tof_bottom_over_max_range));
+    _tof_top->sub_camera_info =
+        nh.subscribe<sensor_msgs::CameraInfo>("tof_top_camera_info_in", 1, boost::bind(&PCLFiltration::callbackTofCameraInfo, this, _1, _tof_top));
+    _tof_top->sub_image = nh.subscribe<sensor_msgs::Image>("tof_top_in", 1, boost::bind(&PCLFiltration::callbackTofImage, this, _1, _tof_top));
+
+    _tof_top->pub_cloud                = nh.advertise<sensor_msgs::PointCloud2>("tof_top_out", 1);
+    _tof_top->pub_cloud_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("tof_top_over_max_range_out", 1);
+    if (_tof_top->detect_landing_area) {
+      _tof_top->pub_landing_spot = nh.advertise<darpa_mrs_msgs::LandingSpot>("landing_feasible_out", 1);
+    }
+
+    // TODO: test bottom camera as well
   }
 
   if (_depth_republish) {
     _sub_depth                = nh.subscribe("depth_in", 1, &PCLFiltration::depthCallback, this, ros::TransportHints().tcpNoDelay());
     _pub_depth                = nh.advertise<sensor_msgs::PointCloud2>("depth_out", 10);
     _pub_depth_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("depth_over_max_range_out", 10);
+
+    NODELET_INFO("[PCLFiltration]: Subscribed to topic: %s", _sub_depth.getTopic().c_str());
+    NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_depth.getTopic().c_str());
+    NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_depth_over_max_range.getTopic().c_str());
   }
 
   /* if (_rplidar_republish) { */
@@ -140,7 +161,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
       for (int i = 0; i < 64; i++) {
         for (int j = 0; j < 1024; j++) {
           if (i % 4 == 0) {
-            cloud_16_1024->at(j, floor(i / 4.0)) = cloud_64_1024->at(j, i);
+            cloud_16_1024->at(j, std::floor(i / 4.0)) = cloud_64_1024->at(j, i);
           }
         }
       }
@@ -183,54 +204,79 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
 }
 //}
 
-/* callbackTof() //{ */
-void PCLFiltration::callbackTof(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &detect_landing_area, const ros::Publisher &pub_over_max_range) {
+/* callbackTofImage() //{ */
+void PCLFiltration::callbackTofImage(const sensor_msgs::Image::ConstPtr &depth_msg, const std::shared_ptr<Camera> &tof) {
 
   if (!is_initialized) {
     return;
+  } else if (!tof->has_camera_model) {
+    NODELET_WARN_THROTTLE(1.0, "[PCLFiltration] Camera %s misses camera info. Skipping image frame.", tof->name.c_str());
+    return;
   }
 
-  NODELET_INFO_ONCE("[PCLFiltration] Subscribing ToF messages. ToF data will %s used to detect landing area.", detect_landing_area ? "be" : "not be");
+  NODELET_INFO_ONCE("[PCLFiltration] Subscribing %s messages. ToF data will %s used to detect landing area.", tof->name.c_str(),
+                    tof->detect_landing_area ? "be" : "not be");
 
   TicToc t;
 
-  const unsigned int points_before = msg->height * msg->width;
+  const unsigned int points_before = depth_msg->height * depth_msg->width;
 
-  const PC::Ptr cloud = downsampleCloud(msg, _tof_downsample_scale);
+  // DONE: Check if data contain NaNs or 0s and then replace these data with an over-the-max-range data to allow space-freeing
+  const std::pair<PC::Ptr, PC::Ptr> clouds_both       = imageToPcFiltered(depth_msg, tof->camera_model, tof->min_range, tof->max_range);
+  PC::Ptr                           cloud_downsampled = downsampleCloud(clouds_both.first, tof->downsample_scale);
 
-  // TODO: Check if data contain NaNs or 0s and then replace these data with an over-the-max-range data to allow space-freeing
-  // TODO: Subt sim is ideal case, no need for range-based data filtration in this case, but fill `over_max_range` with data for free-raying
-  const PC::Ptr cloud_over_max_range = getCloudOverMaxRange(cloud);
+  unsigned int points_after_image_filtration = clouds_both.first->points.size();
+  unsigned int points_after_downsampling     = cloud_downsampled->points.size();
 
   // Detect landing area
-  if (detect_landing_area && _pub_landing_spot.getNumSubscribers() > 0) {
+  if (tof->detect_landing_area && tof->pub_landing_spot.getNumSubscribers() > 0) {
 
-    const int8_t ground = detectGround(cloud);
+    const int8_t ground = detectGround(cloud_downsampled);
 
     // TODO: probably make this as service only
     // Publish landing spot msg
     try {
       darpa_mrs_msgs::LandingSpot::Ptr landing_spot_msg = boost::make_shared<darpa_mrs_msgs::LandingSpot>();
-      landing_spot_msg->stamp                           = msg->header.stamp;
+      landing_spot_msg->stamp                           = depth_msg->header.stamp;
       landing_spot_msg->landing_spot                    = ground;
 
-      _pub_landing_spot.publish(landing_spot_msg);
+      tof->pub_landing_spot.publish(landing_spot_msg);
     }
     catch (...) {
-      NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", _pub_landing_spot.getTopic().c_str());
+      NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", tof->pub_landing_spot.getTopic().c_str());
     }
   }
 
   // Publish data
-  publishCloud(_pub_tof_top, *cloud);
+  publishCloud(tof->pub_cloud, *cloud_downsampled);
 
   // Publish data over max range
-  if (_tof_pcl2_over_max_range) {
-    publishCloud(pub_over_max_range, *cloud_over_max_range);
+  if (tof->publish_pcl2_over_max_range) {
+    publishCloud(tof->pub_cloud_over_max_range, *clouds_both.second);
   }
 
-  NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed ToF camera data (run time: %0.1f ms; points before: %d, after: %ld).", t.toc(), points_before,
-                        cloud->points.size());
+  NODELET_INFO_THROTTLE(5.0,
+                        "[PCLFiltration] Processed ToF camera data (run time: %0.1f ms; points before: %d, after: %ld). After -> image filtering: %d, "
+                        "downsampling: %d",
+                        t.toc(), points_before, cloud_downsampled->points.size(), points_after_image_filtration, points_after_downsampling);
+}
+//}
+
+/* callbackTofCameraInfo() //{ */
+void PCLFiltration::callbackTofCameraInfo(const sensor_msgs::CameraInfo::ConstPtr &info_msg, const std::shared_ptr<Camera> &tof) {
+
+  if (!is_initialized) {
+    return;
+  } else if (tof->has_camera_model) {
+    NODELET_ERROR("[PCLFiltration] Received again camera info of camera: %s. This should not happen!", tof->name.c_str());
+    return;
+  }
+
+  tof->camera_model.fromCameraInfo(info_msg);
+  tof->sub_camera_info.shutdown();
+  tof->has_camera_model = true;
+
+  NODELET_INFO("[PCLFiltration] Received camera info of camera: %s. Shutting down subscriber.", tof->name.c_str());
 }
 //}
 
@@ -297,15 +343,6 @@ void PCLFiltration::depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg)
   }
 }
 //}
-
-/* /1* rplidarCallback() //{ *1/ */
-/* void PCLFiltration::rplidarCallback([[maybe_unused]] const sensor_msgs::LaserScan::ConstPtr msg) { */
-/*   if (is_initialized && _rplidar_republish) { */
-/*     NODELET_INFO_ONCE("[PCLFiltration] Subscribing RPLidar messages."); */
-/*     NODELET_WARN_THROTTLE(2.0, "[PCLFiltration] rplidarCallback() not implemented!"); */
-/*   } */
-/* } */
-/* //} */
 
 /*//{ removeCloseAndFarPointCloud() */
 void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
@@ -510,51 +547,32 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const 
 /*//}*/
 
 /*//{ downsampleCloud() */
-PC::Ptr PCLFiltration::downsampleCloud(const sensor_msgs::PointCloud2::ConstPtr &msg, const unsigned int &keep_every_nth_point) {
+PC::Ptr PCLFiltration::downsampleCloud(const PC::Ptr &cloud, const unsigned int &keep_every_nth_point) {
 
-  if (msg->width <= 1 || msg->height <= 1) {
-    return boost::make_shared<PC>();
-  }
-
-  PC::Ptr cloud = boost::make_shared<PC>();
-  pcl::fromROSMsg(*msg, *cloud);
+  NODELET_INFO_ONCE("[PCLFiltration] Downsampling cloud with scale factor: %d", keep_every_nth_point);
 
   if (keep_every_nth_point <= 1) {
     return cloud;
   }
 
-  const unsigned int height = cloud->height / keep_every_nth_point;
-  const unsigned int width  = cloud->width / keep_every_nth_point;
+  const unsigned int height = std::max(1, int(cloud->height / keep_every_nth_point));
+  const unsigned int width  = std::max(1, int(cloud->width / keep_every_nth_point));
+
+  /* NODELET_ERROR("[PCLFiltration] cloud in: (h: %d, w: %d), cloud out: (h: %d, w: %d)", cloud->height, cloud->width, height, width); */
 
   PC::Ptr cloud_downsampled = boost::make_shared<PC>(height, width);
+  cloud_downsampled->header = cloud->header;
 
-  int r = 0;
-  for (int i = 0; i < cloud->height; i += keep_every_nth_point) {
-    int c = 0;
-    for (int j = 0; j < cloud->width; j += keep_every_nth_point) {
-      cloud_downsampled->at(r, c++) = cloud->at(i, j);
+  int c = 0;
+  for (int i = 0; i < cloud->height - 1; i += keep_every_nth_point) {
+    int r = 0;
+    for (int j = 0; j < cloud->width - 1; j += keep_every_nth_point) {
+      cloud_downsampled->at(r++, c) = cloud->at(j, i);
     }
-    r++;
+    c++;
   }
 
   return cloud_downsampled;
-}
-/*//}*/
-
-/*//{ getCloudOverMaxRange() */
-PC::Ptr PCLFiltration::getCloudOverMaxRange(const PC::Ptr &cloud, const float &placeholder_points_distance) {
-
-  // Convert to pcl object
-  PC::Ptr cloud_over_max_range = boost::make_shared<PC>(cloud->width, cloud->height);
-
-  if (!cloud->isOrganized()) {
-    NODELET_ERROR("[PCLFiltration]: `getCloudOverMaxRange()` input cloud is not organized.");
-    return cloud_over_max_range;
-  }
-
-  // TODO: Implement (for each invalid point in data, insert a "placeholder" point in large distance to which a free ray will be inserted in mapping)
-
-  return cloud_over_max_range;
 }
 /*//}*/
 
@@ -602,6 +620,86 @@ int8_t PCLFiltration::detectGround(const PC::Ptr &cloud) {
 }
 /*//}*/
 
+/*//{ imageToPcFiltered() */
+std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::Image::ConstPtr &depth_msg, const image_geometry::PinholeCameraModel &model,
+                                                             const float &min_range, const float &max_range, const float &nan_depth) {
+
+  PC::Ptr cloud_out                = boost::make_shared<PC>();
+  PC::Ptr cloud_over_max_range_out = boost::make_shared<PC>();
+
+  pcl::uint64_t stamp;
+  pcl_conversions::toPCL(depth_msg->header.stamp, stamp);
+
+  const size_t no_of_points = depth_msg->width * depth_msg->height;
+  cloud_out->points.resize(no_of_points);
+  cloud_over_max_range_out->points.resize(no_of_points);
+
+  cloud_out->header.frame_id                = depth_msg->header.frame_id;
+  cloud_out->header.seq                     = depth_msg->header.seq;
+  cloud_out->header.stamp                   = stamp;
+  cloud_over_max_range_out->header.frame_id = depth_msg->header.frame_id;
+  cloud_over_max_range_out->header.seq      = depth_msg->header.seq;
+  cloud_over_max_range_out->header.stamp    = stamp;
+
+  // Method inspired by: https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
+
+  // Use correct principal point from calibration
+  const float center_x = model.cx();
+  const float center_y = model.cy();
+
+  // Combine unit conversion (if necessary) with scaling by focal length for computing (X,Y)
+  const float constant_x = 1.0f / model.fx();
+  const float constant_y = 1.0f / model.fy();
+  const float bad_point  = std::numeric_limits<float>::quiet_NaN();
+
+  const float *depth_row = reinterpret_cast<const float *>(&depth_msg->data[0]);
+  const int    row_step  = depth_msg->step / sizeof(float);
+
+  int points_cloud                = 0;
+  int points_cloud_over_max_range = 0;
+
+  for (int v = 0; v < (int)depth_msg->height; ++v, depth_row += row_step) {
+
+    for (int u = 0; u < (int)depth_msg->width; ++u) {
+
+      const float depth  = depth_row[u];
+      const bool  finite = std::isfinite(depth);
+
+      if (finite && depth > min_range && depth < max_range) {
+
+        pt_XYZ pt;
+        pt.x                                 = (u - center_x) * depth * constant_x;
+        pt.y                                 = (v - center_y) * depth * constant_y;
+        pt.z                                 = depth;
+        cloud_out->points.at(points_cloud++) = pt;
+
+      } else if (!finite || depth <= 0.0f || depth > max_range) {
+
+        pt_XYZ pt;
+        pt.x                                                               = (u - center_x) * nan_depth * constant_x;
+        pt.y                                                               = (v - center_y) * nan_depth * constant_y;
+        pt.z                                                               = nan_depth;
+        cloud_over_max_range_out->points.at(points_cloud_over_max_range++) = pt;
+      }
+    }
+  }
+
+  cloud_out->width  = points_cloud;
+  cloud_out->height = 1;
+  if (points_cloud != no_of_points) {
+    cloud_out->points.resize(points_cloud);
+  }
+
+  cloud_over_max_range_out->width  = points_cloud_over_max_range;
+  cloud_over_max_range_out->height = 1;
+  if (points_cloud_over_max_range != no_of_points) {
+    cloud_over_max_range_out->points.resize(points_cloud_over_max_range);
+  }
+
+  return std::make_pair(cloud_out, cloud_over_max_range_out);
+}
+/*//}*/
+
 /*//{ publishCloud() */
 template <typename T>
 void PCLFiltration::publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud) {
@@ -610,6 +708,7 @@ void PCLFiltration::publishCloud(const ros::Publisher &pub, const pcl::PointClou
       sensor_msgs::PointCloud2::Ptr pcl_msg = boost::make_shared<sensor_msgs::PointCloud2>();
       pcl::toROSMsg(cloud, *pcl_msg);
       pub.publish(pcl_msg);
+      /* NODELET_DEBUG("[PCLFiltration]: Publishing at time (%0.2f) cloud on topic: %s", pcl_msg->header.stamp.toSec(), pub.getTopic().c_str()); */
     }
     catch (...) {
       NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());

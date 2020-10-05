@@ -15,13 +15,13 @@
   <arg name="lidar3d_filter_intensity_thrd" default="100" />
   <arg name="lidar3d_filter_intensity_range" default="10.0" />
 
-  <arg name="tof_top_topic_in" default="tof_top/depth/points" />
-  <arg name="tof_bottom_topic_in" default="tof_top/depth/points" />
+  <arg name="tof_top_name" default="tof_top" />
+  <arg name="tof_bottom_name" default="tof_bottom" />
   <arg name="tof_republish" default="false" />
   <arg name="tof_publish_cloud_over_max_range" default="true" />
+  <arg name="tof_downsample_scale" default="2" />
   <arg name="tof_min_range" default="0.01" />
   <arg name="tof_max_range" default="4.0" />
-  <arg name="tof_downsample_scale" default="2" />
   <arg name="tof_ground_detection_square_size" default="0.8" />
   <arg name="tof_ground_detection_ransac_dist_thrd" default="0.05" />
   <arg name="tof_ground_detection_n_z_max_diff" default="0.1" />
@@ -56,9 +56,9 @@
       
       <param name="tof/republish" type="bool" value="$(arg tof_republish)" />
       <param name="tof/pcl2_over_max_range" type="bool" value="$(arg tof_publish_cloud_over_max_range)" />
+      <param name="tof/downsample_scale" type="int" value="$(arg tof_downsample_scale)" />
       <param name="tof/min_range" type="double" value="$(arg tof_min_range)" />
       <param name="tof/max_range" type="double" value="$(arg tof_max_range)" />
-      <param name="tof/downsample_scale" type="int" value="$(arg tof_downsample_scale)" />
       
       <param name="tof/ground_detection/square_size" type="double" value="$(arg tof_ground_detection_square_size)" />
       <param name="tof/ground_detection/ransac_dist_thrd" type="double" value="$(arg tof_ground_detection_ransac_dist_thrd)" />
@@ -76,28 +76,27 @@
       <param name="depth/radius_outlier_filter/radius" type="double" value="$(arg depth_radius_outlier_radius)" />
       <param name="depth/radius_outlier_filter/neighbors" type="int" value="$(arg depth_radius_outlier_neighbors)" />
 
-      <!-- <param name="rplidar/republish" type="bool" value="$(arg rplidar_republish)" /> -->
-      <!-- <param name="rplidar/voxel_resolution" type="double" value="0.05" /> -->
-
       <!-- Subscribers -->
       <remap from="~lidar3d_in" to="$(arg lidar3d_topic_in)" />
-      <remap from="~tof_top_in" to="$(arg tof_top_topic_in)" />
-      <remap from="~tof_bottom_in" to="$(arg tof_bottom_topic_in)" />
+
+      <remap from="~tof_top_in" to="$(arg tof_top_name)/depth" />
+      <remap from="~tof_bottom_in" to="$(arg tof_bottom_name)/depth" />
+      <remap from="~tof_top_camera_info_in" to="$(arg tof_top_name)/camera_info" />
+      <remap from="~tof_bottom_camera_info_in" to="$(arg tof_bottom_name)/camera_info" />
+
       <remap from="~depth_in" to="$(arg depth_topic_in)" />
-      <!-- <remap from="~rplidar_in" to="rplidar/scan_raw" /> -->
 
       <!-- Publishers -->
       <remap from="~lidar3d_out" to="$(arg lidar3d_topic_in)_processed" />
       <remap from="~lidar3d_over_max_range_out" to="$(arg lidar3d_topic_in)_over_max_range" />
-      <remap from="~tof_top_out" to="$(arg tof_top_topic_in)_processed" />
-      <remap from="~tof_top_over_max_range_out" to="$(arg tof_top_topic_in)_over_max_range" />
-      <remap from="~tof_bottom_out" to="$(arg tof_bottom_topic_in)_processed" />
-      <remap from="~tof_bottom_over_max_range_out" to="$(arg tof_bottom_topic_in)_over_max_range" />
+      <remap from="~tof_top_out" to="$(arg tof_top_name)/points_processed" />
+      <remap from="~tof_top_over_max_range_out" to="$(arg tof_top_name)/points_over_max_range" />
+      <remap from="~tof_bottom_out" to="$(arg tof_bottom_name)/points_processed" />
+      <remap from="~tof_bottom_over_max_range_out" to="$(arg tof_bottom_name)/points_over_max_range" />
       <remap from="~depth_out" to="$(arg depth_topic_in)_processed" />
       <remap from="~depth_over_max_range_out" to="$(arg depth_topic_in)_over_max_range" />
       
       <remap from="~landing_feasible_out" to="landing_feasible" />
-      <!-- <remap from="~rplidar_out" to="rplidar/scan_processed" /> -->
 
     </node>
 

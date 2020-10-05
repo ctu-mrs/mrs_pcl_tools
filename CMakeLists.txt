@@ -25,6 +25,7 @@ find_package(catkin REQUIRED COMPONENTS
     octomap_ros
     octomap_msgs
     darpa_mrs_msgs
+    image_geometry
 )
 
 add_service_files(DIRECTORY srv/registration FILES
