@@ -108,7 +108,8 @@ private:
     bool            publish_pcl2_over_max_range;
     bool            has_camera_model;
     bool            detect_landing_area;
-    int             downsample_scale;
+    unsigned int    downsample_scale;
+    float           voxel_grid_resolution;
     float           min_range;
     float           max_range;
     ros::Subscriber sub_image;
@@ -127,9 +128,11 @@ private:
   void callbackTofCameraInfo(const sensor_msgs::CameraInfo::ConstPtr &info_msg, const std::shared_ptr<Camera> &tof);
 
   std::pair<PC::Ptr, PC::Ptr> imageToPcFiltered(const sensor_msgs::Image::ConstPtr &msg, const image_geometry::PinholeCameraModel &model,
-                                                const float &min_range, const float &max_range, const float &nan_depth = 100.0f);
+                                                const float &min_range, const float &max_range, const float &nan_depth = 100.0f,
+                                                const unsigned int &keep_every_nth_point = 1);
   PC::Ptr                     downsampleCloud(const PC::Ptr &cloud, const unsigned int &keep_every_nth_point = 1);
   int8_t                      detectGround(const PC::Ptr &cloud);
+  pt_XYZ imagePointToCloudPoint(const int &x, const int &y, const float &cx, const float &cy, const float &depth, const float &ifx, const float &ify);
 };
 //}
 

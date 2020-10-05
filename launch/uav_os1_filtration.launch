@@ -22,6 +22,7 @@
   <arg name="tof_downsample_scale" default="2" />
   <arg name="tof_min_range" default="0.01" />
   <arg name="tof_max_range" default="4.0" />
+  <arg name="tof_voxel_grid_resolution" default="0.05" />
   <arg name="tof_ground_detection_square_size" default="0.8" />
   <arg name="tof_ground_detection_ransac_dist_thrd" default="0.05" />
   <arg name="tof_ground_detection_n_z_max_diff" default="0.1" />
@@ -59,6 +60,7 @@
       <param name="tof/downsample_scale" type="int" value="$(arg tof_downsample_scale)" />
       <param name="tof/min_range" type="double" value="$(arg tof_min_range)" />
       <param name="tof/max_range" type="double" value="$(arg tof_max_range)" />
+      <param name="tof/voxel_grid_resolution" type="double" value="$(arg tof_voxel_grid_resolution)" />
       
       <param name="tof/ground_detection/square_size" type="double" value="$(arg tof_ground_detection_square_size)" />
       <param name="tof/ground_detection/ransac_dist_thrd" type="double" value="$(arg tof_ground_detection_ransac_dist_thrd)" />
