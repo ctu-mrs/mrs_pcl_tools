@@ -20,6 +20,7 @@
   <arg name="tof_republish" default="false" />
   <arg name="tof_publish_cloud_over_max_range" default="true" />
   <arg name="tof_downsample_scale" default="2" />
+  <arg name="tof_focal_length" default="186.4" />
   <arg name="tof_min_range" default="0.01" />
   <arg name="tof_max_range" default="4.0" />
   <arg name="tof_voxel_grid_resolution" default="0.05" />
@@ -58,6 +59,7 @@
       <param name="tof/republish" type="bool" value="$(arg tof_republish)" />
       <param name="tof/pcl2_over_max_range" type="bool" value="$(arg tof_publish_cloud_over_max_range)" />
       <param name="tof/downsample_scale" type="int" value="$(arg tof_downsample_scale)" />
+      <param name="tof/focal_length" type="double" value="$(arg tof_focal_length)" />
       <param name="tof/min_range" type="double" value="$(arg tof_min_range)" />
       <param name="tof/max_range" type="double" value="$(arg tof_max_range)" />
       <param name="tof/voxel_grid_resolution" type="double" value="$(arg tof_voxel_grid_resolution)" />

@@ -35,12 +35,14 @@ void PCLFiltration::onInit() {
   float tof_min_range;
   float tof_max_range;
   float tof_voxel_grid_resolution;
+  float tof_focal_length;
   param_loader.loadParam("tof/republish", tof_republish, true);
   param_loader.loadParam("tof/pcl2_over_max_range", tof_pcl2_over_max_range, false);
   param_loader.loadParam("tof/downsample_scale", tof_downsample_scale, 0);
   param_loader.loadParam("tof/min_range", tof_min_range, 0.1f);
   param_loader.loadParam("tof/max_range", tof_max_range, 4.0f);
   param_loader.loadParam("tof/voxel_grid_resolution", tof_voxel_grid_resolution, 0.0f);
+  param_loader.loadParam("tof/focal_length", tof_focal_length, 186.4f);
 
   /* Landing spot detection */
   param_loader.loadParam("tof/ground_detection/square_size", _ground_detection_square_size, 0.8f);
@@ -84,15 +86,13 @@ void PCLFiltration::onInit() {
     _tof_top                              = std::make_shared<Camera>();
     _tof_top->name                        = std::string("ToF-top");
     _tof_top->publish_pcl2_over_max_range = tof_pcl2_over_max_range;
-    _tof_top->has_camera_model            = false;
     _tof_top->detect_landing_area         = false;
     _tof_top->downsample_scale            = tof_downsample_scale;
+    _tof_top->focal_length                = tof_focal_length;
     _tof_top->min_range                   = tof_min_range;
     _tof_top->max_range                   = tof_max_range;
     _tof_top->voxel_grid_resolution       = tof_voxel_grid_resolution;
 
-    _tof_top->sub_camera_info =
-        nh.subscribe<sensor_msgs::CameraInfo>("tof_top_camera_info_in", 1, boost::bind(&PCLFiltration::callbackTofCameraInfo, this, _1, _tof_top));
     _tof_top->sub_image = nh.subscribe<sensor_msgs::Image>("tof_top_in", 1, boost::bind(&PCLFiltration::callbackTofImage, this, _1, _tof_top));
 
     _tof_top->pub_cloud                = nh.advertise<sensor_msgs::PointCloud2>("tof_top_out", 1);
@@ -105,7 +105,6 @@ void PCLFiltration::onInit() {
     _tof_bottom                              = std::make_shared<Camera>();
     _tof_bottom->name                        = std::string("ToF-bottom");
     _tof_bottom->publish_pcl2_over_max_range = tof_pcl2_over_max_range;
-    _tof_bottom->has_camera_model            = false;
     // TODO: detect landing area should be here set to true
     _tof_bottom->detect_landing_area   = false;
     _tof_bottom->downsample_scale      = tof_downsample_scale;
@@ -113,8 +112,6 @@ void PCLFiltration::onInit() {
     _tof_bottom->max_range             = tof_max_range;
     _tof_bottom->voxel_grid_resolution = tof_voxel_grid_resolution;
 
-    _tof_bottom->sub_camera_info =
-        nh.subscribe<sensor_msgs::CameraInfo>("tof_bottom_camera_info_in", 1, boost::bind(&PCLFiltration::callbackTofCameraInfo, this, _1, _tof_bottom));
     _tof_bottom->sub_image = nh.subscribe<sensor_msgs::Image>("tof_bottom_in", 1, boost::bind(&PCLFiltration::callbackTofImage, this, _1, _tof_bottom));
 
     _tof_bottom->pub_cloud                = nh.advertise<sensor_msgs::PointCloud2>("tof_bottom_out", 1);
@@ -224,9 +221,6 @@ void PCLFiltration::callbackTofImage(const sensor_msgs::Image::ConstPtr &depth_m
 
   if (!is_initialized) {
     return;
-  } else if (!tof->has_camera_model) {
-    NODELET_WARN_THROTTLE(1.0, "[PCLFiltration] Camera %s misses camera info. Skipping image frame.", tof->name.c_str());
-    return;
   }
 
   NODELET_INFO_ONCE("[PCLFiltration] Subscribing %s messages. ToF data will %s used to detect landing area.", tof->name.c_str(),
@@ -235,8 +229,7 @@ void PCLFiltration::callbackTofImage(const sensor_msgs::Image::ConstPtr &depth_m
   TicToc t;
 
   // DONE: Check if data contain NaNs or 0s and then replace these data with an over-the-max-range data to allow space-freeing
-  const std::pair<PC::Ptr, PC::Ptr> clouds_both =
-      imageToPcFiltered(depth_msg, tof->camera_model, tof->min_range, tof->max_range, 100.0f, tof->downsample_scale);
+  const std::pair<PC::Ptr, PC::Ptr> clouds_both = imageToPcFiltered(depth_msg, tof, 50.0f);
 
   // Voxel grid sampling
   if (tof->voxel_grid_resolution > 0.0f) {
@@ -278,24 +271,6 @@ void PCLFiltration::callbackTofImage(const sensor_msgs::Image::ConstPtr &depth_m
 
     publishCloud(tof->pub_cloud_over_max_range, *clouds_both.second);
   }
-}
-//}
-
-/* callbackTofCameraInfo() //{ */
-void PCLFiltration::callbackTofCameraInfo(const sensor_msgs::CameraInfo::ConstPtr &info_msg, const std::shared_ptr<Camera> &tof) {
-
-  if (!is_initialized) {
-    return;
-  } else if (tof->has_camera_model) {
-    NODELET_ERROR("[PCLFiltration] Received again camera info of camera: %s. This should not happen!", tof->name.c_str());
-    return;
-  }
-
-  tof->camera_model.fromCameraInfo(info_msg);
-  tof->sub_camera_info.shutdown();
-  tof->has_camera_model = true;
-
-  NODELET_INFO("[PCLFiltration] Received camera info of camera: %s. Shutting down subscriber.", tof->name.c_str());
 }
 //}
 
@@ -640,9 +615,8 @@ int8_t PCLFiltration::detectGround(const PC::Ptr &cloud) {
 /*//}*/
 
 /*//{ imageToPcFiltered() */
-std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::Image::ConstPtr &depth_msg, const image_geometry::PinholeCameraModel &model,
-                                                             const float &min_range, const float &max_range, const float &nan_depth,
-                                                             const unsigned int &keep_every_nth_point) {
+std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::Image::ConstPtr &depth_msg, const std::shared_ptr<Camera> &tof,
+                                                             const float &nan_depth) {
 
   PC::Ptr cloud_out                = boost::make_shared<PC>();
   PC::Ptr cloud_over_max_range_out = boost::make_shared<PC>();
@@ -664,12 +638,12 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::
   // Method inspired by: https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
 
   // Use correct principal point from calibration
-  const float center_x = model.cx();
-  const float center_y = model.cy();
+  const float center_x = depth_msg->width / 2.0f;
+  const float center_y = depth_msg->height / 2.0f;
 
-  // Combine unit conversion (if necessary) with scaling by focal length for computing (X,Y)
-  const float constant_x = 1.0f / model.fx();
-  const float constant_y = 1.0f / model.fy();
+  // Combine unit conversion (not needed) with scaling by focal length for computing (X,Y)
+  const float constant_x = 1.0f / tof->focal_length;
+  const float constant_y = 1.0f / tof->focal_length;
   const float bad_point  = std::numeric_limits<float>::quiet_NaN();
 
   const float *depth_row = reinterpret_cast<const float *>(&depth_msg->data[0]);
@@ -677,6 +651,10 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::
 
   int points_cloud                = 0;
   int points_cloud_over_max_range = 0;
+
+  const float        min_range            = tof->min_range;
+  const float        max_range            = tof->max_range;
+  const unsigned int keep_every_nth_point = tof->downsample_scale;
 
   unsigned int row = 0;
   for (int v = 0; v < (int)depth_msg->height; ++v, depth_row += row_step) {
