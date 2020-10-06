@@ -127,32 +127,23 @@ void PCLFiltration::onInit() {
       _camera_down->pub_landing_spot = nh.advertise<darpa_mrs_msgs::LandingSpot>("landing_feasible_out", 1);
     }
 
-    if (_depth_republish) {
-      /* Front camera */
-      // TODO: Filter this camera the same way as the up/down cameras
-      param_loader.loadParam("camera/front/republish", _depth_republish, true);
-      param_loader.loadParam("camera/front/pcl2_over_max_range", _depth_pcl2_over_max_range, false);
-      param_loader.loadParam("camera/front/min_range", _depth_min_range_sq, 0.0f);
-      param_loader.loadParam("camera/front/max_range", _depth_max_range_sq, 8.0f);
-      param_loader.loadParam("camera/front/voxel_resolution", _depth_voxel_resolution, 0.0f);
-      param_loader.loadParam("camera/front/minimum_grid_resolution", _depth_minimum_grid_resolution, 0.03f);
-      param_loader.loadParam("camera/front/use_bilateral", _depth_use_bilateral, false);
-      param_loader.loadParam("camera/front/bilateral_sigma_S", _depth_bilateral_sigma_S, 5.0f);
-      param_loader.loadParam("camera/front/bilateral_sigma_R", _depth_bilateral_sigma_R, 5e-3f);
-      param_loader.loadParam("camera/front/radius_outlier_filter/radius", _depth_radius_outlier_filter_radius, 0.0f);
-      param_loader.loadParam("camera/front/radius_outlier_filter/neighbors", _depth_radius_outlier_filter_neighbors, 0);
-      _depth_min_range_sq *= _depth_min_range_sq;
-      _depth_max_range_sq *= _depth_max_range_sq;
-      _depth_use_radius_outlier_filter = _depth_radius_outlier_filter_radius > 0.0f && _depth_radius_outlier_filter_neighbors > 0;
+    /* Front camera */
+    _camera_front                      = std::make_shared<Camera>();
+    _camera_front->name                = std::string("camera-front");
+    _camera_front->focal_length        = _mav_type->focal_length_front_camera;
+    _camera_front->max_range           = _mav_type->front_camera_max_range;
+    _camera_front->detect_landing_area = false;
+    _camera_front->keep_nth_frame      = _mav_type->keep_nth_front_camera_frame;
+    _camera_front->data_frame          = 0;
+    param_loader.loadParam("camera/front/pcl2_over_max_range", _camera_front->publish_pcl2_over_max_range, false);
+    param_loader.loadParam("camera/front/downsample_scale", _camera_front->downsample_scale, 0);
+    param_loader.loadParam("camera/front/min_range", _camera_front->min_range, 0.1f);
+    param_loader.loadParam("camera/front/voxel_grid_resolution", _camera_front->voxel_grid_resolution, 0.0f);
 
-      _sub_depth                = nh.subscribe("depth_in", 1, &PCLFiltration::depthCallback, this, ros::TransportHints().tcpNoDelay());
-      _pub_depth                = nh.advertise<sensor_msgs::PointCloud2>("depth_out", 10);
-      _pub_depth_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("depth_over_max_range_out", 10);
-
-      NODELET_INFO("[PCLFiltration]: Subscribed to topic: %s", _sub_depth.getTopic().c_str());
-      NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_depth.getTopic().c_str());
-      NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_depth_over_max_range.getTopic().c_str());
-    }
+    _camera_front->sub_image =
+        nh.subscribe<sensor_msgs::Image>("camera_front_in", 1, boost::bind(&PCLFiltration::callbackCameraImage, this, _1, _camera_front));
+    _camera_front->pub_cloud                = nh.advertise<sensor_msgs::PointCloud2>("camera_front_out", 1);
+    _camera_front->pub_cloud_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("camera_front_over_max_range_out", 1);
   }
 
   if (!param_loader.loadedSuccessfully()) {
@@ -332,70 +323,6 @@ void PCLFiltration::callbackCameraImage(const sensor_msgs::Image::ConstPtr &dept
   if (camera->publish_pcl2_over_max_range) {
 
     publishCloud(camera->pub_cloud_over_max_range, *clouds_both.second);
-  }
-}
-//}
-
-/* depthCallback() //{ */
-void PCLFiltration::depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
-  if (is_initialized && _depth_republish) {
-    NODELET_INFO_ONCE("[PCLFiltration] Subscribing depth camera messages.");
-    TicToc t;
-
-    unsigned int points_before = msg->height * msg->width;
-
-    std::pair<PC::Ptr, PC::Ptr> clouds = removeCloseAndFarPointCloudXYZ(msg, _depth_pcl2_over_max_range, _depth_min_range_sq, _depth_max_range_sq);
-
-    PC::Ptr pcl = clouds.first;
-
-    // Voxel grid sampling
-    if (_depth_voxel_resolution > 0.0f) {
-      /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied voxel sampling filter (res: %0.2f m).", _depth_voxel_resolution); */
-      pcl::VoxelGrid<pt_XYZ> vg;
-      vg.setInputCloud(pcl);
-      vg.setLeafSize(_depth_voxel_resolution, _depth_voxel_resolution, _depth_voxel_resolution);
-      vg.filter(*pcl);
-    }
-
-    // Radius outlier filter
-    if (_depth_use_radius_outlier_filter) {
-      pcl::RadiusOutlierRemoval<pt_XYZ> outrem;
-      outrem.setInputCloud(pcl);
-      outrem.setRadiusSearch(_depth_radius_outlier_filter_radius);
-      outrem.setMinNeighborsInRadius(_depth_radius_outlier_filter_neighbors);
-      outrem.setKeepOrganized(true);
-      outrem.filter(*pcl);
-    }
-
-    // Bilateral filter
-    if (_depth_use_bilateral) {
-      /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied fast bilateral OMP filter (sigma S: %0.2f, sigma R: %0.2f).", _depth_bilateral_sigma_S, */
-      /*                       _depth_bilateral_sigma_R); */
-      pcl::FastBilateralFilterOMP<pt_XYZ> fbf;
-      fbf.setInputCloud(pcl);
-      fbf.setSigmaS(_depth_bilateral_sigma_S);
-      fbf.setSigmaR(_depth_bilateral_sigma_R);
-      fbf.applyFilter(*pcl);
-    }
-
-    // Grid minimum
-    if (_depth_minimum_grid_resolution > 0.0f) {
-      /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied minimum grid filter (res: %0.2f m).", _depth_minimum_grid_resolution); */
-      pcl::GridMinimum<pt_XYZ> gmf(_depth_minimum_grid_resolution);
-      gmf.setInputCloud(pcl);
-      gmf.filter(*pcl);
-    }
-
-    // Publish data
-    publishCloud(_pub_depth, *pcl);
-
-    // Publish data over max range
-    if (_depth_pcl2_over_max_range) {
-      publishCloud(_pub_depth_over_max_range, *clouds.second);
-    }
-
-    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed depth camera data (run time: %0.1f ms; points before: %d, after: %ld).", t.toc(), points_before,
-                          pcl->points.size());
   }
 }
 //}

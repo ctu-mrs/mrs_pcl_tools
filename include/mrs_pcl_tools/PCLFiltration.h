@@ -33,12 +33,9 @@ private:
   bool is_initialized = false;
 
   ros::Subscriber _sub_lidar3d;
-  ros::Subscriber _sub_depth;
 
   ros::Publisher _pub_lidar3d;
   ros::Publisher _pub_lidar3d_over_max_range;
-  ros::Publisher _pub_depth;
-  ros::Publisher _pub_depth_over_max_range;
 
   ros::Timer _timer_check_subscribers;
 
@@ -62,21 +59,6 @@ private:
   uint32_t          _lidar3d_max_range_mm;
   uint32_t          _lidar3d_filter_intensity_range_mm;
   long unsigned int _lidar3d_frame = 0;
-
-  /* Depth camera */
-  void  depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
-  bool  _depth_republish;
-  bool  _depth_pcl2_over_max_range;
-  bool  _depth_use_bilateral;
-  bool  _depth_use_radius_outlier_filter;
-  float _depth_min_range_sq;
-  float _depth_max_range_sq;
-  float _depth_minimum_grid_resolution;
-  float _depth_bilateral_sigma_S;
-  float _depth_bilateral_sigma_R;
-  float _depth_voxel_resolution;
-  float _depth_radius_outlier_filter_radius;
-  int   _depth_radius_outlier_filter_neighbors;
 
   /* Landing spot detection */
   float _ground_detection_square_size;
@@ -121,6 +103,7 @@ private:
 
   std::shared_ptr<Camera> _camera_up;
   std::shared_ptr<Camera> _camera_down;
+  std::shared_ptr<Camera> _camera_front;
 
   void callbackCameraImage(const sensor_msgs::Image::ConstPtr &depth_msg, const std::shared_ptr<Camera> &tof);
 
