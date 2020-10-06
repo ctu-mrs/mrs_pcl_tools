@@ -13,7 +13,6 @@ void PCLFiltration::onInit() {
   mrs_lib::ParamLoader param_loader(nh, "PCLFiltration");
 
   /* 3D LIDAR */
-  param_loader.loadParam("lidar3d/republish", _lidar3d_republish, false);
   param_loader.loadParam("lidar3d/pcl2_over_max_range", _lidar3d_pcl2_over_max_range, false);
   param_loader.loadParam("lidar3d/min_range", _lidar3d_min_range_sq, 0.4f);
   param_loader.loadParam("lidar3d/max_range", _lidar3d_max_range_sq, 100.0f);
@@ -28,107 +27,137 @@ void PCLFiltration::onInit() {
   _lidar3d_filter_intensity_range_mm = _lidar3d_filter_intensity_range_sq * 1000;
   _lidar3d_filter_intensity_range_sq *= _lidar3d_filter_intensity_range_sq;
 
-  /* ToF cameras */
-  bool  tof_republish;
-  bool  tof_pcl2_over_max_range;
-  int   tof_downsample_scale;
-  float tof_min_range;
-  float tof_max_range;
-  float tof_voxel_grid_resolution;
-  float tof_focal_length;
-  param_loader.loadParam("tof/republish", tof_republish, true);
-  param_loader.loadParam("tof/pcl2_over_max_range", tof_pcl2_over_max_range, false);
-  param_loader.loadParam("tof/downsample_scale", tof_downsample_scale, 0);
-  param_loader.loadParam("tof/min_range", tof_min_range, 0.1f);
-  param_loader.loadParam("tof/max_range", tof_max_range, 4.0f);
-  param_loader.loadParam("tof/voxel_grid_resolution", tof_voxel_grid_resolution, 0.0f);
-  param_loader.loadParam("tof/focal_length", tof_focal_length, 186.4f);
+  _sub_lidar3d                = nh.subscribe("lidar3d_in", 10, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());
+  _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 10);
+  _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 10);
 
-  /* Landing spot detection */
-  param_loader.loadParam("tof/ground_detection/square_size", _ground_detection_square_size, 0.8f);
-  param_loader.loadParam("tof/ground_detection/ransac_dist_thrd", _ground_detection_ransac_distance_thrd, 0.05f);
-  param_loader.loadParam("tof/ground_detection/n_z_max_diff", _ground_detection_n_z_max_diff, 0.1f);
+  NODELET_INFO("[PCLFiltration]: Subscribed to topic: %s", _sub_lidar3d.getTopic().c_str());
+  NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_lidar3d.getTopic().c_str());
+  NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_lidar3d_over_max_range.getTopic().c_str());
 
-  /* Depth camera */
-  param_loader.loadParam("depth/republish", _depth_republish, true);
-  param_loader.loadParam("depth/pcl2_over_max_range", _depth_pcl2_over_max_range, false);
-  param_loader.loadParam("depth/min_range", _depth_min_range_sq, 0.0f);
-  param_loader.loadParam("depth/max_range", _depth_max_range_sq, 8.0f);
-  param_loader.loadParam("depth/voxel_resolution", _depth_voxel_resolution, 0.0f);
-  param_loader.loadParam("depth/minimum_grid_resolution", _depth_minimum_grid_resolution, 0.03f);
-  param_loader.loadParam("depth/use_bilateral", _depth_use_bilateral, false);
-  param_loader.loadParam("depth/bilateral_sigma_S", _depth_bilateral_sigma_S, 5.0f);
-  param_loader.loadParam("depth/bilateral_sigma_R", _depth_bilateral_sigma_R, 5e-3f);
-  param_loader.loadParam("depth/radius_outlier_filter/radius", _depth_radius_outlier_filter_radius, 0.0f);
-  param_loader.loadParam("depth/radius_outlier_filter/neighbors", _depth_radius_outlier_filter_neighbors, 0);
-  _depth_min_range_sq *= _depth_min_range_sq;
-  _depth_max_range_sq *= _depth_max_range_sq;
-  _depth_use_radius_outlier_filter = _depth_radius_outlier_filter_radius > 0.0f && _depth_radius_outlier_filter_neighbors > 0;
+  /* MAV type */
+  std::string mav_type_name;
+  param_loader.loadParam("mav_type", mav_type_name);
+
+  _mav_type       = std::make_shared<MAVType>();
+  _mav_type->name = mav_type_name;
+
+  if (mav_type_name == "MARBLE_QAV500") {
+    _mav_type->downsample_lidar_columns        = false;
+    _mav_type->downsample_lidar_rows           = true;
+    _mav_type->process_cameras                 = true;
+    _mav_type->filter_out_projected_self_frame = true;
+    _mav_type->skip_nth_lidar_frame            = 4;               // 20 Hz -> 15 Hz
+    _mav_type->keep_nth_vert_camera_frame      = 3;               // 30 Hz -> 10 Hz
+    _mav_type->keep_nth_front_camera_frame     = 3;               // 30 Hz -> 10 Hz
+    _mav_type->focal_length_vert_camera        = 186.4f;          // 62deg hfov, 224 px width
+    _mav_type->focal_length_front_camera       = 303.668661581f;  // 87deg hfov, 640 px width
+    _mav_type->vert_camera_max_range           = 4.0f;
+    _mav_type->front_camera_max_range          = 10.0f;
+  } else if (mav_type_name == "EXPLORER_DS1") {
+    _mav_type->downsample_lidar_columns        = true;
+    _mav_type->downsample_lidar_rows           = false;
+    _mav_type->process_cameras                 = true;
+    _mav_type->filter_out_projected_self_frame = false;
+    _mav_type->skip_nth_lidar_frame            = 0;          // 15 Hz
+    _mav_type->keep_nth_vert_camera_frame      = 2;          // 20 Hz -> 10 Hz
+    _mav_type->keep_nth_front_camera_frame     = 2;          // 20 Hz -> 10 Hz
+    _mav_type->focal_length_vert_camera        = 554.25469;  //
+    _mav_type->focal_length_front_camera       = 554.25469;  //
+    _mav_type->vert_camera_max_range           = 10.0f;
+    _mav_type->front_camera_max_range          = 10.0f;
+  } else if (mav_type_name == "SSCI_X4") {
+    _mav_type->downsample_lidar_columns        = true;
+    _mav_type->downsample_lidar_rows           = false;
+    _mav_type->process_cameras                 = false;
+    _mav_type->filter_out_projected_self_frame = false;
+    _mav_type->skip_nth_lidar_frame            = 0;     // 15 Hz
+    _mav_type->keep_nth_vert_camera_frame      = 0;     // no cam
+    _mav_type->keep_nth_front_camera_frame     = 0;     // no cam
+    _mav_type->focal_length_vert_camera        = 0.0f;  // no cam
+    _mav_type->focal_length_front_camera       = 0.0f;  // no cam
+    _mav_type->vert_camera_max_range           = 0.0f;  // no cam
+    _mav_type->front_camera_max_range          = 0.0f;  // no cam
+  } else {
+    NODELET_ERROR("[PCLFiltration] Unsupported MAV type: %s.", mav_type_name.c_str());
+    ros::shutdown();
+  }
+
+  /* RGBD / ToF cameras */
+  if (_mav_type->process_cameras) {
+
+    /* Upper camera */
+    _camera_up                      = std::make_shared<Camera>();
+    _camera_up->name                = std::string("camera-top");
+    _camera_up->focal_length        = _mav_type->focal_length_vert_camera;
+    _camera_up->max_range           = _mav_type->vert_camera_max_range;
+    _camera_up->detect_landing_area = false;
+    _camera_up->keep_nth_frame      = _mav_type->keep_nth_vert_camera_frame;
+    _camera_up->data_frame          = 0;
+    param_loader.loadParam("camera/up/pcl2_over_max_range", _camera_up->publish_pcl2_over_max_range, false);
+    param_loader.loadParam("camera/up/downsample_scale", _camera_up->downsample_scale, 0);
+    param_loader.loadParam("camera/up/min_range", _camera_up->min_range, 0.1f);
+    param_loader.loadParam("camera/up/voxel_grid_resolution", _camera_up->voxel_grid_resolution, 0.0f);
+
+    _camera_up->sub_image = nh.subscribe<sensor_msgs::Image>("camera_up_in", 1, boost::bind(&PCLFiltration::callbackCameraImage, this, _1, _camera_up));
+    _camera_up->pub_cloud = nh.advertise<sensor_msgs::PointCloud2>("camera_up_out", 1);
+    _camera_up->pub_cloud_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("camera_up_over_max_range_out", 1);
+
+    /* Bottom camera */
+    _camera_down                      = std::make_shared<Camera>();
+    _camera_down->name                = std::string("camera-top");
+    _camera_down->focal_length        = _mav_type->focal_length_vert_camera;
+    _camera_down->max_range           = _mav_type->vert_camera_max_range;
+    _camera_down->detect_landing_area = false;  // TODO: detect landing are should be set here to true
+    _camera_down->keep_nth_frame      = _mav_type->keep_nth_vert_camera_frame;
+    _camera_down->data_frame          = 0;
+    param_loader.loadParam("camera/down/pcl2_over_max_range", _camera_down->publish_pcl2_over_max_range, false);
+    param_loader.loadParam("camera/down/downsample_scale", _camera_down->downsample_scale, 0);
+    param_loader.loadParam("camera/down/min_range", _camera_down->min_range, 0.1f);
+    param_loader.loadParam("camera/down/voxel_grid_resolution", _camera_down->voxel_grid_resolution, 0.0f);
+
+    param_loader.loadParam("camera/down/ground_detection/square_size", _ground_detection_square_size, 0.8f);
+    param_loader.loadParam("camera/down/ground_detection/ransac_dist_thrd", _ground_detection_ransac_distance_thrd, 0.05f);
+    param_loader.loadParam("camera/down/ground_detection/n_z_max_diff", _ground_detection_n_z_max_diff, 0.1f);
+
+    _camera_down->sub_image = nh.subscribe<sensor_msgs::Image>("camera_down_in", 1, boost::bind(&PCLFiltration::callbackCameraImage, this, _1, _camera_down));
+    _camera_down->pub_cloud = nh.advertise<sensor_msgs::PointCloud2>("camera_down_out", 1);
+    _camera_down->pub_cloud_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("camera_down_over_max_range_out", 1);
+    if (_camera_down->detect_landing_area) {
+      _camera_down->pub_landing_spot = nh.advertise<darpa_mrs_msgs::LandingSpot>("landing_feasible_out", 1);
+    }
+
+    if (_depth_republish) {
+      /* Front camera */
+      // TODO: Filter this camera the same way as the up/down cameras
+      param_loader.loadParam("camera/front/republish", _depth_republish, true);
+      param_loader.loadParam("camera/front/pcl2_over_max_range", _depth_pcl2_over_max_range, false);
+      param_loader.loadParam("camera/front/min_range", _depth_min_range_sq, 0.0f);
+      param_loader.loadParam("camera/front/max_range", _depth_max_range_sq, 8.0f);
+      param_loader.loadParam("camera/front/voxel_resolution", _depth_voxel_resolution, 0.0f);
+      param_loader.loadParam("camera/front/minimum_grid_resolution", _depth_minimum_grid_resolution, 0.03f);
+      param_loader.loadParam("camera/front/use_bilateral", _depth_use_bilateral, false);
+      param_loader.loadParam("camera/front/bilateral_sigma_S", _depth_bilateral_sigma_S, 5.0f);
+      param_loader.loadParam("camera/front/bilateral_sigma_R", _depth_bilateral_sigma_R, 5e-3f);
+      param_loader.loadParam("camera/front/radius_outlier_filter/radius", _depth_radius_outlier_filter_radius, 0.0f);
+      param_loader.loadParam("camera/front/radius_outlier_filter/neighbors", _depth_radius_outlier_filter_neighbors, 0);
+      _depth_min_range_sq *= _depth_min_range_sq;
+      _depth_max_range_sq *= _depth_max_range_sq;
+      _depth_use_radius_outlier_filter = _depth_radius_outlier_filter_radius > 0.0f && _depth_radius_outlier_filter_neighbors > 0;
+
+      _sub_depth                = nh.subscribe("depth_in", 1, &PCLFiltration::depthCallback, this, ros::TransportHints().tcpNoDelay());
+      _pub_depth                = nh.advertise<sensor_msgs::PointCloud2>("depth_out", 10);
+      _pub_depth_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("depth_over_max_range_out", 10);
+
+      NODELET_INFO("[PCLFiltration]: Subscribed to topic: %s", _sub_depth.getTopic().c_str());
+      NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_depth.getTopic().c_str());
+      NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_depth_over_max_range.getTopic().c_str());
+    }
+  }
 
   if (!param_loader.loadedSuccessfully()) {
     NODELET_ERROR("[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
     ros::shutdown();
-  }
-
-  if (_lidar3d_republish) {
-    _sub_lidar3d                = nh.subscribe("lidar3d_in", 10, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());
-    _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 10);
-    _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 10);
-
-    NODELET_INFO("[PCLFiltration]: Subscribed to topic: %s", _sub_lidar3d.getTopic().c_str());
-    NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_lidar3d.getTopic().c_str());
-    NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_lidar3d_over_max_range.getTopic().c_str());
-  }
-
-  if (tof_republish) {
-
-    // Top-oriented ToF
-    _tof_top                              = std::make_shared<Camera>();
-    _tof_top->name                        = std::string("ToF-top");
-    _tof_top->publish_pcl2_over_max_range = tof_pcl2_over_max_range;
-    _tof_top->detect_landing_area         = false;
-    _tof_top->downsample_scale            = tof_downsample_scale;
-    _tof_top->focal_length                = tof_focal_length;
-    _tof_top->min_range                   = tof_min_range;
-    _tof_top->max_range                   = tof_max_range;
-    _tof_top->voxel_grid_resolution       = tof_voxel_grid_resolution;
-
-    _tof_top->sub_image = nh.subscribe<sensor_msgs::Image>("tof_top_in", 1, boost::bind(&PCLFiltration::callbackTofImage, this, _1, _tof_top));
-
-    _tof_top->pub_cloud                = nh.advertise<sensor_msgs::PointCloud2>("tof_top_out", 1);
-    _tof_top->pub_cloud_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("tof_top_over_max_range_out", 1);
-    if (_tof_top->detect_landing_area) {
-      _tof_top->pub_landing_spot = nh.advertise<darpa_mrs_msgs::LandingSpot>("landing_feasible_out", 1);
-    }
-
-    // Bottom-oriented ToF
-    _tof_bottom                              = std::make_shared<Camera>();
-    _tof_bottom->name                        = std::string("ToF-bottom");
-    _tof_bottom->publish_pcl2_over_max_range = tof_pcl2_over_max_range;
-    // TODO: detect landing area should be here set to true
-    _tof_bottom->detect_landing_area   = false;
-    _tof_bottom->downsample_scale      = tof_downsample_scale;
-    _tof_bottom->min_range             = tof_min_range;
-    _tof_bottom->max_range             = tof_max_range;
-    _tof_bottom->voxel_grid_resolution = tof_voxel_grid_resolution;
-
-    _tof_bottom->sub_image = nh.subscribe<sensor_msgs::Image>("tof_bottom_in", 1, boost::bind(&PCLFiltration::callbackTofImage, this, _1, _tof_bottom));
-
-    _tof_bottom->pub_cloud                = nh.advertise<sensor_msgs::PointCloud2>("tof_bottom_out", 1);
-    _tof_bottom->pub_cloud_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("tof_bottom_over_max_range_out", 1);
-    if (_tof_bottom->detect_landing_area) {
-      _tof_bottom->pub_landing_spot = nh.advertise<darpa_mrs_msgs::LandingSpot>("landing_feasible_out", 1);
-    }
-  }
-
-  if (_depth_republish) {
-    _sub_depth                = nh.subscribe("depth_in", 1, &PCLFiltration::depthCallback, this, ros::TransportHints().tcpNoDelay());
-    _pub_depth                = nh.advertise<sensor_msgs::PointCloud2>("depth_out", 10);
-    _pub_depth_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("depth_over_max_range_out", 10);
-
-    NODELET_INFO("[PCLFiltration]: Subscribed to topic: %s", _sub_depth.getTopic().c_str());
-    NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_depth.getTopic().c_str());
-    NODELET_INFO("[PCLFiltration]: Publishing at topic: %s", _pub_depth_over_max_range.getTopic().c_str());
   }
 
   reconfigure_server_.reset(new ReconfigureServer(config_mutex_, nh));
@@ -157,94 +186,127 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
 
 /* lidar3dCallback() //{ */
 void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
-  if (is_initialized && _lidar3d_republish) {
-
-    TicToc t;
-
-    sensor_msgs::PointCloud2::ConstPtr new_msg;
-
-    // HOTFIX for subt virtual
-    if (msg->height == 64) {
-      PC_I::Ptr cloud_64_1024 = boost::make_shared<PC_I>();
-      pcl::fromROSMsg(*msg, *cloud_64_1024);
-
-      PC_I::Ptr cloud_16_1024 = boost::make_shared<PC_I>(1024, 16);
-
-      for (int i = 0; i < 64; i++) {
-        for (int j = 0; j < 1024; j++) {
-          if (i % 4 == 0) {
-            cloud_16_1024->at(j, std::floor(i / 4.0)) = cloud_64_1024->at(j, i);
-          }
-        }
-      }
-      sensor_msgs::PointCloud2 msg_cloud_16_1024;
-      pcl::toROSMsg(*cloud_16_1024, msg_cloud_16_1024);
-      msg_cloud_16_1024.header = msg->header;
-
-      new_msg = boost::make_shared<sensor_msgs::PointCloud2>(msg_cloud_16_1024);
-    } else {
-      new_msg = msg;
-    }
-
-    unsigned int                         points_before = new_msg->height * new_msg->width;
-    unsigned int                         points_after;
-    std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_variant;
-    std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
-
-    if (hasField("range", new_msg)) {
-      NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::OS1::PointOS1.");
-      removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, new_msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm,
-                                     _lidar3d_max_range_mm, _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);
-    } else {
-      NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: pcl::PointXYZI.");
-      removeCloseAndFarPointCloud(pcl_variant, pcl_over_max_range_variant, new_msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_sq, _lidar3d_max_range_sq);
-    }
-
-    auto cloud_visitor = [&](const auto &pc) {
-      points_after = pc->points.size();
-      publishCloud(_pub_lidar3d, *pc);
-    };
-    std::visit(cloud_visitor, pcl_variant);
-
-    if (_lidar3d_pcl2_over_max_range) {
-      std::visit([&](const auto &pc) { publishCloud(_pub_lidar3d_over_max_range, *pc); }, pcl_over_max_range_variant);
-    }
-
-    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %d, after: %d).", t.toc(), points_before,
-                          points_after);
-  }
-}
-//}
-
-/* callbackTofImage() //{ */
-void PCLFiltration::callbackTofImage(const sensor_msgs::Image::ConstPtr &depth_msg, const std::shared_ptr<Camera> &tof) {
-
   if (!is_initialized) {
     return;
   }
 
-  NODELET_INFO_ONCE("[PCLFiltration] Subscribing %s messages. ToF data will %s used to detect landing area.", tof->name.c_str(),
-                    tof->detect_landing_area ? "be" : "not be");
+  _lidar3d_frame++;
+
+  if (_mav_type->skip_nth_lidar_frame > 1 && _lidar3d_frame % _mav_type->skip_nth_lidar_frame == 0) {
+    return;
+  }
+
+  TicToc t;
+
+  sensor_msgs::PointCloud2::ConstPtr new_msg;
+
+  // HOTFIX for subt virtual
+  if (_mav_type->downsample_lidar_rows || _mav_type->downsample_lidar_columns) {
+
+    PC_I::Ptr cloud_in = boost::make_shared<PC_I>();
+    pcl::fromROSMsg(*msg, *cloud_in);
+
+    PC_I::Ptr cloud_filt;
+
+    if (_mav_type->downsample_lidar_rows) {
+
+      cloud_filt = boost::make_shared<PC_I>(1024, 16);
+
+      for (int i = 0; i < 64; i++) {
+        for (int j = 0; j < 1024; j++) {
+          if (i % 4 == 0) {
+            cloud_filt->at(j, std::floor(i / 4.0)) = cloud_in->at(j, i);
+          }
+        }
+      }
+
+    } else {
+
+      const unsigned int samples = 5000;
+      const unsigned int step    = msg->width / samples;
+      cloud_filt                 = boost::make_shared<PC_I>(samples, 16);
+
+      for (int i = 0; i < 16; i++) {
+        for (int j = 0; j < msg->width - 1; j += step) {
+          cloud_filt->at(std::floor(j / step), i) = cloud_in->at(j, i);
+        }
+      }
+    }
+
+    sensor_msgs::PointCloud2 msg_cloud_filt;
+    pcl::toROSMsg(*cloud_filt, msg_cloud_filt);
+    msg_cloud_filt.header = msg->header;
+
+    new_msg = boost::make_shared<sensor_msgs::PointCloud2>(msg_cloud_filt);
+
+  } else {
+
+    new_msg = msg;
+  }
+
+  unsigned int                         points_before = new_msg->height * new_msg->width;
+  unsigned int                         points_after;
+  std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_variant;
+  std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
+
+  if (hasField("range", new_msg)) {
+    NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::OS1::PointOS1. MAV type: %s.", _mav_type->name.c_str());
+    removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, new_msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm, _lidar3d_max_range_mm,
+                                   _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);
+  } else {
+    NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: pcl::PointXYZI. MAV type: %s.", _mav_type->name.c_str());
+    removeCloseAndFarPointCloud(pcl_variant, pcl_over_max_range_variant, new_msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_sq, _lidar3d_max_range_sq);
+  }
+
+  auto cloud_visitor = [&](const auto &pc) {
+    points_after = pc->points.size();
+    publishCloud(_pub_lidar3d, *pc);
+  };
+  std::visit(cloud_visitor, pcl_variant);
+
+  if (_lidar3d_pcl2_over_max_range) {
+    std::visit([&](const auto &pc) { publishCloud(_pub_lidar3d_over_max_range, *pc); }, pcl_over_max_range_variant);
+  }
+
+  NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %d, after: %d).", t.toc(), points_before,
+                        points_after);
+}
+//}
+
+/* callbackCameraImage() //{ */
+void PCLFiltration::callbackCameraImage(const sensor_msgs::Image::ConstPtr &depth_msg, const std::shared_ptr<Camera> &camera) {
+
+  if (!is_initialized || !_mav_type->process_cameras) {
+    return;
+  }
+
+  camera->data_frame++;
+  if (camera->keep_nth_frame > 1 && camera->data_frame % camera->keep_nth_frame != 0) {
+    return;
+  }
+
+  NODELET_INFO_ONCE("[PCLFiltration] Subscribing %s messages. Camera data will %s used to detect landing area.", camera->name.c_str(),
+                    camera->detect_landing_area ? "be" : "not be");
 
   TicToc t;
 
   // DONE: Check if data contain NaNs or 0s and then replace these data with an over-the-max-range data to allow space-freeing
-  const std::pair<PC::Ptr, PC::Ptr> clouds_both = imageToPcFiltered(depth_msg, tof, 50.0f);
+  const std::pair<PC::Ptr, PC::Ptr> clouds_both = imageToPcFiltered(depth_msg, camera, 50.0f);
 
   // Voxel grid sampling
-  if (tof->voxel_grid_resolution > 0.0f) {
-    /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied voxel sampling filter (res: %0.2f m).", tof->voxel_grid_resolution); */
+  if (camera->voxel_grid_resolution > 0.0f) {
+    /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied voxel sampling filter (res: %0.2f m).", camera->voxel_grid_resolution); */
     pcl::VoxelGrid<pt_XYZ> vg;
     vg.setInputCloud(clouds_both.first);
-    vg.setLeafSize(tof->voxel_grid_resolution, tof->voxel_grid_resolution, tof->voxel_grid_resolution);
+    vg.setLeafSize(camera->voxel_grid_resolution, camera->voxel_grid_resolution, camera->voxel_grid_resolution);
     vg.filter(*clouds_both.first);
   }
 
-  NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed ToF camera data (run time: %0.1f ms; points before: %d, after: %ld, over_max_range: %ld).", t.toc(),
+  NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed camera data (run time: %0.1f ms; points before: %d, after: %ld, over_max_range: %ld).", t.toc(),
                         depth_msg->height * depth_msg->width, clouds_both.first->points.size(), clouds_both.second->points.size());
 
   // Detect landing area
-  if (tof->detect_landing_area && tof->pub_landing_spot.getNumSubscribers() > 0) {
+  if (camera->detect_landing_area && camera->pub_landing_spot.getNumSubscribers() > 0) {
 
     const int8_t ground = detectGround(clouds_both.first);
 
@@ -255,21 +317,21 @@ void PCLFiltration::callbackTofImage(const sensor_msgs::Image::ConstPtr &depth_m
       landing_spot_msg->stamp                           = depth_msg->header.stamp;
       landing_spot_msg->landing_spot                    = ground;
 
-      tof->pub_landing_spot.publish(landing_spot_msg);
+      camera->pub_landing_spot.publish(landing_spot_msg);
     }
     catch (...) {
-      NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", tof->pub_landing_spot.getTopic().c_str());
+      NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", camera->pub_landing_spot.getTopic().c_str());
     }
   }
 
   // Publish data
-  publishCloud(tof->pub_cloud, *clouds_both.first);
+  publishCloud(camera->pub_cloud, *clouds_both.first);
 
 
   // Publish data over max range
-  if (tof->publish_pcl2_over_max_range) {
+  if (camera->publish_pcl2_over_max_range) {
 
-    publishCloud(tof->pub_cloud_over_max_range, *clouds_both.second);
+    publishCloud(camera->pub_cloud_over_max_range, *clouds_both.second);
   }
 }
 //}
@@ -376,14 +438,17 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
     }
 
     // SUBT HOTFIX
-    const float x = std::fabs(cloud->points.at(i).x);
-    const float y = std::fabs(cloud->points.at(i).y);
-    const float z = std::fabs(cloud->points.at(i).z);
-    if ((z > subt_frame_z_lower && z < subt_frame_z_upper) &&
-        ((x > subt_frame_x_lower && x < subt_frame_x_upper) || (y > subt_frame_y_lower && y < subt_frame_y_upper))) {
-      continue;
+    if (_mav_type->filter_out_projected_self_frame) {
+      const float x = std::fabs(cloud->points.at(i).x);
+      const float y = std::fabs(cloud->points.at(i).y);
+      const float z = std::fabs(cloud->points.at(i).z);
+      if ((z > subt_frame_z_lower && z < subt_frame_z_upper) &&
+          ((x > subt_frame_x_lower && x < subt_frame_x_upper) || (y > subt_frame_y_lower && y < subt_frame_y_upper))) {
+        continue;
+      }
+    }
 
-    } else if (range_sq <= max_range_sq) {
+    if (range_sq <= max_range_sq) {
 
       cloud->points.at(j++) = cloud->points.at(i);
 
@@ -615,7 +680,7 @@ int8_t PCLFiltration::detectGround(const PC::Ptr &cloud) {
 /*//}*/
 
 /*//{ imageToPcFiltered() */
-std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::Image::ConstPtr &depth_msg, const std::shared_ptr<Camera> &tof,
+std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::Image::ConstPtr &depth_msg, const std::shared_ptr<Camera> &camera,
                                                              const float &nan_depth) {
 
   PC::Ptr cloud_out                = boost::make_shared<PC>();
@@ -642,8 +707,8 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::
   const float center_y = depth_msg->height / 2.0f;
 
   // Combine unit conversion (not needed) with scaling by focal length for computing (X,Y)
-  const float constant_x = 1.0f / tof->focal_length;
-  const float constant_y = 1.0f / tof->focal_length;
+  const float constant_x = 1.0f / camera->focal_length;
+  const float constant_y = 1.0f / camera->focal_length;
   const float bad_point  = std::numeric_limits<float>::quiet_NaN();
 
   const float *depth_row = reinterpret_cast<const float *>(&depth_msg->data[0]);
@@ -652,9 +717,9 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::
   int points_cloud                = 0;
   int points_cloud_over_max_range = 0;
 
-  const float        min_range            = tof->min_range;
-  const float        max_range            = tof->max_range;
-  const unsigned int keep_every_nth_point = tof->downsample_scale;
+  const float        min_range            = camera->min_range;
+  const float        max_range            = camera->max_range;
+  const unsigned int keep_every_nth_point = camera->downsample_scale;
 
   unsigned int row = 0;
   for (int v = 0; v < (int)depth_msg->height; ++v, depth_row += row_step) {

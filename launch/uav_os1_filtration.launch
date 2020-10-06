@@ -2,6 +2,7 @@
 
   <!-- Filtration parameters -->
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
+  <arg name="ROBOT_TYPE" default="MARBLE_QAV500" />
 
   <arg name="lidar3d_republish" default="true" />
   <arg name="depth_republish" default="false" />
@@ -15,18 +16,18 @@
   <arg name="lidar3d_filter_intensity_thrd" default="100" />
   <arg name="lidar3d_filter_intensity_range" default="10.0" />
 
-  <arg name="tof_top_name" default="tof_top" />
-  <arg name="tof_bottom_name" default="tof_bottom" />
-  <arg name="tof_republish" default="false" />
-  <arg name="tof_publish_cloud_over_max_range" default="true" />
-  <arg name="tof_downsample_scale" default="2" />
-  <arg name="tof_focal_length" default="186.4" />
-  <arg name="tof_min_range" default="0.01" />
-  <arg name="tof_max_range" default="4.0" />
-  <arg name="tof_voxel_grid_resolution" default="0.05" />
-  <arg name="tof_ground_detection_square_size" default="0.8" />
-  <arg name="tof_ground_detection_ransac_dist_thrd" default="0.05" />
-  <arg name="tof_ground_detection_n_z_max_diff" default="0.1" />
+  <arg name="camera_up_publish_cloud_over_max_range" default="true" />
+  <arg name="camera_up_downsample_scale" default="2" />
+  <arg name="camera_up_min_range" default="0.01" />
+  <arg name="camera_up_voxel_grid_resolution" default="0.1" />
+
+  <arg name="camera_down_publish_cloud_over_max_range" default="true" />
+  <arg name="camera_down_downsample_scale" default="2" />
+  <arg name="camera_down_min_range" default="0.01" />
+  <arg name="camera_down_voxel_grid_resolution" default="0.1" />
+  <arg name="camera_down_ground_detection_square_size" default="0.8" />
+  <arg name="camera_down_ground_detection_ransac_dist_thrd" default="0.05" />
+  <arg name="camera_down_ground_detection_n_z_max_diff" default="0.1" />
 
   <arg name="depth_topic_in" default="rs_d435/points" />
   <arg name="depth_image_format" default="true" doc="if depth data come in sensor_msgs/Image format" />
@@ -34,7 +35,6 @@
   <arg name="depth_image_camera_info_in" default="rs_d435/aligned_depth_to_color/camera_info" />
   <arg name="depth_publish_cloud_over_max_range" default="false" />
   <arg name="depth_min_range" default="0.4" />
-  <arg name="depth_max_range" default="5.0" />
   <arg name="depth_voxel_resolution" default="0.05" />
   <arg name="depth_minimum_grid_resolution" default="0.0" />
   <arg name="depth_radius_outlier_radius" default="0.0" />
@@ -47,6 +47,8 @@
   <group ns="$(arg UAV_NAME)">
     <node pkg="nodelet" type="nodelet" name="pcl_filtration" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
 
+      <param name="mav_type" type="string" value="$(arg ROBOT_TYPE)" />
+
       <!-- Parameters -->
       <param name="lidar3d/republish" type="bool" value="$(arg lidar3d_republish)" />
       <param name="lidar3d/pcl2_over_max_range" type="bool" value="$(arg lidar3d_publish_cloud_over_max_range)" />
@@ -55,51 +57,50 @@
       <param name="lidar3d/filter/intensity/enable" type="bool" value="$(arg lidar3d_filter_intensity_en)" />
       <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d_filter_intensity_thrd)" />
       <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d_filter_intensity_range)" />
-      
-      <param name="tof/republish" type="bool" value="$(arg tof_republish)" />
-      <param name="tof/pcl2_over_max_range" type="bool" value="$(arg tof_publish_cloud_over_max_range)" />
-      <param name="tof/downsample_scale" type="int" value="$(arg tof_downsample_scale)" />
-      <param name="tof/focal_length" type="double" value="$(arg tof_focal_length)" />
-      <param name="tof/min_range" type="double" value="$(arg tof_min_range)" />
-      <param name="tof/max_range" type="double" value="$(arg tof_max_range)" />
-      <param name="tof/voxel_grid_resolution" type="double" value="$(arg tof_voxel_grid_resolution)" />
-      
-      <param name="tof/ground_detection/square_size" type="double" value="$(arg tof_ground_detection_square_size)" />
-      <param name="tof/ground_detection/ransac_dist_thrd" type="double" value="$(arg tof_ground_detection_ransac_dist_thrd)" />
-      <param name="tof/ground_detection/n_z_max_diff" type="double" value="$(arg tof_ground_detection_n_z_max_diff)" />
 
-      <param name="depth/republish" type="bool" value="$(arg depth_republish)" />
-      <param name="depth/pcl2_over_max_range" type="bool" value="$(arg depth_publish_cloud_over_max_range)" />
-      <param name="depth/min_range" type="double" value="$(arg depth_min_range)" />
-      <param name="depth/max_range" type="double" value="$(arg depth_max_range)" />
-      <param name="depth/voxel_resolution" type="double" value="$(arg depth_voxel_resolution)" />
-      <param name="depth/minimum_grid_resolution" type="double" value="$(arg depth_minimum_grid_resolution)" />
-      <param name="depth/use_bilateral" type="bool" value="false" />
-      <param name="depth/bilateral_sigma_S" type="double" value="5.0" />
-      <param name="depth/bilateral_sigma_R" type="double" value="5e-3" />
-      <param name="depth/radius_outlier_filter/radius" type="double" value="$(arg depth_radius_outlier_radius)" />
-      <param name="depth/radius_outlier_filter/neighbors" type="int" value="$(arg depth_radius_outlier_neighbors)" />
+      <param name="camera/up/pcl2_over_max_range" type="bool" value="$(arg camera_up_publish_cloud_over_max_range)" />
+      <param name="camera/up/downsample_scale" type="int" value="$(arg camera_up_downsample_scale)" />
+      <param name="camera/up/min_range" type="double" value="$(arg camera_up_min_range)" />
+      <param name="camera/up/voxel_grid_resolution" type="double" value="$(arg camera_up_voxel_grid_resolution)" />
+
+      <param name="camera/down/pcl2_over_max_range" type="bool" value="$(arg camera_down_publish_cloud_over_max_range)" />
+      <param name="camera/down/downsample_scale" type="int" value="$(arg camera_down_downsample_scale)" />
+      <param name="camera/down/min_range" type="double" value="$(arg camera_down_min_range)" />
+      <param name="camera/down/voxel_grid_resolution" type="double" value="$(arg camera_down_voxel_grid_resolution)" />
+      
+      <param name="camera/down/ground_detection/square_size" type="double" value="$(arg camera_down_ground_detection_square_size)" />
+      <param name="camera/down/ground_detection/ransac_dist_thrd" type="double" value="$(arg camera_down_ground_detection_ransac_dist_thrd)" />
+      <param name="camera/down/ground_detection/n_z_max_diff" type="double" value="$(arg camera_down_ground_detection_n_z_max_diff)" />
+
+      <param name="camera/front/republish" type="bool" value="$(arg depth_republish)" />
+      <param name="camera/front/pcl2_over_max_range" type="bool" value="$(arg depth_publish_cloud_over_max_range)" />
+      <param name="camera/front/min_range" type="double" value="$(arg depth_min_range)" />
+      <param name="camera/front/max_range" type="double" value="$(arg depth_max_range)" />
+      <param name="camera/front/voxel_resolution" type="double" value="$(arg depth_voxel_resolution)" />
+      <param name="camera/front/minimum_grid_resolution" type="double" value="$(arg depth_minimum_grid_resolution)" />
+      <param name="camera/front/use_bilateral" type="bool" value="false" />
+      <param name="camera/front/bilateral_sigma_S" type="double" value="5.0" />
+      <param name="camera/front/bilateral_sigma_R" type="double" value="5e-3" />
+      <param name="camera/front/radius_outlier_filter/radius" type="double" value="$(arg depth_radius_outlier_radius)" />
+      <param name="camera/front/radius_outlier_filter/neighbors" type="int" value="$(arg depth_radius_outlier_neighbors)" />
 
       <!-- Subscribers -->
       <remap from="~lidar3d_in" to="$(arg lidar3d_topic_in)" />
 
-      <remap from="~tof_top_in" to="$(arg tof_top_name)/depth" />
-      <remap from="~tof_bottom_in" to="$(arg tof_bottom_name)/depth" />
-      <remap from="~tof_top_camera_info_in" to="$(arg tof_top_name)/camera_info" />
-      <remap from="~tof_bottom_camera_info_in" to="$(arg tof_bottom_name)/camera_info" />
-
+      <remap from="~camera_up_in" to="$(arg camera_up_name)/depth" />
+      <remap from="~camera_down_in" to="$(arg camera_down_name)/depth" />
       <remap from="~depth_in" to="$(arg depth_topic_in)" />
 
       <!-- Publishers -->
       <remap from="~lidar3d_out" to="$(arg lidar3d_topic_in)_processed" />
       <remap from="~lidar3d_over_max_range_out" to="$(arg lidar3d_topic_in)_over_max_range" />
-      <remap from="~tof_top_out" to="$(arg tof_top_name)/points_processed" />
-      <remap from="~tof_top_over_max_range_out" to="$(arg tof_top_name)/points_over_max_range" />
-      <remap from="~tof_bottom_out" to="$(arg tof_bottom_name)/points_processed" />
-      <remap from="~tof_bottom_over_max_range_out" to="$(arg tof_bottom_name)/points_over_max_range" />
+      <remap from="~camera_up_out" to="$(arg camera_up_name)/points_processed" />
+      <remap from="~camera_up_over_max_range_out" to="$(arg camera_up_name)/points_over_max_range" />
+      <remap from="~camera_down_out" to="$(arg camera_down_name)/points_processed" />
+      <remap from="~camera_down_over_max_range_out" to="$(arg camera_down_name)/points_over_max_range" />
       <remap from="~depth_out" to="$(arg depth_topic_in)_processed" />
       <remap from="~depth_over_max_range_out" to="$(arg depth_topic_in)_over_max_range" />
-      
+
       <remap from="~landing_feasible_out" to="landing_feasible" />
 
     </node>
