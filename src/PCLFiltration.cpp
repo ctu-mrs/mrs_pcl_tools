@@ -193,14 +193,14 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
   sensor_msgs::PointCloud2::ConstPtr new_msg;
 
   // HOTFIX for subt virtual
-  if (_mav_type->downsample_lidar_rows || _mav_type->downsample_lidar_columns) {
+  if ((_mav_type->downsample_lidar_rows && msg->height == 64) || _mav_type->downsample_lidar_columns) {
 
     PC_I::Ptr cloud_in = boost::make_shared<PC_I>();
     pcl::fromROSMsg(*msg, *cloud_in);
 
     PC_I::Ptr cloud_filt;
 
-    if (_mav_type->downsample_lidar_rows) {
+    if (_mav_type->downsample_lidar_rows && msg->height == 64) {
 
       cloud_filt = boost::make_shared<PC_I>(1024, 16);
 
