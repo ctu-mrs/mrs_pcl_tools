@@ -82,6 +82,7 @@ void PCLFiltration::onInit() {
     NODELET_ERROR("[PCLFiltration] Unsupported MAV type: %s.", mav_type_name.c_str());
     ros::shutdown();
   }
+  NODELET_INFO("[PCLFiltration]: Loaded MAV type: %s", _mav_type->name.c_str());
 
   /* RGBD / ToF cameras */
   if (_mav_type->process_cameras) {
@@ -218,7 +219,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
       cloud_filt                 = boost::make_shared<PC_I>(samples, 16);
 
       for (int i = 0; i < 16; i++) {
-        for (int j = 0; j < msg->width - 1; j += step) {
+        for (unsigned int j = 0; j < msg->width - 1; j += step) {
           cloud_filt->at(std::floor(j / step), i) = cloud_in->at(j, i);
         }
       }
@@ -576,7 +577,7 @@ int8_t PCLFiltration::detectGround(const PC::Ptr &cloud) {
   filter.setInputCloud(cloud);
   filter.filter(*square);
 
-  if (!square->points.size() == 0) {
+  if (square->points.size() == 0) {
     return darpa_mrs_msgs::LandingSpot::LANDING_NO_DATA;
   }
 
@@ -616,7 +617,7 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::
   pcl::uint64_t stamp;
   pcl_conversions::toPCL(depth_msg->header.stamp, stamp);
 
-  const size_t no_of_points = depth_msg->width * depth_msg->height;
+  const int no_of_points = depth_msg->width * depth_msg->height;
   cloud_out->points.resize(no_of_points);
   cloud_over_max_range_out->points.resize(no_of_points);
 
@@ -636,7 +637,6 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::imageToPcFiltered(const sensor_msgs::
   // Combine unit conversion (not needed) with scaling by focal length for computing (X,Y)
   const float constant_x = 1.0f / camera->focal_length;
   const float constant_y = 1.0f / camera->focal_length;
-  const float bad_point  = std::numeric_limits<float>::quiet_NaN();
 
   const float *depth_row = reinterpret_cast<const float *>(&depth_msg->data[0]);
   const int    row_step  = depth_msg->step / sizeof(float);
