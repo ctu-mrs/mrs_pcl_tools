@@ -9,6 +9,7 @@
 
   <arg name="lidar3d_topic_in" default="os1_cloud_node/points" />
   <arg name="lidar3d_publish_cloud_over_max_range" default="false" />
+  <arg name="lidar3d_ring_step" default="1" doc="Keep every ring_step laser row"/>
   <arg name="lidar3d_min_range" default="0.45" />
   <arg name="lidar3d_max_range" default="20.0" />
   <arg name="lidar3d_filter_intensity_en" default="false" />
@@ -39,6 +40,8 @@
       <param name="lidar3d/pcl2_over_max_range" type="bool" value="$(arg lidar3d_publish_cloud_over_max_range)" />
       <param name="lidar3d/min_range" type="double" value="$(arg lidar3d_min_range)" />
       <param name="lidar3d/max_range" type="double" value="$(arg lidar3d_max_range)" />
+      <param name="lidar3d/row_step" type="int" value="1" />
+      <param name="lidar3d/col_step" type="int" value="1" />
       <param name="lidar3d/filter/intensity/enable" type="bool" value="$(arg lidar3d_filter_intensity_en)" />
       <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d_filter_intensity_thrd)" />
       <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d_filter_intensity_range)" />

@@ -50,6 +50,8 @@ private:
   float    _lidar3d_max_range_sq;
   float    _lidar3d_filter_intensity_range_sq;
   int      _lidar3d_filter_intensity_thrd;
+  int      _lidar3d_row_step;
+  int      _lidar3d_col_step;
   uint32_t _lidar3d_min_range_mm;
   uint32_t _lidar3d_max_range_mm;
   uint32_t _lidar3d_filter_intensity_range_mm;
@@ -76,9 +78,9 @@ private:
 
   /* Functions */
   void removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
-                                      const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const uint32_t &min_range_mm,
-                                      const uint32_t &max_range_mm, const bool &filter_intensity, const uint32_t &filter_intensity_range_mm,
-                                      const int &filter_intensity_thrd);
+                                      unsigned int &valid_points, const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
+                                      const uint32_t &min_range_mm, const uint32_t &max_range_mm, const bool &filter_intensity,
+                                      const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd);
 
   void removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
                                    const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const float &min_range_sq,
@@ -87,9 +89,10 @@ private:
   std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                                              const float &min_range_sq, const float &max_range_sq);
 
+  void invalidatePoint(pt_OS1 &point, const float inv_value = std::numeric_limits<float>::quiet_NaN());
+
   template <typename T>
   void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);
-
 };
 //}
 
