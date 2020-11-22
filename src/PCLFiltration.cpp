@@ -107,11 +107,11 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
 void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
   if (is_initialized && _lidar3d_republish) {
 
-    if (msg->width % _lidar3d_row_step != 0 || msg->height % _lidar3d_row_step != 0) {
+    if (msg->width % _lidar3d_col_step != 0 || msg->height % _lidar3d_row_step != 0) {
       NODELET_WARN(
           "[PCLFiltration] Step-based downsampling of 3D lidar data would create nondeterministic results. Data (w: %d, h: %d) with downsampling step (w: %d, "
           "h: %d) would leave some samples untouched. Skipping lidar frame.",
-          msg->width, msg->height, _lidar3d_row_step, _lidar3d_col_step);
+          msg->width, msg->height, _lidar3d_col_step, _lidar3d_row_step);
       return;
     }
 
@@ -235,9 +235,9 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
   PC_I::Ptr cloud_over_max_range;
   pcl::fromROSMsg(*msg, *cloud);
 
-  size_t j          = 0;
-  size_t k          = 0;
-  size_t cloud_size = cloud->points.size();
+  unsigned int j          = 0;
+  unsigned int k          = 0;
+  unsigned int cloud_size = cloud->points.size();
 
   if (ret_cloud_over_max_range) {
     cloud_over_max_range         = boost::make_shared<PC_I>();
@@ -245,7 +245,7 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
     cloud_over_max_range->points.resize(cloud_size);
   }
 
-  for (size_t i = 0; i < cloud_size; i++) {
+  for (unsigned int i = 0; i < cloud_size; i++) {
 
     float range_sq =
         cloud->points.at(i).x * cloud->points.at(i).x + cloud->points.at(i).y * cloud->points.at(i).y + cloud->points.at(i).z * cloud->points.at(i).z;
@@ -293,54 +293,74 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_
                                                    const uint32_t &min_range_mm, const uint32_t &max_range_mm, const bool &filter_intensity,
                                                    const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd) {
 
-  const unsigned int width  = msg->width;
-  const unsigned int height = msg->height;
-  const float        nan    = std::numeric_limits<float>::quiet_NaN();
-  valid_points              = 0;
+  const unsigned int w   = msg->width / _lidar3d_col_step;
+  const unsigned int h   = msg->height / _lidar3d_row_step;
+  const float        nan = std::numeric_limits<float>::quiet_NaN();
+  valid_points           = 0;
 
   // Convert to pcl object
-  PC_OS1::Ptr cloud = boost::make_shared<PC_OS1>(width, height);
+  PC_OS1::Ptr cloud_out = boost::make_shared<PC_OS1>(w, h);
   PC_OS1::Ptr cloud_over_max_range;
+
+  PC_OS1::Ptr cloud = boost::make_shared<PC_OS1>();
   pcl::fromROSMsg(*msg, *cloud);
+
+  cloud_out->width    = w;
+  cloud_out->height   = h;
+  cloud_out->is_dense = false;
+  cloud_out->header   = cloud->header;
 
   if (ret_cloud_over_max_range) {
     cloud_over_max_range         = boost::make_shared<PC_OS1>();
     cloud_over_max_range->header = cloud->header;
-    cloud_over_max_range->resize(width * height);
+    cloud_over_max_range->resize(w * h);
   }
   unsigned int k = 0;
 
-  // TODO: use col and row steps
-  for (size_t i = 0; i < msg->width; i++) {
+  for (unsigned int j = 0; j < msg->width; j += _lidar3d_col_step) {
+    const unsigned int c = j / _lidar3d_col_step;
 
-    for (size_t j = 0; j < msg->height; j++) {
+    for (unsigned int i = 0; i < msg->height; i += _lidar3d_row_step) {
+      const unsigned int r = i / _lidar3d_row_step;
 
-      uint32_t range_mm = cloud->at(i, j).range;
+      /* ROS_DEBUG("j|i|idx|c|r %d|%d|%d|%d|%d", j, i, idx, c, r); */
+      /* ROS_DEBUG("... xyz|ring (%0.1f %0.1f %0.1f)|%d", point.x, point.y, point.z, point.ring); */
 
-      if (range_mm < min_range_mm) {
+      const unsigned int idx   = j * msg->height + i;
+      pt_OS1             point = cloud->at(idx);
 
-        invalidatePoint(cloud->at(i, j), nan);
+      point.ring = r;
 
-      } else if (range_mm <= max_range_mm) {
+      if (point.range < min_range_mm) {
+
+        invalidatePoint(point, nan);
+
+      } else if (point.range <= max_range_mm) {
 
         // Filter out low intensities in close radius
-        if (filter_intensity && cloud->at(i, j).intensity < filter_intensity_thrd && range_mm < filter_intensity_range_mm) {
+        if (filter_intensity && point.intensity < filter_intensity_thrd && point.range < filter_intensity_range_mm) {
 
-          invalidatePoint(cloud->at(i, j), nan);
+          invalidatePoint(point, nan);
 
         } else {
           valid_points++;
         }
 
-      } else if (ret_cloud_over_max_range) {
-        cloud_over_max_range->at(k++) = cloud->at(i, j);
+      } else {
+
+        if (ret_cloud_over_max_range) {
+          cloud_over_max_range->at(k++) = point;
+        }
+
+        invalidatePoint(point, nan);
       }
+
+      cloud_out->at(c, r) = point;
     }
   }
 
   // Resize both clouds
-  cloud->is_dense = false;
-  cloud_var.emplace<0>(cloud);
+  cloud_var.emplace<0>(cloud_out);
 
   if (ret_cloud_over_max_range) {
     cloud_over_max_range->resize(k);
@@ -359,16 +379,16 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const 
   PC::Ptr cloud_over_max_range = boost::make_shared<PC>();
   pcl::fromROSMsg(*msg, *cloud);
 
-  size_t j          = 0;
-  size_t k          = 0;
-  size_t cloud_size = cloud->points.size();
+  unsigned int j          = 0;
+  unsigned int k          = 0;
+  unsigned int cloud_size = cloud->points.size();
 
   if (ret_cloud_over_max_range) {
     cloud_over_max_range->header = cloud->header;
     cloud_over_max_range->points.resize(cloud_size);
   }
 
-  for (size_t i = 0; i < cloud_size; i++) {
+  for (unsigned int i = 0; i < cloud_size; i++) {
 
     float range_sq =
         cloud->points.at(i).x * cloud->points.at(i).x + cloud->points.at(i).y * cloud->points.at(i).y + cloud->points.at(i).z * cloud->points.at(i).z;
