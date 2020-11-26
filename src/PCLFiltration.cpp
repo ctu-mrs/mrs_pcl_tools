@@ -123,7 +123,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_variant;
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
 
-    if (hasField("range", msg) && hasField("noise", msg)) {
+    if (hasField("range", msg) && hasField("range", msg) && hasField("t", msg)) {
       NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::OS1::PointOS1.");
       removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, points_after, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm,
                                      _lidar3d_max_range_mm, _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);
@@ -310,6 +310,8 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_
   cloud_out->is_dense = false;
   cloud_out->header   = cloud->header;
 
+  /* ROS_WARN("w: %d, h: %d", w, h); */
+
   if (ret_cloud_over_max_range) {
     cloud_over_max_range         = boost::make_shared<PC_OS1>();
     cloud_over_max_range->header = cloud->header;
@@ -323,11 +325,11 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_
     for (unsigned int i = 0; i < msg->height; i += _lidar3d_row_step) {
       const unsigned int r = i / _lidar3d_row_step;
 
-      /* ROS_DEBUG("j|i|idx|c|r %d|%d|%d|%d|%d", j, i, idx, c, r); */
-      /* ROS_DEBUG("... xyz|ring (%0.1f %0.1f %0.1f)|%d", point.x, point.y, point.z, point.ring); */
-
       const unsigned int idx   = j * msg->height + i;
       pt_OS1             point = cloud->at(idx);
+      
+      /* ROS_DEBUG("j|i|idx|c|r %d|%d|%d|%d|%d", j, i, idx, c, r); */
+      /* ROS_DEBUG("... xyz|ring (%0.1f %0.1f %0.1f)|%d", point.x, point.y, point.z, point.ring); */
 
       point.ring = r;
 
