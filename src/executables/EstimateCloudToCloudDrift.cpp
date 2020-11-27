@@ -140,12 +140,14 @@ void saveTrajectory(const std::string &filepath, const std::vector<TRAJECTORY_PO
 
   if (outfile.is_open()) {
 
+    outfile << "# timestamp x y z qx qy qz qw" << std::endl;
+
     for (const auto &dato : data) {
 
       const mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(dato.transformed_pose.block<3, 3>(0, 0).cast<double>());
       const geometry_msgs::Quaternion  quat = atti;
 
-      outfile << std::fixed << std::setprecision(20) << dato.sample_time << " ";
+      outfile << std::fixed << std::setprecision(precision) << dato.sample_time << " ";
       outfile << std::fixed << std::setprecision(precision) << dato.transformed_pose(0, 3) << " ";
       outfile << std::fixed << std::setprecision(precision) << dato.transformed_pose(1, 3) << " ";
       outfile << std::fixed << std::setprecision(precision) << dato.transformed_pose(2, 3) << " ";
@@ -176,14 +178,14 @@ PC::Ptr cropCloud(const PC::Ptr &cloud, const Eigen::Vector3f &box_center, const
 /*//}*/
 
 /*//{ registerClouds() */
-std::optional<std::tuple<Eigen::Matrix4f, PC::Ptr>> registerClouds(const PC::Ptr &source, const PC::Ptr &target) {
+std::optional<std::tuple<Eigen::Matrix4f, PC::Ptr>> registerClouds(const PC::Ptr &source, const PC::Ptr &target, const Eigen::Matrix4f &initial_guess) {
 
   PC::Ptr aligned = boost::make_shared<PC>();
 
   _icp.setInputSource(source);
   _icp.setInputTarget(target);
 
-  _icp.align(*aligned, Eigen::Matrix4f::Identity());
+  _icp.align(*aligned, initial_guess);
 
   if (!_icp.hasConverged()) {
     ROS_WARN("ICP has not converged, change your parameters.");
@@ -214,7 +216,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectory(const std::vector<st
   _icp.setTransformationEpsilon(0.1);
   _icp.setEuclideanFitnessEpsilon(0.1);
   _icp.setRANSACIterations(500);
-  _icp.setRANSACOutlierRejectionThreshold(0.8);
+  _icp.setRANSACOutlierRejectionThreshold(0.9);
   _icp.setUseReciprocalCorrespondences(false);
 
   const float xy_crop_dist = crop_dist / 2.0f;
@@ -226,6 +228,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectory(const std::vector<st
   Eigen::Vector3f       position_prev     = position_origin;
   float                 trajectory_length = 0.0f;
   unsigned int          sample_count      = 0;
+  Eigen::Matrix4f       T_prev            = Eigen::Matrix4f::Identity();
 
   ROS_INFO("Estimating ground truth trajectory:");
   for (unsigned int i = 0; i < trajectory.size(); i++) {
@@ -271,7 +274,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectory(const std::vector<st
     mrs_pcl_tools::publishCloud(_pub_pc_target_local, pc_target_local);
 
     // Find mutual transformations
-    const auto ret = registerClouds(pc_source_local, pc_target_local);
+    const auto ret = registerClouds(pc_source_local, pc_target_local, T_prev);
 
     // Fill return object
     if (ret) {
@@ -309,6 +312,8 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectory(const std::vector<st
           ROS_ERROR("[AloamMapping]: Exception caught during publishing the trajectories.");
         }
       }
+
+      T_prev = T;
     }
 
     position_prev = position;
