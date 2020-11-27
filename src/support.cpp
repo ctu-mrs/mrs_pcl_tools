@@ -144,6 +144,16 @@ void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &cloud) {
 }
 /*//}*/
 
+/*//{ publishCloud() */
+void publishCloud(const ros::Publisher &pub, const PC::Ptr &cloud) {
+  if (pub.getNumSubscribers() > 0) {
+    sensor_msgs::PointCloud2::Ptr cloud_msg = boost::make_shared<sensor_msgs::PointCloud2>();
+    pcl::toROSMsg(*cloud, *cloud_msg);
+    publishCloudMsg(pub, cloud_msg);
+  }
+}
+/*//}*/
+
 /*//{ publishCloudMsg() */
 void publishCloudMsg(const ros::Publisher &pub, const sensor_msgs::PointCloud2::Ptr &cloud_msg) {
   try {
