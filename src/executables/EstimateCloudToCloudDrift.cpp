@@ -16,7 +16,7 @@ void printHelp() {
       "Syntax is: `rosrun mrs_pcl_tools estimate_cloud_to_cloud_drift source.pcd target.pcd trajectory_in.txt trajectory_out.txt [traj_step, crop_dist]`");
   ROS_ERROR(
       "Ground truth trajectory will be estimated from given drifting trajectory using two PCD maps. 1) source cloud (i.e., SLAM map output) and 2) target "
-      "cloud (i.e., reference 3D scan).");
+      "cloud (i.e., reference 3D scan). The registration parameters are hard-coded.");
   ROS_ERROR("IMPORTANT: Method expects source/target clouds to be pre-registered and the input trajectory to be in the frame of the source point cloud.");
   ROS_ERROR("Arguments:");
   ROS_ERROR("- source.pcd:         source point cloud (with drift)");
@@ -29,7 +29,7 @@ void printHelp() {
   ROS_ERROR("- start_time:         start time offset of the trajectory (optional, default: 0.0 s)");
 }
 
-struct TRANSFORMED_DATA
+struct TRAJECTORY_POINT
 {
   Eigen::Matrix4f transformation;
   Eigen::Matrix4f transformed_pose;
@@ -130,7 +130,7 @@ std::vector<std::tuple<double, Eigen::Matrix4f>> loadTrajectory(const std::strin
 /*//}*/
 
 /*//{ saveTrajectory() */
-void saveTrajectory(const std::string &filepath, const std::vector<TRANSFORMED_DATA> &data) {
+void saveTrajectory(const std::string &filepath, const std::vector<TRAJECTORY_POINT> &data) {
 
   ROS_INFO("Saving trajectory to: %s", filepath.c_str());
 
@@ -195,11 +195,11 @@ std::optional<std::tuple<Eigen::Matrix4f, PC::Ptr>> registerClouds(const PC::Ptr
 /*//}*/
 
 /*//{ estimateGroundTruthTrajectory() */
-std::vector<TRANSFORMED_DATA> estimateGroundTruthTrajectory(const std::vector<std::tuple<double, Eigen::Matrix4f>> &trajectory, const PC::Ptr &pc_source,
+std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectory(const std::vector<std::tuple<double, Eigen::Matrix4f>> &trajectory, const PC::Ptr &pc_source,
                                                             const PC::Ptr &pc_target, const float &traj_step, const float &crop_dist,
                                                             const double &start_time) {
 
-  std::vector<TRANSFORMED_DATA> drift_data;
+  std::vector<TRAJECTORY_POINT> drift_data;
 
   const std::string frame = "origin";
 
@@ -209,11 +209,11 @@ std::vector<TRANSFORMED_DATA> estimateGroundTruthTrajectory(const std::vector<st
   path_untransformed->header.frame_id    = frame;
 
   // Preset global objects parameters
-  _icp.setMaxCorrespondenceDistance(5.5);
-  _icp.setMaximumIterations(1000);
-  _icp.setTransformationEpsilon(0.03);
-  _icp.setEuclideanFitnessEpsilon(0.03);
-  _icp.setRANSACIterations(300);
+  _icp.setMaxCorrespondenceDistance(15.0);
+  _icp.setMaximumIterations(5000);
+  _icp.setTransformationEpsilon(0.1);
+  _icp.setEuclideanFitnessEpsilon(0.1);
+  _icp.setRANSACIterations(500);
   _icp.setRANSACOutlierRejectionThreshold(0.8);
   _icp.setUseReciprocalCorrespondences(false);
 
@@ -225,6 +225,7 @@ std::vector<TRANSFORMED_DATA> estimateGroundTruthTrajectory(const std::vector<st
   const double          time_min          = t_origin + start_time;
   Eigen::Vector3f       position_prev     = position_origin;
   float                 trajectory_length = 0.0f;
+  unsigned int          sample_count      = 0;
 
   ROS_INFO("Estimating ground truth trajectory:");
   for (unsigned int i = 0; i < trajectory.size(); i++) {
@@ -262,7 +263,7 @@ std::vector<TRANSFORMED_DATA> estimateGroundTruthTrajectory(const std::vector<st
     pc_target_local->header.frame_id = frame;
 
     // Publish clouds
-    if (drift_data.size() % 10 == 0) {
+    if (sample_count++ % 10 == 0) {
       mrs_pcl_tools::publishCloud(_pub_pc_source_global, pc_source);
       mrs_pcl_tools::publishCloud(_pub_pc_target_global, pc_target);
     }
@@ -276,7 +277,7 @@ std::vector<TRANSFORMED_DATA> estimateGroundTruthTrajectory(const std::vector<st
     if (ret) {
       const auto [T, pc_aligned_local] = ret.value();
 
-      TRANSFORMED_DATA dato;
+      TRAJECTORY_POINT dato;
       dato.transformation            = T;
       dato.transformed_pose          = T * pose;
       dato.untransformed_pose        = pose;
@@ -378,7 +379,7 @@ int main(int argc, char **argv) {
   _pub_path_transformed   = nh.advertise<nav_msgs::Path>("trajectory/transformed", 1);
 
   // for traj_step in trajectory, crop maps and compute icp source->target
-  std::vector<TRANSFORMED_DATA> data = estimateGroundTruthTrajectory(trajectory, ret_source.value(), ret_target.value(), traj_step, crop_dist, start_time);
+  std::vector<TRAJECTORY_POINT> data = estimateGroundTruthTrajectory(trajectory, ret_source.value(), ret_target.value(), traj_step, crop_dist, start_time);
 
   // save trajectory
   saveTrajectory(txt_trajectory_out, data);
