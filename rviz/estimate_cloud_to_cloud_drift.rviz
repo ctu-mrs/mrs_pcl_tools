@@ -112,7 +112,7 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
-    - Alpha: 1
+    - Alpha: 0.5
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
         Max Value: 10
@@ -121,7 +121,7 @@ Visualization Manager:
       Axis: Z
       Channel Name: intensity
       Class: rviz/PointCloud2
-      Color: 0; 170; 255
+      Color: 0; 0; 0
       Color Transformer: FlatColor
       Decay Time: 0
       Enabled: true
@@ -276,25 +276,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 71.04298400878906
+      Distance: 92.12924194335938
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -56.72179412841797
-        Y: -44.13325500488281
-        Z: -0.6989694833755493
+        X: -41.421085357666016
+        Y: -18.009510040283203
+        Z: 13.16745662689209
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.3447972536087036
+      Pitch: 0.2847974896430969
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 2.0800020694732666
+      Yaw: 1.3931788206100464
     Saved: ~
 Window Geometry:
   Displays:

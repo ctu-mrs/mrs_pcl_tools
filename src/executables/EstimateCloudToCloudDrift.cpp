@@ -213,10 +213,10 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectory(const std::vector<st
   // Preset global objects parameters
   _icp.setMaxCorrespondenceDistance(15.0);
   _icp.setMaximumIterations(5000);
-  _icp.setTransformationEpsilon(0.1);
-  _icp.setEuclideanFitnessEpsilon(0.1);
+  _icp.setTransformationEpsilon(0.03);
+  _icp.setEuclideanFitnessEpsilon(0.03);
   _icp.setRANSACIterations(500);
-  _icp.setRANSACOutlierRejectionThreshold(0.9);
+  _icp.setRANSACOutlierRejectionThreshold(0.8);
   _icp.setUseReciprocalCorrespondences(false);
 
   const float xy_crop_dist = crop_dist / 2.0f;
