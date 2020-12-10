@@ -139,8 +139,8 @@ target_link_libraries(
 )
 target_include_directories(PCLPublishPCDToNetwork SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
-### EXECUTABLES
-add_executable(rosbag_cloud_to_pcd src/executables/RosbagCloudToPCD.cpp)
-target_link_libraries(rosbag_cloud_to_pcd
-  PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
-)
+# ### EXECUTABLES
+# add_executable(rosbag_cloud_to_pcd src/executables/RosbagCloudToPCD.cpp)
+# target_link_libraries(rosbag_cloud_to_pcd
+#   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+# )
