@@ -32,7 +32,7 @@
 #include <dynamic_reconfigure/server.h>
 
 // point types
-#include <os1_driver/ouster_ros/point_os1.h>
+#include <ouster_ros/point.h>
 
 //}
 
@@ -42,7 +42,7 @@ typedef pcl::PointXYZ              pt_XYZ;
 typedef pcl::PointXYZI             pt_XYZI;
 typedef pcl::PointXYZRGB           pt_XYZRGB;
 typedef pcl::PointNormal           pt_NORM;
-typedef ouster_ros::OS1::PointOS1  pt_OS1;
+typedef ouster_ros::Point          pt_OS1;
 typedef pcl::PointCloud<pt_XYZ>    PC;
 typedef pcl::PointCloud<pt_XYZI>   PC_I;
 typedef pcl::PointCloud<pt_XYZRGB> PC_RGB;
