@@ -22,7 +22,7 @@ find_package(catkin REQUIRED COMPONENTS
     pcl_ros
     mrs_lib
     dynamic_reconfigure
-    os1_driver
+    ouster_ros
     octomap_ros
     octomap_msgs
 )
@@ -139,7 +139,7 @@ target_link_libraries(
 )
 target_include_directories(PCLPublishPCDToNetwork SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
-### EXECUTABLES
+# ### EXECUTABLES
 add_executable(rosbag_cloud_to_pcd src/executables/RosbagCloudToPCD.cpp)
 target_link_libraries(rosbag_cloud_to_pcd
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
