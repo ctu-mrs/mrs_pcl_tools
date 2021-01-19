@@ -9,6 +9,9 @@ void PCLFiltration::onInit() {
   ros::NodeHandle nh = nodelet::Nodelet::getMTPrivateNodeHandle();
   ros::Time::waitForValid();
 
+  // Set PCL verbosity level to errors and higher
+  pcl::console::setVerbosityLevel(pcl::console::L_ERROR);
+
   // Get parameters from config file
   mrs_lib::ParamLoader param_loader(nh, "PCLFiltration");
 
