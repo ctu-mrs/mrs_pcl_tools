@@ -124,7 +124,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
 
     if (hasField("range", msg) && hasField("range", msg) && hasField("t", msg)) {
-      NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::OS1::PointOS1.");
+      NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::Point.");
       removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, points_after, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm,
                                      _lidar3d_max_range_mm, _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);
     } else {
