@@ -39,19 +39,19 @@ set(Eigen_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIRS})
 set(Eigen_LIBRARIES ${Eigen_LIBRARIES})
 
 # Compile with distcc when available (must be after find_package(catkin))
-find_file(DISTCC_FULL_PATH distcc)
-find_file(DISTCPP_FULL_PATH distg++)
-IF (EXISTS ${DISTCC_FULL_PATH})
- IF (EXISTS ${DISTCPP_FULL_PATH})
-   message("Found distcc and distg++, using distributed compilation")
-   SET(CMAKE_C_COMPILER ${DISTCC_FULL_PATH})
-   SET(CMAKE_CXX_COMPILER ${DISTCPP_FULL_PATH})
- ELSE()
-   message("Found only distcc, but not distg++, not using distributed compilation")
- ENDIF()
-ELSE()
-  message("Not found distcc, not using distributed compilation")
-ENDIF()
+# find_file(DISTCC_FULL_PATH distcc)
+# find_file(DISTCPP_FULL_PATH distg++)
+# IF (EXISTS ${DISTCC_FULL_PATH})
+#  IF (EXISTS ${DISTCPP_FULL_PATH})
+#    message("Found distcc and distg++, using distributed compilation")
+#    SET(CMAKE_C_COMPILER ${DISTCC_FULL_PATH})
+#    SET(CMAKE_CXX_COMPILER ${DISTCPP_FULL_PATH})
+#  ELSE()
+#    message("Found only distcc, but not distg++, not using distributed compilation")
+#  ENDIF()
+# ELSE()
+#   message("Not found distcc, not using distributed compilation")
+# ENDIF()
 
 generate_dynamic_reconfigure_options(
   cfg/pcl_filtration_dynparam.cfg
@@ -91,9 +91,9 @@ link_directories(
 )
 
 # This causes adds the -march=native gcc flag that prevents ditributed compilation
-# add_definitions(
-#   ${PCL_DEFINITIONS}
-# )
+add_definitions(
+  ${PCL_DEFINITIONS}
+)
 
 # Binary version of pcl on most of the linux distro is built with -march=native
 # which cause a lot of compatibility problems.
