@@ -91,19 +91,19 @@ link_directories(
 )
 
 # This causes adds the -march=native gcc flag that prevents ditributed compilation
-add_definitions(
-  ${PCL_DEFINITIONS}
-  )
+# add_definitions(
+#   ${PCL_DEFINITIONS}
+# )
 
 # Binary version of pcl on most of the linux distro is built with -march=native
 # which cause a lot of compatibility problems.
 # Define PCL_NO_PRECOMPILE to disable using binary version
-# add_definitions(-DPCL_NO_PRECOMPILE)
+add_definitions(-DPCL_NO_PRECOMPILE)
 
 # Library PCLSupportLib
 add_library(PCLSupportLib
   src/support.cpp
-  )
+)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(
@@ -113,7 +113,7 @@ target_link_libraries(
 # Nodelet library PCLFiltration
 add_library(PCLFiltration
   src/PCLFiltration.cpp
-  )
+)
 
 add_dependencies(PCLFiltration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
 
