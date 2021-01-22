@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(mrs_pcl_tools)
 
-set(CMAKE_CXX_FLAGS "-std=c++17 -fno-diagnostics-color")
+# set(CMAKE_CXX_FLAGS "-std=c++17 -fno-diagnostics-color")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -91,14 +91,14 @@ link_directories(
 )
 
 # This causes adds the -march=native gcc flag that prevents ditributed compilation
-add_definitions(
-  ${PCL_DEFINITIONS}
-)
+# add_definitions(
+#   ${PCL_DEFINITIONS}
+# )
 
 # Binary version of pcl on most of the linux distro is built with -march=native
 # which cause a lot of compatibility problems.
 # Define PCL_NO_PRECOMPILE to disable using binary version
-add_definitions(-DPCL_NO_PRECOMPILE)
+# add_definitions(-DPCL_NO_PRECOMPILE)
 
 # Library PCLSupportLib
 add_library(PCLSupportLib
