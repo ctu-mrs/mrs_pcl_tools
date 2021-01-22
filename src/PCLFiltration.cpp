@@ -213,15 +213,21 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
       }
 
     } else {
+      
+      const unsigned int samples = 5000; 
 
-      const unsigned int samples = 5000;
-      const unsigned int step    = msg->width / samples;
-      cloud_filt                 = boost::make_shared<PC_I>(samples, 16);
+      if (msg->width > samples) { // check whether it is possible to downsample
 
-      for (int i = 0; i < 16; i++) {
-        for (unsigned int j = 0; j < msg->width - 1; j += step) {
-          cloud_filt->at(std::floor(j / step), i) = cloud_in->at(j, i);
+        const unsigned int step    = msg->width / samples;
+        cloud_filt                 = boost::make_shared<PC_I>(samples, 16);
+
+        for (int i = 0; i < 16; i++) {
+          for (unsigned int j = 0; j < msg->width - 1; j += step) {
+            cloud_filt->at(std::floor(j / step), i) = cloud_in->at(j, i);
+          }
         }
+      } else {
+        cloud_filt = cloud_in;
       }
     }
 
