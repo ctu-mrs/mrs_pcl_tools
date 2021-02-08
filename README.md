@@ -3,4 +3,4 @@
 Package grouping smaller nodes for processing, filtering, and general online/offline work with pointclouds.
 
 ## Dependencies
-[os1_driver](https://mrs.felk.cvut.cz/gitlab/uav/drivers/os1_driver) for Ouster point type
+[ouster_ros](https://mrs.felk.cvut.cz/gitlab/uav/drivers/ouster) for Ouster point type
