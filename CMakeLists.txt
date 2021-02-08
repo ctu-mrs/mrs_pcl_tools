@@ -20,7 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
     pcl_ros
     mrs_lib
     dynamic_reconfigure
-    os1_driver
+    ouster_ros
     octomap_ros
     octomap_msgs
     darpa_mrs_msgs

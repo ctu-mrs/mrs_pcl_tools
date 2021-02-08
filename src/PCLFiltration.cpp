@@ -213,13 +213,13 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
       }
 
     } else {
-      
-      const unsigned int samples = 5000; 
 
-      if (msg->width > samples) { // check whether it is possible to downsample
+      const unsigned int samples = 5000;
 
-        const unsigned int step    = msg->width / samples;
-        cloud_filt                 = boost::make_shared<PC_I>(samples, 16);
+      if (msg->width > samples) {  // check whether it is possible to downsample
+
+        const unsigned int step = msg->width / samples;
+        cloud_filt              = boost::make_shared<PC_I>(samples, 16);
 
         for (int i = 0; i < 16; i++) {
           for (unsigned int j = 0; j < msg->width - 1; j += step) {
@@ -242,10 +242,10 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
     new_msg = msg;
   }
 
-  unsigned int                         points_before = new_msg->height * new_msg->width;
-  unsigned int                         points_after;
-  std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_variant;
-  std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
+  unsigned int                        points_before = new_msg->height * new_msg->width;
+  unsigned int                        points_after;
+  std::variant<PC_OS::Ptr, PC_I::Ptr> pcl_variant;
+  std::variant<PC_OS::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
 
   if (hasField("range", new_msg)) {
     NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::OS1::PointOS1. MAV type: %s.", _mav_type->name.c_str());
@@ -335,7 +335,7 @@ void PCLFiltration::callbackCameraImage(const sensor_msgs::Image::ConstPtr &dept
 //}
 
 /*//{ removeCloseAndFarPointCloud() */
-void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
+void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
                                                 const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const float &min_range_sq,
                                                 const float &max_range_sq) {
   // SUBT HOTFIX
@@ -416,15 +416,14 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
 /*//}*/
 
 /*//{ removeCloseAndFarPointCloudOS1() */
-void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &    cloud_var,
-                                                   std::variant<PC_OS1::Ptr, PC_I::Ptr> &    cloud_over_max_range_var,
-                                                   const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
-                                                   const uint32_t &min_range_mm, const uint32_t &max_range_mm, const bool &filter_intensity,
-                                                   const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd) {
+void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var,
+                                                   std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var, const sensor_msgs::PointCloud2::ConstPtr &msg,
+                                                   const bool &ret_cloud_over_max_range, const uint32_t &min_range_mm, const uint32_t &max_range_mm,
+                                                   const bool &filter_intensity, const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd) {
 
   // Convert to pcl object
-  PC_OS1::Ptr cloud = boost::make_shared<PC_OS1>();
-  PC_OS1::Ptr cloud_over_max_range;
+  PC_OS::Ptr cloud = boost::make_shared<PC_OS>();
+  PC_OS::Ptr cloud_over_max_range;
   pcl::fromROSMsg(*msg, *cloud);
 
   size_t j          = 0;
@@ -432,7 +431,7 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_
   size_t cloud_size = cloud->points.size();
 
   if (ret_cloud_over_max_range) {
-    cloud_over_max_range         = boost::make_shared<PC_OS1>();
+    cloud_over_max_range         = boost::make_shared<PC_OS>();
     cloud_over_max_range->header = cloud->header;
     cloud_over_max_range->points.resize(cloud_size);
   }

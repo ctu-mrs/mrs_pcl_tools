@@ -66,12 +66,12 @@ private:
   float _ground_detection_n_z_max_diff;
 
   /* Functions */
-  void removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
+  void removeCloseAndFarPointCloudOS1(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
                                       const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const uint32_t &min_range_mm,
                                       const uint32_t &max_range_mm, const bool &filter_intensity, const uint32_t &filter_intensity_range_mm,
                                       const int &filter_intensity_thrd);
 
-  void removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
+  void removeCloseAndFarPointCloud(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
                                    const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const float &min_range_sq,
                                    const float &max_range_sq);
 
