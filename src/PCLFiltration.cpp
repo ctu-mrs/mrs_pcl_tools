@@ -1,5 +1,8 @@
 #include "mrs_pcl_tools/PCLFiltration.h"
 
+// 1: new ouster_ros driver; 0: old os1_driver
+#define OUSTER_ORDERING_TRANSPOSE 1
+
 namespace mrs_pcl_tools
 {
 
@@ -322,15 +325,22 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_
   }
   unsigned int k = 0;
 
+#if OUSTER_ORDERING_TRANSPOSE
   for (unsigned int j = _lidar3d_col_step - 1; j < msg->width; j += _lidar3d_col_step) {
     const unsigned int c = j / _lidar3d_col_step;
-
     for (unsigned int i = _lidar3d_row_step - 1; i < msg->height; i += _lidar3d_row_step) {
-      const unsigned int r = i / _lidar3d_row_step;
+      const unsigned int r   = i / _lidar3d_row_step;
+      const unsigned int idx = i * msg->width + j;
+#else
+  for (unsigned int j = 0; j < msg->width; j += _lidar3d_col_step) {
+    const unsigned int c = j / _lidar3d_col_step;
+    for (unsigned int i = 0; i < msg->height; i += _lidar3d_row_step) {
+      const unsigned int r   = i / _lidar3d_row_step;
+      const unsigned int idx = j * msg->height + i;
+#endif
 
-      const unsigned int idx   = i * msg->width + j;
-      pt_OS1             point = cloud->at(idx);
-      
+      pt_OS1 point = cloud->at(idx);
+
       /* ROS_DEBUG("j|i|idx|c|r %d|%d|%d|%d|%d", j, i, idx, c, r); */
       /* ROS_DEBUG("... xyz|ring (%0.1f %0.1f %0.1f)|%d", point.x, point.y, point.z, point.ring); */
 
