@@ -9,6 +9,9 @@ void PCLFiltration::onInit() {
   ros::NodeHandle nh = nodelet::Nodelet::getMTPrivateNodeHandle();
   ros::Time::waitForValid();
 
+  // Set PCL verbosity level to errors and higher
+  pcl::console::setVerbosityLevel(pcl::console::L_ERROR);
+
   // Get parameters from config file
   mrs_lib::ParamLoader param_loader(nh, "PCLFiltration");
 
@@ -43,8 +46,8 @@ void PCLFiltration::onInit() {
   _mav_type->name = mav_type_name;
 
   if (mav_type_name == "MARBLE_QAV500") {
-    _mav_type->downsample_lidar_columns        = false;
-    _mav_type->downsample_lidar_rows           = true;
+    _mav_type->lidar_col_step                  = 1;
+    _mav_type->lidar_row_step                  = 1;
     _mav_type->process_cameras                 = true;
     _mav_type->filter_out_projected_self_frame = true;
     _mav_type->skip_nth_lidar_frame            = 4;               // 20 Hz -> 15 Hz
@@ -55,8 +58,8 @@ void PCLFiltration::onInit() {
     _mav_type->vert_camera_max_range           = 4.0f;
     _mav_type->front_camera_max_range          = 10.0f;
   } else if (mav_type_name == "EXPLORER_DS1") {
-    _mav_type->downsample_lidar_columns        = true;
-    _mav_type->downsample_lidar_rows           = false;
+    _mav_type->lidar_col_step                  = 1;
+    _mav_type->lidar_row_step                  = 1;
     _mav_type->process_cameras                 = true;
     _mav_type->filter_out_projected_self_frame = false;
     _mav_type->skip_nth_lidar_frame            = 0;          // 15 Hz
@@ -67,8 +70,8 @@ void PCLFiltration::onInit() {
     _mav_type->vert_camera_max_range           = 10.0f;
     _mav_type->front_camera_max_range          = 10.0f;
   } else if (mav_type_name == "SSCI_X4") {
-    _mav_type->downsample_lidar_columns        = true;
-    _mav_type->downsample_lidar_rows           = false;
+    _mav_type->lidar_col_step                  = 1;
+    _mav_type->lidar_row_step                  = 1;
     _mav_type->process_cameras                 = false;
     _mav_type->filter_out_projected_self_frame = false;
     _mav_type->skip_nth_lidar_frame            = 0;     // 15 Hz
@@ -188,86 +191,40 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
     return;
   }
 
-  TicToc t;
-
-  sensor_msgs::PointCloud2::ConstPtr new_msg;
-
-  // HOTFIX for subt virtual
-  if ((_mav_type->downsample_lidar_rows && msg->height == 64) || _mav_type->downsample_lidar_columns) {
-
-    PC_I::Ptr cloud_in = boost::make_shared<PC_I>();
-    pcl::fromROSMsg(*msg, *cloud_in);
-
-    PC_I::Ptr cloud_filt;
-
-    if (_mav_type->downsample_lidar_rows && msg->height == 64) {
-
-      cloud_filt = boost::make_shared<PC_I>(1024, 16);
-
-      for (int i = 0; i < 64; i++) {
-        for (int j = 0; j < 1024; j++) {
-          if (i % 4 == 0) {
-            cloud_filt->at(j, std::floor(i / 4.0)) = cloud_in->at(j, i);
-          }
-        }
-      }
-
-    } else {
-
-      const unsigned int samples = 5000;
-
-      if (msg->width > samples) {  // check whether it is possible to downsample
-
-        const unsigned int step = msg->width / samples;
-        cloud_filt              = boost::make_shared<PC_I>(samples, 16);
-
-        for (int i = 0; i < 16; i++) {
-          for (unsigned int j = 0; j < msg->width - 1; j += step) {
-            cloud_filt->at(std::floor(j / step), i) = cloud_in->at(j, i);
-          }
-        }
-      } else {
-        cloud_filt = cloud_in;
-      }
-    }
-
-    sensor_msgs::PointCloud2 msg_cloud_filt;
-    pcl::toROSMsg(*cloud_filt, msg_cloud_filt);
-    msg_cloud_filt.header = msg->header;
-
-    new_msg = boost::make_shared<sensor_msgs::PointCloud2>(msg_cloud_filt);
-
-  } else {
-
-    new_msg = msg;
+  if (msg->width % _mav_type->lidar_col_step != 0 || msg->height % _mav_type->lidar_row_step != 0) {
+    NODELET_WARN(
+        "[PCLFiltration] Step-based downsampling of 3D lidar data would create nondeterministic results. Data (w: %d, h: %d) with downsampling step (w: %d, "
+        "h: %d) would leave some samples untouched. Skipping lidar frame.",
+        msg->width, msg->height, _mav_type->lidar_col_step, _mav_type->lidar_row_step);
+    return;
   }
 
-  unsigned int                        points_before = new_msg->height * new_msg->width;
-  unsigned int                        points_after;
-  std::variant<PC_OS::Ptr, PC_I::Ptr> pcl_variant;
-  std::variant<PC_OS::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
+  TicToc t;
 
-  if (hasField("range", new_msg)) {
+  unsigned int points_before = msg->height * msg->width;
+  unsigned int points_after  = 0;
+
+  PC_OS::Ptr cloud;
+  PC_OS::Ptr cloud_over_max_range;
+
+  if (hasField("range", msg) && hasField("ring", msg) && hasField("t", msg)) {
     NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::OS1::PointOS1. MAV type: %s.", _mav_type->name.c_str());
-    removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, new_msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm, _lidar3d_max_range_mm,
+    removeCloseAndFarPointCloudOS1(cloud, cloud_over_max_range, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm, _lidar3d_max_range_mm,
                                    _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);
   } else {
     NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: pcl::PointXYZI. MAV type: %s.", _mav_type->name.c_str());
-    removeCloseAndFarPointCloud(pcl_variant, pcl_over_max_range_variant, new_msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_sq, _lidar3d_max_range_sq);
+    removeCloseAndFarPointCloud(cloud, cloud_over_max_range, points_after, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_sq, _lidar3d_max_range_sq);
   }
 
-  auto cloud_visitor = [&](const auto &pc) {
-    points_after = pc->points.size();
-    publishCloud(_pub_lidar3d, *pc);
-  };
-  std::visit(cloud_visitor, pcl_variant);
+  publishCloud(_pub_lidar3d, *cloud);
 
   if (_lidar3d_pcl2_over_max_range) {
-    std::visit([&](const auto &pc) { publishCloud(_pub_lidar3d_over_max_range, *pc); }, pcl_over_max_range_variant);
+    publishCloud(_pub_lidar3d_over_max_range, *cloud_over_max_range);
   }
 
-  NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %d, after: %d).", t.toc(), points_before,
-                        points_after);
+  NODELET_INFO_THROTTLE(
+      5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %d, after: %d; dim before: (w: %d, h: %d), after: (w: %d, h: %d)).",
+      t.toc(), points_before, points_after, msg->width, msg->height, cloud->width, cloud->height);
 }
 //}
 
@@ -335,95 +292,100 @@ void PCLFiltration::callbackCameraImage(const sensor_msgs::Image::ConstPtr &dept
 //}
 
 /*//{ removeCloseAndFarPointCloud() */
-void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
+void PCLFiltration::removeCloseAndFarPointCloud(PC_OS::Ptr &cloud_out, PC_OS::Ptr &cloud_over_max_range, unsigned int &valid_points,
                                                 const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const float &min_range_sq,
                                                 const float &max_range_sq) {
-  // SUBT HOTFIX
-  const float subt_frame_det_dist_thrd = 0.15;
-  const float subt_frame_x_lower       = 0.800 - subt_frame_det_dist_thrd;
-  const float subt_frame_x_upper       = 0.800 + subt_frame_det_dist_thrd;
-  const float subt_frame_y_lower       = 0.800 - subt_frame_det_dist_thrd;
-  const float subt_frame_y_upper       = 0.800 + subt_frame_det_dist_thrd;
-  const float subt_frame_z_lower       = 0.265 - 3.0 * subt_frame_det_dist_thrd;
-  const float subt_frame_z_upper       = 0.265 + subt_frame_det_dist_thrd;
+
+  const unsigned int w          = msg->width / _mav_type->lidar_col_step;
+  const unsigned int h          = msg->height / _mav_type->lidar_row_step;
+  const unsigned int cloud_size = w * h;
 
   // Convert to pcl object
-  PC_I::Ptr cloud = boost::make_shared<PC_I>();
-  PC_I::Ptr cloud_over_max_range;
-  pcl::fromROSMsg(*msg, *cloud);
+  PC_OS::Ptr cloud_in = boost::make_shared<PC_OS>();
+  pcl::fromROSMsg(*msg, *cloud_in);
 
-  size_t       j          = 0;
-  size_t       k          = 0;
-  const size_t cloud_size = cloud->points.size();
+  cloud_out           = boost::make_shared<PC_OS>(w, h);
+  cloud_out->width    = w;
+  cloud_out->height   = h;
+  cloud_out->is_dense = true;
+  cloud_out->header   = cloud_in->header;
+
+  size_t count_over = 0;
 
   if (ret_cloud_over_max_range) {
-    cloud_over_max_range         = boost::make_shared<PC_I>();
-    cloud_over_max_range->header = cloud->header;
+    cloud_over_max_range         = boost::make_shared<PC_OS>();
+    cloud_over_max_range->header = cloud_in->header;
     cloud_over_max_range->points.resize(cloud_size);
   }
 
-  for (size_t i = 0; i < cloud_size; i++) {
+  for (unsigned int j = _mav_type->lidar_col_step - 1; j < msg->width; j += _mav_type->lidar_col_step) {
+    const unsigned int c               = j / _mav_type->lidar_col_step;
+    const float        point_intensity = float(c) / float(msg->width);
 
-    const float range_sq =
-        cloud->points.at(i).x * cloud->points.at(i).x + cloud->points.at(i).y * cloud->points.at(i).y + cloud->points.at(i).z * cloud->points.at(i).z;
+    for (unsigned int i = _mav_type->lidar_row_step - 1; i < msg->height; i += _mav_type->lidar_row_step) {
+      const unsigned int r = i / _mav_type->lidar_row_step;
 
-    if (range_sq < min_range_sq) {
-      continue;
-    }
+      pt_OS       point    = cloud_in->at(j, i);
+      const float range_sq = point.x * point.x + point.y * point.y + point.z * point.z;
 
-    // SUBT HOTFIX
-    if (_mav_type->filter_out_projected_self_frame) {
-      const float x = std::fabs(cloud->points.at(i).x);
-      const float y = std::fabs(cloud->points.at(i).y);
-      const float z = std::fabs(cloud->points.at(i).z);
-      if ((z > subt_frame_z_lower && z < subt_frame_z_upper) &&
-          ((x > subt_frame_x_lower && x < subt_frame_x_upper) || (y > subt_frame_y_lower && y < subt_frame_y_upper))) {
-        continue;
+      point.range     = std::sqrt(range_sq) * 1000.0f;  // in mm
+      point.intensity = point_intensity;
+      point.ring      = r;
+
+      if (!point.getArray4fMap().allFinite()) {
+        invalidatePoint(point);
+      } else if (range_sq < min_range_sq) {
+        invalidatePoint(point);
+      } else if (range_sq <= max_range_sq) {
+
+        bool self_projection = false;
+        if (_mav_type->filter_out_projected_self_frame) {
+          // SUBT HOTFIX
+          const float x = std::fabs(point.x);
+          const float y = std::fabs(point.y);
+          const float z = std::fabs(point.z);
+          if ((z > subt_frame_z_lower && z < subt_frame_z_upper) &&
+              ((x > subt_frame_x_lower && x < subt_frame_x_upper) || (y > subt_frame_y_lower && y < subt_frame_y_upper))) {
+            self_projection = true;
+            invalidatePoint(point);
+          }
+        }
+
+        if (!self_projection) {
+          valid_points++;
+        }
+
+      } else {
+
+        if (ret_cloud_over_max_range) {
+          cloud_over_max_range->points.at(count_over++) = point;
+        }
+
+        invalidatePoint(point);
       }
-    }
 
-    if (range_sq <= max_range_sq) {
-
-      cloud->points.at(j++) = cloud->points.at(i);
-
-    } else if (ret_cloud_over_max_range && cloud->points.at(i).getArray4fMap().allFinite()) {
-
-      cloud_over_max_range->points.at(k++) = cloud->points.at(i);
+      cloud_out->at(c, r) = point;
     }
   }
 
-  // Resize both clouds
-  if (j != cloud_size) {
-    cloud->points.resize(j);
-  }
-  cloud->height   = 1;
-  cloud->width    = static_cast<uint32_t>(j);
-  cloud->is_dense = false;
-
-  cloud_var.emplace<1>(cloud);
-
+  // Resize
   if (ret_cloud_over_max_range) {
-    if (k != cloud_size) {
-      cloud_over_max_range->points.resize(k);
+    if (count_over != cloud_size) {
+      cloud_over_max_range->points.resize(count_over);
     }
     cloud_over_max_range->height   = 1;
-    cloud_over_max_range->width    = static_cast<uint32_t>(k);
-    cloud_over_max_range->is_dense = false;
-
-    cloud_over_max_range_var.emplace<1>(cloud_over_max_range);
+    cloud_over_max_range->width    = static_cast<uint32_t>(count_over);
+    cloud_over_max_range->is_dense = true;
   }
 }
 /*//}*/
 
 /*//{ removeCloseAndFarPointCloudOS1() */
-void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var,
-                                                   std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var, const sensor_msgs::PointCloud2::ConstPtr &msg,
+void PCLFiltration::removeCloseAndFarPointCloudOS1(PC_OS::Ptr &cloud, PC_OS::Ptr &cloud_over_max_range, const sensor_msgs::PointCloud2::ConstPtr &msg,
                                                    const bool &ret_cloud_over_max_range, const uint32_t &min_range_mm, const uint32_t &max_range_mm,
                                                    const bool &filter_intensity, const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd) {
 
   // Convert to pcl object
-  PC_OS::Ptr cloud = boost::make_shared<PC_OS>();
-  PC_OS::Ptr cloud_over_max_range;
   pcl::fromROSMsg(*msg, *cloud);
 
   size_t j          = 0;
@@ -463,8 +425,7 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS::Ptr, PC_I
   }
   cloud->height   = 1;
   cloud->width    = static_cast<uint32_t>(j);
-  cloud->is_dense = false;
-  cloud_var.emplace<0>(cloud);
+  cloud->is_dense = true;
 
   if (ret_cloud_over_max_range) {
     if (k != cloud_size) {
@@ -472,9 +433,7 @@ void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS::Ptr, PC_I
     }
     cloud_over_max_range->height   = 1;
     cloud_over_max_range->width    = static_cast<uint32_t>(k);
-    cloud_over_max_range->is_dense = false;
-
-    cloud_over_max_range_var.emplace<0>(cloud_over_max_range);
+    cloud_over_max_range->is_dense = true;
   }
 }
 /*//}*/
@@ -723,6 +682,14 @@ void PCLFiltration::publishCloud(const ros::Publisher &pub, const pcl::PointClou
       NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
     }
   }
+}
+/*//}*/
+
+/*//{ invalidatePoint() */
+void PCLFiltration::invalidatePoint(pt_OS &point) {
+  point.x = 0.0f;
+  point.y = 0.0f;
+  point.z = 0.0f;
 }
 /*//}*/
 

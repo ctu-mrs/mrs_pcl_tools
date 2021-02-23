@@ -66,12 +66,11 @@ private:
   float _ground_detection_n_z_max_diff;
 
   /* Functions */
-  void removeCloseAndFarPointCloudOS1(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
-                                      const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const uint32_t &min_range_mm,
-                                      const uint32_t &max_range_mm, const bool &filter_intensity, const uint32_t &filter_intensity_range_mm,
-                                      const int &filter_intensity_thrd);
+  void removeCloseAndFarPointCloudOS1(PC_OS::Ptr &cloud_var, PC_OS::Ptr &cloud_over_max_range_var, const sensor_msgs::PointCloud2::ConstPtr &msg,
+                                      const bool &ret_cloud_over_max_range, const uint32_t &min_range_mm, const uint32_t &max_range_mm,
+                                      const bool &filter_intensity, const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd);
 
-  void removeCloseAndFarPointCloud(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
+  void removeCloseAndFarPointCloud(PC_OS::Ptr &cloud_var, PC_OS::Ptr &cloud_over_max_range_var, unsigned int &valid_points,
                                    const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const float &min_range_sq,
                                    const float &max_range_sq);
 
@@ -112,13 +111,26 @@ private:
   int8_t                      detectGround(const PC::Ptr &cloud);
   pt_XYZ imagePointToCloudPoint(const int &x, const int &y, const float &cx, const float &cy, const float &depth, const float &ifx, const float &ify);
 
+  void invalidatePoint(pt_OS &point);
+
+  // SUBT HOTFIX
+  const float subt_frame_det_dist_thrd = 0.15;
+  const float subt_frame_x_lower       = 0.800 - subt_frame_det_dist_thrd;
+  const float subt_frame_x_upper       = 0.800 + subt_frame_det_dist_thrd;
+  const float subt_frame_y_lower       = 0.800 - subt_frame_det_dist_thrd;
+  const float subt_frame_y_upper       = 0.800 + subt_frame_det_dist_thrd;
+  const float subt_frame_z_lower       = 0.265 - 3.0 * subt_frame_det_dist_thrd;
+  const float subt_frame_z_upper       = 0.265 + subt_frame_det_dist_thrd;
+
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+
   // MAV type-specific variables
   struct MAVType
   {
   public:
     std::string       name;
-    bool              downsample_lidar_columns;
-    bool              downsample_lidar_rows;
+    int               lidar_col_step;
+    int               lidar_row_step;
     bool              process_cameras;
     bool              filter_out_projected_self_frame;
     unsigned long int skip_nth_lidar_frame;
