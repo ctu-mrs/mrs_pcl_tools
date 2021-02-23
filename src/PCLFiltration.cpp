@@ -47,7 +47,7 @@ void PCLFiltration::onInit() {
 
   if (mav_type_name == "MARBLE_QAV500") {
     _mav_type->lidar_col_step                  = 1;
-    _mav_type->lidar_row_step                  = 1;
+    _mav_type->lidar_row_step                  = 4;
     _mav_type->process_cameras                 = true;
     _mav_type->filter_out_projected_self_frame = true;
     _mav_type->skip_nth_lidar_frame            = 4;               // 20 Hz -> 15 Hz
@@ -307,7 +307,7 @@ void PCLFiltration::removeCloseAndFarPointCloud(PC_OS::Ptr &cloud_out, PC_OS::Pt
   cloud_out           = boost::make_shared<PC_OS>(w, h);
   cloud_out->width    = w;
   cloud_out->height   = h;
-  cloud_out->is_dense = true;
+  cloud_out->is_dense = false;
   cloud_out->header   = cloud_in->header;
 
   size_t count_over = 0;
@@ -687,9 +687,11 @@ void PCLFiltration::publishCloud(const ros::Publisher &pub, const pcl::PointClou
 
 /*//{ invalidatePoint() */
 void PCLFiltration::invalidatePoint(pt_OS &point) {
-  point.x = 0.0f;
-  point.y = 0.0f;
-  point.z = 0.0f;
+  point.x         = nan;
+  point.y         = nan;
+  point.z         = nan;
+  point.range     = 0;
+  point.intensity = 0;
 }
 /*//}*/
 
