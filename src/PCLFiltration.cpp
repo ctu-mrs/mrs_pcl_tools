@@ -62,7 +62,7 @@ void PCLFiltration::onInit() {
     _mav_type->lidar_row_step                  = 1;
     _mav_type->process_cameras                 = true;
     _mav_type->filter_out_projected_self_frame = false;
-    _mav_type->skip_nth_lidar_frame            = 0;          // 15 Hz
+    _mav_type->skip_nth_lidar_frame            = 0;          // 10 Hz
     _mav_type->keep_nth_vert_camera_frame      = 2;          // 20 Hz -> 10 Hz
     _mav_type->keep_nth_front_camera_frame     = 2;          // 20 Hz -> 10 Hz
     _mav_type->focal_length_vert_camera        = 554.25469;  //
@@ -74,7 +74,7 @@ void PCLFiltration::onInit() {
     _mav_type->lidar_row_step                  = 1;
     _mav_type->process_cameras                 = false;
     _mav_type->filter_out_projected_self_frame = false;
-    _mav_type->skip_nth_lidar_frame            = 0;     // 15 Hz
+    _mav_type->skip_nth_lidar_frame            = 0;     // 10 Hz
     _mav_type->keep_nth_vert_camera_frame      = 0;     // no cam
     _mav_type->keep_nth_front_camera_frame     = 0;     // no cam
     _mav_type->focal_length_vert_camera        = 0.0f;  // no cam
