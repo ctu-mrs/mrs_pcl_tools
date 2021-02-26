@@ -7,9 +7,8 @@
   <arg name="depth_republish" default="false" />
   <arg name="rplidar_republish" default="false" />
 
-  <arg name="lidar3d_topic_in" default="os1_cloud_node/points" />
+  <arg name="lidar3d_topic_in" default="os_cloud_nodelet/points" />
   <arg name="lidar3d_publish_cloud_over_max_range" default="false" />
-  <arg name="lidar3d_ring_step" default="1" doc="Keep every ring_step laser row"/>
   <arg name="lidar3d_min_range" default="0.45" />
   <arg name="lidar3d_max_range" default="20.0" />
   <arg name="lidar3d_downsample_row_step" default="1" doc="will keep every n-th row" />
