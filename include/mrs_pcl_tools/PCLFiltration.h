@@ -56,6 +56,10 @@ private:
   uint32_t _lidar3d_max_range_mm;
   uint32_t _lidar3d_filter_intensity_range_mm;
 
+  bool         _lidar3d_dynamic_row_selection_enabled;
+  int          _lidar3d_dynamic_row_selection_iterations;
+  unsigned int _lidar3d_dynamic_row_selection_offset = 0;
+
   /* Depth camera */
   void  depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
   bool  _depth_republish;
