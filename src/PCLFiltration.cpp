@@ -21,8 +21,6 @@ void PCLFiltration::onInit() {
   /* 3D LIDAR */
   param_loader.loadParam("lidar3d/republish", _lidar3d_republish, false);
   param_loader.loadParam("lidar3d/pcl2_over_max_range", _lidar3d_pcl2_over_max_range, false);
-  param_loader.loadParam("lidar3d/row_step", _lidar3d_row_step, 1);
-  param_loader.loadParam("lidar3d/col_step", _lidar3d_col_step, 1);
   param_loader.loadParam("lidar3d/min_range", _lidar3d_min_range_sq, 0.4f);
   param_loader.loadParam("lidar3d/max_range", _lidar3d_max_range_sq, 100.0f);
   _lidar3d_min_range_mm = _lidar3d_min_range_sq * 1000;
@@ -30,20 +28,13 @@ void PCLFiltration::onInit() {
   _lidar3d_min_range_sq *= _lidar3d_min_range_sq;
   _lidar3d_max_range_sq *= _lidar3d_max_range_sq;
 
-  param_loader.loadParam("lidar3d/dynamic_row_selection/enabled", _lidar3d_dynamic_row_selection_enabled, false);
-  param_loader.loadParam("lidar3d/dynamic_row_selection/iterations", _lidar3d_dynamic_row_selection_iterations, 2);
+  param_loader.loadParam("lidar3d/downsampling/dynamic_row_selection", _lidar3d_dynamic_row_selection_enabled, false);
+  param_loader.loadParam("lidar3d/downsampling/row_step", _lidar3d_row_step, 1);
+  param_loader.loadParam("lidar3d/downsampling/col_step", _lidar3d_col_step, 1);
 
-  if (_lidar3d_dynamic_row_selection_enabled) {
-
-    if (_lidar3d_dynamic_row_selection_iterations % 2 != 0) {
-      NODELET_ERROR("[PCLFiltration]: Dynamic selection of lidar rows is enabled, but number of iterations is not even. Ending nodelet.");
-      ros::shutdown();
-    } else {
-      if (_lidar3d_row_step > 1) {
-        NODELET_WARN("[PCLFiltration]: Dynamic selection of lidar rows is enabled. `lidar_row_step` step will be set dynamically.");
-      }
-      _lidar3d_row_step = _lidar3d_dynamic_row_selection_iterations;
-    }
+  if (_lidar3d_dynamic_row_selection_enabled && _lidar3d_row_step % 2 != 0) {
+    NODELET_ERROR("[PCLFiltration]: Dynamic selection of lidar rows is enabled, but `lidar_row_step` is not even. Ending nodelet.");
+    ros::shutdown();
   }
 
   param_loader.loadParam("lidar3d/filter/intensity/enable", _lidar3d_filter_intensity_en, false);
@@ -169,7 +160,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
 
     if (_lidar3d_dynamic_row_selection_enabled) {
       _lidar3d_dynamic_row_selection_offset++;
-      _lidar3d_dynamic_row_selection_offset %= _lidar3d_dynamic_row_selection_iterations;
+      _lidar3d_dynamic_row_selection_offset %= _lidar3d_row_step;
     }
 
     NODELET_INFO_THROTTLE(
