@@ -42,23 +42,22 @@ private:
   void callbackReconfigure(mrs_pcl_tools::pcl_filtration_dynparamConfig &config, uint32_t level);
 
   /* 3D LIDAR */
-  void     lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
-  bool     _lidar3d_republish;
-  bool     _lidar3d_pcl2_over_max_range;
-  bool     _lidar3d_filter_intensity_en;
-  float    _lidar3d_min_range_sq;
-  float    _lidar3d_max_range_sq;
-  float    _lidar3d_filter_intensity_range_sq;
-  int      _lidar3d_filter_intensity_thrd;
-  int      _lidar3d_row_step;
-  int      _lidar3d_col_step;
-  uint32_t _lidar3d_min_range_mm;
-  uint32_t _lidar3d_max_range_mm;
-  uint32_t _lidar3d_filter_intensity_range_mm;
-
+  void         lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
+  bool         _lidar3d_republish;
+  bool         _lidar3d_pcl2_over_max_range;
+  bool         _lidar3d_filter_intensity_en;
   bool         _lidar3d_dynamic_row_selection_enabled;
-  int          _lidar3d_dynamic_row_selection_iterations;
+  float        _lidar3d_min_range_sq;
+  float        _lidar3d_max_range_sq;
+  float        _lidar3d_filter_intensity_range_sq;
+  int          _lidar3d_filter_intensity_thrd;
+  int          _lidar3d_row_step;
+  int          _lidar3d_col_step;
+  uint32_t     _lidar3d_min_range_mm;
+  uint32_t     _lidar3d_max_range_mm;
+  uint32_t     _lidar3d_filter_intensity_range_mm;
   unsigned int _lidar3d_dynamic_row_selection_offset = 0;
+
 
   /* Depth camera */
   void  depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
