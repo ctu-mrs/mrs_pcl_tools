@@ -57,6 +57,18 @@ void PCLFiltration::onInit() {
     _mav_type->focal_length_front_camera       = 303.668661581f;  // 87deg hfov, 640 px width
     _mav_type->vert_camera_max_range           = 4.0f;
     _mav_type->front_camera_max_range          = 10.0f;
+  } else if (mav_type_name == "CTU_CRAS_NORLAB_X500") { // TODO: check these values
+    _mav_type->lidar_col_step                  = 1;
+    _mav_type->lidar_row_step                  = 4;
+    _mav_type->process_cameras                 = true;
+    _mav_type->filter_out_projected_self_frame = true;
+    _mav_type->skip_nth_lidar_frame            = 4;               // 20 Hz -> 15 Hz
+    _mav_type->keep_nth_vert_camera_frame      = 3;               // 30 Hz -> 10 Hz
+    _mav_type->keep_nth_front_camera_frame     = 3;               // 30 Hz -> 10 Hz
+    _mav_type->focal_length_vert_camera        = 186.4f;          // 62deg hfov, 224 px width
+    _mav_type->focal_length_front_camera       = 303.668661581f;  // 87deg hfov, 640 px width
+    _mav_type->vert_camera_max_range           = 4.0f;
+    _mav_type->front_camera_max_range          = 10.0f;
   } else if (mav_type_name == "EXPLORER_DS1") {
     _mav_type->lidar_col_step                  = 1;
     _mav_type->lidar_row_step                  = 1;
