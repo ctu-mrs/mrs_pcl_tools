@@ -1,4 +1,6 @@
 #include "mrs_pcl_tools/PCLFiltration.h"
+#include <limits>
+#include <pcl/filters/crop_box.h>
 
 // 1: new ouster_ros driver; 0: old os1_driver
 #define OUSTER_ORDERING_TRANSPOSE 1
@@ -28,10 +30,27 @@ void PCLFiltration::onInit() {
   _lidar3d_min_range_sq *= _lidar3d_min_range_sq;
   _lidar3d_max_range_sq *= _lidar3d_max_range_sq;
 
+  // load downsampling parameters
   param_loader.loadParam("lidar3d/downsampling/dynamic_row_selection", _lidar3d_dynamic_row_selection_enabled, false);
   param_loader.loadParam("lidar3d/downsampling/row_step", _lidar3d_row_step, 1);
   param_loader.loadParam("lidar3d/downsampling/col_step", _lidar3d_col_step, 1);
 
+  // load cropbox parameters
+  param_loader.loadParam("lidar3d/cropbox/frame_id", _lidar3d_cropbox_frame_id, {});
+  param_loader.loadParam("lidar3d/cropbox/min/x", _lidar3d_cropbox_min.x(), -std::numeric_limits<float>::infinity());
+  param_loader.loadParam("lidar3d/cropbox/min/y", _lidar3d_cropbox_min.y(), -std::numeric_limits<float>::infinity());
+  param_loader.loadParam("lidar3d/cropbox/min/z", _lidar3d_cropbox_min.z(), -std::numeric_limits<float>::infinity());
+
+  param_loader.loadParam("lidar3d/cropbox/max/x", _lidar3d_cropbox_max.x(), std::numeric_limits<float>::infinity());
+  param_loader.loadParam("lidar3d/cropbox/max/y", _lidar3d_cropbox_max.y(), std::numeric_limits<float>::infinity());
+  param_loader.loadParam("lidar3d/cropbox/max/z", _lidar3d_cropbox_max.z(), std::numeric_limits<float>::infinity());
+
+  // by default, use the cropbox filter if any of the crop coordinates is finite
+  const bool cbox_use_default = _lidar3d_cropbox_min.array().isFinite().any() || _lidar3d_cropbox_max.array().isFinite().any();
+  // the user can override this behavior by setting the "lidar3d/cropbox/use" parameter
+  param_loader.loadParam("lidar3d/cropbox/use", _lidar3d_cropbox_use, cbox_use_default);
+
+  // load dynamic row selection
   if (_lidar3d_dynamic_row_selection_enabled && _lidar3d_row_step % 2 != 0) {
     NODELET_ERROR("[PCLFiltration]: Dynamic selection of lidar rows is enabled, but `lidar_row_step` is not even. Ending nodelet.");
     ros::shutdown();
@@ -130,19 +149,31 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
 
     TicToc t;
 
-    unsigned int points_before = msg->height * msg->width;
+    const bool is_ouster = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
+    if (is_ouster)
+      NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::Point.");
+    else
+      NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: pcl::PointXYZI.");
+
+    const unsigned int points_before = msg->height * msg->width;
     unsigned int points_after;
 
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_variant;
     std::variant<PC_OS1::Ptr, PC_I::Ptr> pcl_over_max_range_variant;
 
-    if (hasField("range", msg) && hasField("ring", msg) && hasField("t", msg)) {
-      NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: ouster_ros::Point.");
-      removeCloseAndFarPointCloudOS1(pcl_variant, pcl_over_max_range_variant, points_after, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm,
+    if (is_ouster)
+      removeCloseAndFarPointCloudOS(pcl_variant, pcl_over_max_range_variant, points_after, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_mm,
                                      _lidar3d_max_range_mm, _lidar3d_filter_intensity_en, _lidar3d_filter_intensity_range_mm, _lidar3d_filter_intensity_thrd);
-    } else {
-      NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: pcl::PointXYZI.");
+    else
       removeCloseAndFarPointCloud(pcl_variant, pcl_over_max_range_variant, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_sq, _lidar3d_max_range_sq);
+   
+
+    if (_lidar3d_cropbox_use)
+    {
+      if (is_ouster)
+        cropBoxPointCloud(std::get<PC_OS1::Ptr>(pcl_variant));
+      else
+        cropBoxPointCloud(std::get<PC_I::Ptr>(pcl_variant));
     }
 
     unsigned int width_after;
@@ -304,8 +335,18 @@ void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::
 }
 /*//}*/
 
-/*//{ removeCloseAndFarPointCloudOS1() */
-void PCLFiltration::removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var,
+template <typename PCPtr>
+void PCLFiltration::cropBoxPointCloud(PCPtr pc_ptr)
+{
+  pcl::CropBox<typename PCPtr::element_type::PointType> cb;
+  cb.setInputCloud(pc_ptr);
+  cb.setMin(_lidar3d_cropbox_min);
+  cb.setMax(_lidar3d_cropbox_max);
+  cb.filter(*pc_ptr);
+}
+
+/*//{ removeCloseAndFarPointCloudOS() */
+void PCLFiltration::removeCloseAndFarPointCloudOS(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var,
                                                    std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var, unsigned int &valid_points,
                                                    const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                                    const uint32_t &min_range_mm, const uint32_t &max_range_mm, const bool &filter_intensity,

@@ -4,6 +4,7 @@
 #include "support.h"
 
 #include <variant>
+#include <pcl/filters/crop_box.h>
 
 #include <sensor_msgs/LaserScan.h>
 
@@ -16,6 +17,8 @@ namespace mrs_pcl_tools
 
 /* class PCLFiltration //{ */
 class PCLFiltration : public nodelet::Nodelet {
+
+  using vec4_t = Eigen::Vector4f;
 
 public:
   virtual void onInit();
@@ -53,6 +56,10 @@ private:
   int          _lidar3d_filter_intensity_thrd;
   int          _lidar3d_row_step;
   int          _lidar3d_col_step;
+  bool         _lidar3d_cropbox_use;
+  std::string  _lidar3d_cropbox_frame_id;
+  vec4_t       _lidar3d_cropbox_min;
+  vec4_t       _lidar3d_cropbox_max;
   uint32_t     _lidar3d_min_range_mm;
   uint32_t     _lidar3d_max_range_mm;
   uint32_t     _lidar3d_filter_intensity_range_mm;
@@ -80,7 +87,9 @@ private:
   float _rplidar_voxel_resolution;
 
   /* Functions */
-  void removeCloseAndFarPointCloudOS1(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
+  template <typename PCPtr>
+  void cropBoxPointCloud(PCPtr pc_ptr);
+  void removeCloseAndFarPointCloudOS(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
                                       unsigned int &valid_points, const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                       const uint32_t &min_range_mm, const uint32_t &max_range_mm, const bool &filter_intensity,
                                       const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd);
