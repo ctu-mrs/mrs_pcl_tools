@@ -3,20 +3,20 @@
   <!-- Filtration parameters -->
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
 
-  <arg name="lidar3d_republish" default="true" />
+  <arg name="lidar3d/republish" default="true" />
   <arg name="depth_republish" default="false" />
   <arg name="rplidar_republish" default="false" />
 
-  <arg name="lidar3d_topic_in" default="os_cloud_nodelet/points" />
-  <arg name="lidar3d_publish_cloud_over_max_range" default="false" />
-  <arg name="lidar3d_min_range" default="0.45" />
-  <arg name="lidar3d_max_range" default="20.0" />
+  <arg name="lidar3d/topic_in" default="os_cloud_nodelet/points" />
+  <arg name="lidar3d/publish_cloud_over_max_range" default="false" />
+  <arg name="lidar3d/min_range" default="0.45" />
+  <arg name="lidar3d/max_range" default="20.0" />
   <arg name="lidar3d/downsampling/dynamic_row_selection" default="false" />
   <arg name="lidar3d/downsampling/row_step" default="1" doc="dynamic=false: will keep every n-th row; dynamic=true: number of iterations" />
   <arg name="lidar3d/downsampling/col_step" default="1" doc="will keep every n-th column" />
-  <arg name="lidar3d_filter_intensity_en" default="false" />
-  <arg name="lidar3d_filter_intensity_thrd" default="100" />
-  <arg name="lidar3d_filter_intensity_range" default="10.0" />
+  <arg name="lidar3d/filter_intensity_en" default="false" />
+  <arg name="lidar3d/filter_intensity_thrd" default="100" />
+  <arg name="lidar3d/filter_intensity_range" default="10.0" />
 
   <arg name="depth_topic_in" default="rs_d435/points" />
   <arg name="depth_image_format" default="true" doc="if depth data come in sensor_msgs/Image format" />
@@ -38,16 +38,20 @@
     <node pkg="nodelet" type="nodelet" name="pcl_filtration" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
 
       <!-- Parameters -->
-      <param name="lidar3d/republish" type="bool" value="$(arg lidar3d_republish)" />
-      <param name="lidar3d/pcl2_over_max_range" type="bool" value="$(arg lidar3d_publish_cloud_over_max_range)" />
-      <param name="lidar3d/min_range" type="double" value="$(arg lidar3d_min_range)" />
-      <param name="lidar3d/max_range" type="double" value="$(arg lidar3d_max_range)" />
+      <param name="uav_name" type="string" value="$(arg UAV_NAME)" />
+
+      <param name="lidar3d/republish" type="bool" value="$(arg lidar3d/republish)" />
+      <param name="lidar3d/pcl2_over_max_range" type="bool" value="$(arg lidar3d/publish_cloud_over_max_range)" />
+      <param name="lidar3d/min_range" type="double" value="$(arg lidar3d/min_range)" />
+      <param name="lidar3d/max_range" type="double" value="$(arg lidar3d/max_range)" />
+      <param name="lidar3d/cropbox/frame_id" type="string" value="gps_origin" />
+      <param name="lidar3d/cropbox/min/z" type="double" value="2.0" />
       <param name="lidar3d/downsampling/dynamic_row_selection" type="bool" value="$(arg lidar3d/downsampling/dynamic_row_selection)" />
       <param name="lidar3d/downsampling/row_step" type="int" value="$(arg lidar3d/downsampling/row_step)" />
       <param name="lidar3d/downsampling/col_step" type="int" value="$(arg lidar3d/downsampling/col_step)" />
-      <param name="lidar3d/filter/intensity/enable" type="bool" value="$(arg lidar3d_filter_intensity_en)" />
-      <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d_filter_intensity_thrd)" />
-      <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d_filter_intensity_range)" />
+      <param name="lidar3d/filter/intensity/enable" type="bool" value="$(arg lidar3d/filter_intensity_en)" />
+      <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d/filter_intensity_thrd)" />
+      <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d/filter_intensity_range)" />
 
       <param name="depth/republish" type="bool" value="$(arg depth_republish)" />
       <param name="depth/pcl2_over_max_range" type="bool" value="$(arg depth_publish_cloud_over_max_range)" />
@@ -65,13 +69,13 @@
       <param name="rplidar/voxel_resolution" type="double" value="0.05" />
 
       <!-- Subscribers -->
-      <remap from="~lidar3d_in" to="$(arg lidar3d_topic_in)" />
+      <remap from="~lidar3d_in" to="$(arg lidar3d/topic_in)" />
       <remap from="~depth_in" to="$(arg depth_topic_in)" />
       <remap from="~rplidar_in" to="rplidar/scan_raw" />
 
       <!-- Publishers -->
-      <remap from="~lidar3d_out" to="$(arg lidar3d_topic_in)_processed" />
-      <remap from="~lidar3d_over_max_range_out" to="$(arg lidar3d_topic_in)_over_max_range" />
+      <remap from="~lidar3d_out" to="$(arg lidar3d/topic_in)_processed" />
+      <remap from="~lidar3d_over_max_range_out" to="$(arg lidar3d/topic_in)_over_max_range" />
       <remap from="~depth_out" to="$(arg depth_topic_in)_processed" />
       <remap from="~depth_over_max_range_out" to="$(arg depth_topic_in)_over_max_range" />
       <remap from="~rplidar_out" to="rplidar/scan_processed" />

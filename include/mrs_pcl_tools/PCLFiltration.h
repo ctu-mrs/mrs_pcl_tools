@@ -7,6 +7,7 @@
 #include <pcl/filters/crop_box.h>
 
 #include <sensor_msgs/LaserScan.h>
+#include <mrs_lib/transformer.h>
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
@@ -35,6 +36,8 @@ private:
   ros::Publisher _pub_depth;
   ros::Publisher _pub_depth_over_max_range;
   ros::Publisher _pub_rplidar;
+
+  mrs_lib::Transformer _transformer;
 
   boost::recursive_mutex                               config_mutex_;
   typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;

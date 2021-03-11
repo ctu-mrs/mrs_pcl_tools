@@ -1,4 +1,6 @@
 #include "mrs_pcl_tools/PCLFiltration.h"
+#include "geometry_msgs/Transform.h"
+#include "pcl_conversions/pcl_conversions.h"
 #include <limits>
 #include <pcl/filters/crop_box.h>
 
@@ -19,6 +21,8 @@ void PCLFiltration::onInit() {
 
   // Get parameters from config file
   mrs_lib::ParamLoader param_loader(nh, "PCLFiltration");
+
+  const auto uav_name = param_loader.loadParam2<std::string>("uav_name");
 
   /* 3D LIDAR */
   param_loader.loadParam("lidar3d/republish", _lidar3d_republish, false);
@@ -86,6 +90,10 @@ void PCLFiltration::onInit() {
     NODELET_ERROR("[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
     ros::shutdown();
   }
+
+  // setup transformer
+  _transformer = mrs_lib::Transformer("PCLFiltration", uav_name);
+  _lidar3d_cropbox_frame_id = _transformer.resolveFrameName(_lidar3d_cropbox_frame_id);
 
 
   if (_lidar3d_republish) {
@@ -339,6 +347,25 @@ template <typename PCPtr>
 void PCLFiltration::cropBoxPointCloud(PCPtr pc_ptr)
 {
   pcl::CropBox<typename PCPtr::element_type::PointType> cb;
+
+  if (!_lidar3d_cropbox_frame_id.empty())
+  {
+    ros::Time stamp;
+    pcl_conversions::fromPCL(pc_ptr->header.stamp, stamp);
+    const auto tf_opt = _transformer.getTransform(pc_ptr->header.frame_id, _lidar3d_cropbox_frame_id, stamp);
+    if (tf_opt.has_value())
+    {
+      const Eigen::Affine3d tf = tf_opt->getTransformEigen();
+      cb.setTransform(tf.cast<float>());
+    }
+    else
+    {
+      ROS_WARN_STREAM_THROTTLE(1.0, "[PCLFiltration]: Could not find pointcloud transformation (from \"" << pc_ptr->header.frame_id << "\" to \"" << _lidar3d_cropbox_frame_id << "\") ! Not applying CropBox filter.");
+      return;
+    }
+  }
+
+  cb.setNegative(false);
   cb.setMin(_lidar3d_cropbox_min);
   cb.setMax(_lidar3d_cropbox_max);
   cb.setInputCloud(pc_ptr);
