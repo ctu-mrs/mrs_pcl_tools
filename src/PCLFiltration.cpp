@@ -339,9 +339,9 @@ template <typename PCPtr>
 void PCLFiltration::cropBoxPointCloud(PCPtr pc_ptr)
 {
   pcl::CropBox<typename PCPtr::element_type::PointType> cb;
-  cb.setInputCloud(pc_ptr);
   cb.setMin(_lidar3d_cropbox_min);
   cb.setMax(_lidar3d_cropbox_max);
+  cb.setInputCloud(pc_ptr);
   cb.filter(*pc_ptr);
 }
 

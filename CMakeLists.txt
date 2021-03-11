@@ -1,10 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(mrs_pcl_tools)
 
-# we really need to replace the flags because
-# we cannot build this with march=native
-set(CMAKE_CXX_FLAGS "-std=c++17")
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
