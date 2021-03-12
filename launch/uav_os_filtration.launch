@@ -44,8 +44,9 @@
       <param name="lidar3d/pcl2_over_max_range" type="bool" value="$(arg lidar3d/publish_cloud_over_max_range)" />
       <param name="lidar3d/min_range" type="double" value="$(arg lidar3d/min_range)" />
       <param name="lidar3d/max_range" type="double" value="$(arg lidar3d/max_range)" />
-      <param name="lidar3d/cropbox/frame_id" type="string" value="gps_origin" />
-      <param name="lidar3d/cropbox/min/z" type="double" value="2.0" />
+      <param name="lidar3d/ground_removal/use" type="bool" value="true" />
+      <param name="lidar3d/ground_removal/range/use" type="bool" value="true" />
+      <param name="lidar3d/ground_removal/frame_id" type="string" value="gps_origin" />
       <param name="lidar3d/downsampling/dynamic_row_selection" type="bool" value="$(arg lidar3d/downsampling/dynamic_row_selection)" />
       <param name="lidar3d/downsampling/row_step" type="int" value="$(arg lidar3d/downsampling/row_step)" />
       <param name="lidar3d/downsampling/col_step" type="int" value="$(arg lidar3d/downsampling/col_step)" />
@@ -72,6 +73,7 @@
       <remap from="~lidar3d_in" to="$(arg lidar3d/topic_in)" />
       <remap from="~depth_in" to="$(arg depth_topic_in)" />
       <remap from="~rplidar_in" to="rplidar/scan_raw" />
+      <remap from="~rangefinder_in" to="mavros/distance_sensor/garmin" />
 
       <!-- Publishers -->
       <remap from="~lidar3d_out" to="$(arg lidar3d/topic_in)_processed" />

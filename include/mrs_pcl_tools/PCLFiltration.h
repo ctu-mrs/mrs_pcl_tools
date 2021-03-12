@@ -3,11 +3,17 @@
 /* includes //{ */
 #include "support.h"
 
+#include <eigen3/Eigen/src/Geometry/Quaternion.h>
 #include <variant>
 #include <pcl/filters/crop_box.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/sample_consensus/ransac.h>
+#include <pcl/sample_consensus/sac_model_perpendicular_plane.h>
 
 #include <sensor_msgs/LaserScan.h>
+#include <sensor_msgs/Range.h>
 #include <mrs_lib/transformer.h>
+#include <mrs_lib/subscribe_handler.h>
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
@@ -19,7 +25,9 @@ namespace mrs_pcl_tools
 /* class PCLFiltration //{ */
 class PCLFiltration : public nodelet::Nodelet {
 
+  using vec3_t = Eigen::Vector3f;
   using vec4_t = Eigen::Vector4f;
+  using quat_t = Eigen::Quaternionf;
 
 public:
   virtual void onInit();
@@ -30,9 +38,13 @@ private:
   ros::Subscriber _sub_lidar3d;
   ros::Subscriber _sub_depth;
   ros::Subscriber _sub_rplidar;
+  mrs_lib::SubscribeHandler<sensor_msgs::Range> _sh_range;
 
   ros::Publisher _pub_lidar3d;
   ros::Publisher _pub_lidar3d_over_max_range;
+  ros::Publisher _pub_lidar3d_below_ground;
+  ros::Publisher _pub_fitted_plane;
+  ros::Publisher _pub_ground_point;
   ros::Publisher _pub_depth;
   ros::Publisher _pub_depth_over_max_range;
   ros::Publisher _pub_rplidar;
@@ -50,22 +62,32 @@ private:
   /* 3D LIDAR */
   void         lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
   bool         _lidar3d_republish;
-  bool         _lidar3d_pcl2_over_max_range;
-  bool         _lidar3d_filter_intensity_en;
   bool         _lidar3d_dynamic_row_selection_enabled;
-  float        _lidar3d_min_range_sq;
-  float        _lidar3d_max_range_sq;
+
+  bool         _lidar3d_rangeclip_use;
+  float        _lidar3d_rangeclip_min_sq;
+  float        _lidar3d_rangeclip_max_sq;
+  uint32_t     _lidar3d_rangeclip_min_mm;
+  uint32_t     _lidar3d_rangeclip_max_mm;
+
+  bool         _lidar3d_filter_intensity_en;
   float        _lidar3d_filter_intensity_range_sq;
+  uint32_t     _lidar3d_filter_intensity_range_mm;
   int          _lidar3d_filter_intensity_thrd;
   int          _lidar3d_row_step;
   int          _lidar3d_col_step;
+
+  bool         _lidar3d_grrem_use;
+  bool         _lidar3d_grrem_range_use;
+  std::string  _lidar3d_grrem_frame_id;
+  float        _lidar3d_grrem_ransac_max_inlier_dist;
+  float        _lidar3d_grrem_ransac_max_angle_diff;
+  float        _lidar3d_grrem_offset;
+
   bool         _lidar3d_cropbox_use;
   std::string  _lidar3d_cropbox_frame_id;
   vec4_t       _lidar3d_cropbox_min;
   vec4_t       _lidar3d_cropbox_max;
-  uint32_t     _lidar3d_min_range_mm;
-  uint32_t     _lidar3d_max_range_mm;
-  uint32_t     _lidar3d_filter_intensity_range_mm;
   unsigned int _lidar3d_dynamic_row_selection_offset = 0;
 
 
@@ -90,16 +112,20 @@ private:
   float _rplidar_voxel_resolution;
 
   /* Functions */
-  template <typename PCPtr>
-  void cropBoxPointCloud(PCPtr pc_ptr);
+  template <typename PC>
+  void process_msg(typename boost::shared_ptr<PC> pc_ptr);
+
+  template <typename PC>
+  typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>& inout_pc_ptr);
+  template <typename PC>
+  void cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc_ptr);
   void removeCloseAndFarPointCloudOS(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
                                       unsigned int &valid_points, const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                       const uint32_t &min_range_mm, const uint32_t &max_range_mm, const bool &filter_intensity,
                                       const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd);
 
-  void removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
-                                   const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const float &min_range_sq,
-                                   const float &max_range_sq);
+  template <typename PC>
+  typename boost::shared_ptr<PC> removeCloseAndFarPointCloud(typename boost::shared_ptr<PC>& inout_pc_ptr);
 
   std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                                              const float &min_range_sq, const float &max_range_sq);
@@ -108,6 +134,8 @@ private:
 
   template <typename T>
   void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);
+
+  visualization_msgs::MarkerArray plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::Header& header);
 };
 //}
 
