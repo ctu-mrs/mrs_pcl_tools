@@ -1,11 +1,4 @@
 #include "mrs_pcl_tools/PCLFiltration.h"
-#include "geometry_msgs/PointStamped.h"
-#include "geometry_msgs/Transform.h"
-#include "pcl_conversions/pcl_conversions.h"
-#include "sensor_msgs/Range.h"
-#include "visualization_msgs/MarkerArray.h"
-#include <limits>
-#include <pcl/filters/crop_box.h>
 
 // 1: new ouster_ros driver; 0: old os1_driver
 #define OUSTER_ORDERING_TRANSPOSE 1
@@ -464,9 +457,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeBelowGround(typename boost::
   if (tf_opt.has_value())
   {
     const Eigen::Affine3f tf = tf_opt->getTransformEigen().template cast<float>();
-    ROS_ERROR_STREAM("BEFORE" << ground_normal);
     ground_normal = tf.rotation()*vec3_t(0, 0, 1);
-    ROS_ERROR_STREAM("AFTER" << ground_normal);
     // if the range measurement is not used for estimation of the ground point, assume that the static frame starts at ground level
     if (!range_meas_used)
       ground_point = tf*vec3_t(0, 0, 0);
@@ -476,8 +467,15 @@ typename boost::shared_ptr<PC> PCLFiltration::removeBelowGround(typename boost::
     ROS_WARN_STREAM_THROTTLE(1.0, "[PCLFiltration]: Could not get transformation from " << _lidar3d_grrem_frame_id << " to " << inout_pc->header.frame_id << ", ground plane may be imprecise.");
   }
 
+  // simplify the fitting by filtering the input cloud a bit
+  typename PC::Ptr pc_filtered = boost::make_shared<PC>();
+  pcl::VoxelGrid<pt_t> vg;
+  vg.setInputCloud(inout_pc);
+  vg.setLeafSize(0.5, 0.5, 0.5);
+  vg.filter(*pc_filtered);
+
   // prepare a SAC plane model with an angular constraint according to the estimated plane normal
-  typename pcl::SampleConsensusModelPerpendicularPlane<pt_t>::Ptr model = boost::make_shared<pcl::SampleConsensusModelPerpendicularPlane<pt_t>>(inout_pc, true);
+  typename pcl::SampleConsensusModelPerpendicularPlane<pt_t>::Ptr model = boost::make_shared<pcl::SampleConsensusModelPerpendicularPlane<pt_t>>(pc_filtered, true);
   model->setAxis(ground_normal);
   model->setEpsAngle(_lidar3d_grrem_ransac_max_angle_diff);
 
@@ -487,7 +485,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeBelowGround(typename boost::
   if (!ransac.computeModel())
   {
     ROS_ERROR_STREAM_THROTTLE(1.0, "[PCLFiltration]: Could not fit a ground-plane model! Skipping ground removal.");
-    return boost::shared_ptr<PC>();
+    return boost::make_shared<PC>();
   }
 
   // retreive the fitted model
@@ -498,8 +496,11 @@ typename boost::shared_ptr<PC> PCLFiltration::removeBelowGround(typename boost::
   {
     /* coeffs.block<3, 1>(0, 0) = -coeffs.block<3, 1>(0, 0); */
     /* coeffs(3) = -coeffs(3); */
+    ROS_INFO("[]: FLIPPIN FLIP");
     coeffs = -coeffs;
   }
+  else
+    ROS_INFO("[]: NO FLIP");
   // just some helper variables
   const vec3_t fit_n = coeffs.block<3, 1>(0, 0);
   const float fit_d = coeffs(3);
@@ -509,7 +510,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeBelowGround(typename boost::
   if (ground_pt_dist >  _lidar3d_grrem_ransac_max_inlier_dist)
   {
     ROS_ERROR_STREAM_THROTTLE(1.0, "[PCLFiltration]: The RANSAC-fitted ground-plane model [" << coeffs.transpose() << "] is too far from the measured ground (" << ground_pt_dist << "m > " << _lidar3d_grrem_ransac_max_inlier_dist << "m)! Skipping ground removal.");
-    return boost::shared_ptr<PC>();
+    return boost::make_shared<PC>();
   }
 
   // find indices of points above the ground with the specified offset

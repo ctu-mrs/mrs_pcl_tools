@@ -7,13 +7,24 @@
 #include <variant>
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/filters/voxel_grid.h>
 #include <pcl/sample_consensus/ransac.h>
 #include <pcl/sample_consensus/sac_model_perpendicular_plane.h>
+#include <pcl_conversions/pcl_conversions.h>
+
+#include <mrs_lib/transformer.h>
+#include <mrs_lib/subscribe_handler.h>
 
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/Range.h>
-#include <mrs_lib/transformer.h>
-#include <mrs_lib/subscribe_handler.h>
+#include <sensor_msgs/Range.h>
+#include <geometry_msgs/PointStamped.h>
+#include <geometry_msgs/Transform.h>
+#include <visualization_msgs/MarkerArray.h>
+
+#include <boost/smart_ptr/make_shared_array.hpp>
+#include <limits>
+
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 

@@ -1,11 +1,13 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(mrs_pcl_tools)
 
-set(CMAKE_CXX_FLAGS "")
+# set(CMAKE_CXX_FLAGS "")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+add_definitions(-g)
+add_definitions(-O0)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)

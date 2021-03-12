@@ -22,6 +22,7 @@
 #include <pcl_ros/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/impl/voxel_grid.hpp>
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/impl/crop_box.hpp>
 #include <pcl/filters/fast_bilateral_omp.h>
