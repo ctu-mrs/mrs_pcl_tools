@@ -65,8 +65,8 @@ void PCLFiltration::onInit() {
     _mav_type->skip_nth_lidar_frame            = 4;           // 20 Hz -> 15 Hz
     _mav_type->keep_nth_vert_camera_frame      = 2;           // 20 Hz -> 10 Hz
     _mav_type->keep_nth_front_camera_frame     = 2;           // 20 Hz -> 10 Hz
-    _mav_type->focal_length_vert_camera        = 554.25469f;  //
-    _mav_type->focal_length_front_camera       = 1108.5f;     //
+    _mav_type->focal_length_vert_camera        = 686.32f;     // hfov -> 1.50098
+    _mav_type->focal_length_front_camera       = 671.28f;     //
     _mav_type->vert_camera_max_range           = 10.0f;
     _mav_type->front_camera_max_range          = 10.0f;
   } else if (mav_type_name == "EXPLORER_DS1") {
