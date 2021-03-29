@@ -3,6 +3,7 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/pcl_base.h>
+#include <pcl/point_traits.h>
 
 // 1: new ouster_ros driver; 0: old os1_driver
 #define OUSTER_ORDERING_TRANSPOSE 1
@@ -190,7 +191,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
   if (is_ouster)
   {
     NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: ouster_ros::Point.");
-    PC_OS1::Ptr cloud = boost::make_shared<PC_OS1>();
+    PC_OS::Ptr cloud = boost::make_shared<PC_OS>();
     pcl::fromROSMsg(*msg, *cloud);
     process_msg(cloud);
   }
@@ -221,8 +222,10 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
 
   if (_lidar3d_rangeclip_use)
   {
-    const typename PC::Ptr pcl_over_max_range = removeCloseAndFarPointCloud(pc_ptr);
-    _pub_lidar3d_over_max_range.publish(pcl_over_max_range);
+    const bool publish_removed = _pub_lidar3d_over_max_range.getNumSubscribers() > 0;
+    const typename PC::Ptr pcl_over_max_range = removeCloseAndFar(pc_ptr, publish_removed);
+    if (publish_removed)
+      _pub_lidar3d_over_max_range.publish(pcl_over_max_range);
   }
 
   if (_lidar3d_cropbox_use)
@@ -318,117 +321,206 @@ void PCLFiltration::rplidarCallback([[maybe_unused]] const sensor_msgs::LaserSca
 }
 //}
 
-/*//{ removeCloseAndFarPointCloud() */
-/* void PCLFiltration::removeCloseAndFarPointCloud(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var, */
-/*                                                 const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range, const float &min_range_sq, */
-/*                                                 const float &max_range_sq) { */
-template <typename PC>
-typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarPointCloud(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed)
+template <typename pt_t>
+std::tuple<bool, std::size_t> getFieldOffset(const std::string& field_name)
 {
+  std::vector<pcl::PCLPointField> fields;
+  const int range_idx = pcl::getFieldIndex<pt_t>(field_name, fields);
+  if (range_idx == -1)
+    return {false, 0};
+  const std::size_t range_offset = fields.at(range_idx).offset;
+  return {true, range_offset};
+}
 
-  // Convert to pcl object
-  typename PC::Ptr cloud_over_max_range = boost::make_shared<PC>();
-  cloud_over_max_range->header = inout_pc->header;
-  cloud_over_max_range->points.resize(inout_pc->size());
+template <typename T, typename pt_t>
+T getFieldValue(const pt_t& point, std::size_t field_offset)
+{
+  /* T val; */
+  /* pcl::getFieldValue(point, field_offset, val); */
+  const std::uint8_t* pt_data = reinterpret_cast<const std::uint8_t*>(&(point));
+  T field_value = 0;
+  memcpy(&field_value, pt_data + field_offset, sizeof(T));
+  return field_value;
+}
 
-  size_t valid_it = 0;
-  size_t remov_it = 0;
-  const size_t cloud_size = inout_pc->points.size();
-  for (const auto& pt : *inout_pc)
+/*//{ removeCloseAndFar() */
+template <typename PC>
+typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFar(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed)
+{
+  using pt_t = typename PC::PointType;
+
+  // Prepare pointcloud of removed points
+  typename PC::Ptr removed_pc = boost::make_shared<PC>();
+  removed_pc->header = inout_pc->header;
+  if (return_removed)
+    removed_pc->resize(inout_pc->size());
+  size_t removed_it = 0;
+
+  // Attempt to get the range field name's index
+  const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
+  if (range_exists)
+    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
+  else
+    ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
+
+  for (auto& point : inout_pc->points)
   {
-    const vec3_t& cur_pt_eig = pt.getArray3fMap();
-    const float range_sq = cur_pt_eig.norm();
+    bool invalid = false;
 
-    if (range_sq >= _lidar3d_rangeclip_min_sq && range_sq <= _lidar3d_rangeclip_max_sq)
+    // if the range field is available, use it
+    if (range_exists)
     {
-      inout_pc->points.at(valid_it++) = pt;
+      // Get the range (in millimeters)
+      const auto range = getFieldValue<uint32_t>(point, range_offset);
+      invalid = range < _lidar3d_rangeclip_min_mm || range > _lidar3d_rangeclip_max_mm;
     }
-    else if (cur_pt_eig.allFinite())
+    // otherwise, just calculate the range as the norm
+    else
     {
-      cloud_over_max_range->points.at(remov_it++) = pt;
+      const vec3_t pt = point.getArray3fMap();
+      const float range_sq = pt.squaredNorm();
+      invalid = range_sq < _lidar3d_rangeclip_min_sq || range_sq > _lidar3d_rangeclip_max_sq;
+    }
+
+    if (invalid)
+    {
+      if (return_removed)
+        removed_pc->at(removed_it++) = point;
+      invalidatePoint(point);
     }
   }
 
-  // Resize both clouds
-  inout_pc->points.resize(valid_it);
-  inout_pc->height   = 1;
-  inout_pc->width    = valid_it;
-  inout_pc->is_dense = false;
-
-  cloud_over_max_range->points.resize(remov_it);
-  cloud_over_max_range->height   = 1;
-  cloud_over_max_range->width    = remov_it;
-  cloud_over_max_range->is_dense = false;
-
-  return cloud_over_max_range;
+  return removed_pc;
 }
 /*//}*/
 
-/*//{ removeCloseAndFarPointCloudOS() */
-template <>
-typename boost::shared_ptr<PC_OS1>  PCLFiltration::removeCloseAndFarPointCloud(typename boost::shared_ptr<PC_OS1>& inout_pc, const bool return_removed)
+/*//{ removeCloseAndFarAndLowIntensity() */
+template <typename PC>
+typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed)
 {
-  using pt_t = typename PC_OS1::PointType;
-  const unsigned int w = inout_pc->width / _lidar3d_col_step;
-  const unsigned int h = inout_pc->height / _lidar3d_row_step;
-  constexpr float nan = std::numeric_limits<float>::quiet_NaN();
-  size_t valid_points = 0;
+  using pt_t = typename PC::PointType;
 
-  PC_OS1::Ptr cloud_over_max_range = boost::make_shared<PC_OS1>();
-  cloud_over_max_range->header = inout_pc->header;
-  cloud_over_max_range->points.resize(inout_pc->size());
+  // Prepare pointcloud of removed points
+  typename PC::Ptr removed_pc = boost::make_shared<PC>();
+  removed_pc->header = inout_pc->header;
+  if (return_removed)
+    removed_pc->resize(inout_pc->size());
+  size_t removed_it = 0;
 
-  size_t remov_it = 0;
-  // select the order of looping based on the ouster driver version...
-#if OUSTER_ORDERING_TRANSPOSE
-  const unsigned int start_ring = _lidar3d_dynamic_row_selection_enabled ? 0 : _lidar3d_row_step - 1;
-  for (unsigned int j = _lidar3d_col_step - 1; j < w; j += _lidar3d_col_step) {
-    const unsigned int c = j / _lidar3d_col_step;
-    for (unsigned int i = start_ring + _lidar3d_dynamic_row_selection_offset; i < h; i += _lidar3d_row_step) {
-      const unsigned int r   = i / _lidar3d_row_step;
-      const unsigned int idx = i * w + j;
-#else
-  for (unsigned int j = 0; j < w; j += _lidar3d_col_step) {
-    const unsigned int c = j / _lidar3d_col_step;
-    for (unsigned int i = 0 + _lidar3d_dynamic_row_selection_offset; i < msg->height; i += _lidar3d_row_step) {
-      const unsigned int r   = i / _lidar3d_row_step;
-      const unsigned int idx = j * h + i;
-#endif
-
-      pt_OS1& point = inout_pc->at(idx);
-      ROS_DEBUG("j|i|idx|c|r %d|%d|%d|%d|%d", j, i, idx, c, r);
-      ROS_DEBUG("... xyz|ring (%0.1f %0.1f %0.1f)|%d", point.x, point.y, point.z, point.ring);
-
-      point.ring = r;
-
-  for (auto& point : *inout_pc)
+  // Attempt to get the intensity field name's index
+  const auto [intensity_exists, intensity_offset] = getFieldOffset<pt_t>("intensity");
+  if (intensity_exists)
   {
-    if (point.range >= _lidar3d_rangeclip_min_mm && point.range <= _lidar3d_rangeclip_max_mm)
-    { // point is within valid range
-      // check if filtering by intensity is enabled and if so, do it
-      if (_lidar3d_filter_intensity_en && point.intensity < _lidar3d_filter_intensity_thrd && point.range < _lidar3d_filter_intensity_range_mm)
-        invalidatePoint(point, nan);
-      else
-        valid_points++;
+    ROS_WARN("[PCLFiltration] Unable to find field name \"intensity\" in point type.");
+    return removeCloseAndFar(inout_pc, return_removed);
+  }
+
+  // Attempt to get the range field name's index
+  const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
+  if (range_exists)
+    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
+  else
+    ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
+
+  for (auto& point : inout_pc->points)
+  {
+    // Get the intensity
+    const auto intensity = getFieldValue<float>(point, intensity_offset);
+
+    bool invalid_range = false;
+    bool invalid_intensity = false;
+    // if the range field is available, use it
+    if (range_exists) // nevermind this condition inside a loop - the branch predictor will optimize this out easily
+    {
+      const auto range = getFieldValue<uint32_t>(point, range_offset);
+      invalid_range = range < _lidar3d_rangeclip_min_mm || range > _lidar3d_rangeclip_max_mm;
+      invalid_intensity = intensity < _lidar3d_filter_intensity_thrd && range < _lidar3d_filter_intensity_range_mm;
     }
+    // otherwise, just calculate the range as the norm
     else
-    { // point is within minimal or outside maximal range
-      invalidatePoint(point, nan);
-      cloud_over_max_range->at(remov_it++) = point;
+    {
+      const vec3_t pt = point.getArray3fMap();
+      const float range_sq = pt.squaredNorm();
+      invalid_range = range_sq < _lidar3d_rangeclip_min_sq || range_sq > _lidar3d_rangeclip_max_sq;
+      invalid_intensity = intensity < _lidar3d_filter_intensity_thrd && range_sq < _lidar3d_filter_intensity_range_sq;
+    }
+
+    // check the removal condition
+    if (invalid_range || invalid_intensity)
+    {
+      if (return_removed)
+        removed_pc->at(removed_it++) = point;
+      invalidatePoint(point);
     }
   }
 
-  /* pcl::PassThrough<pt_t> passt(true); */
-  /* passt.setFilterFieldName("range"); */
-  /* passt.setFilterLimits(_lidar3d_rangeclip_min_mm, _lidar3d_rangeclip_max_mm); */
-  /* passt.setInputCloud(inout_pc); */
-
-  /* passt.setNegative(true); */
-
-  cloud_over_max_range->resize(remov_it);
-  cloud_over_max_range->is_dense = false;
-  return cloud_over_max_range;
+  return removed_pc;
 }
+/*//}*/
+
+/*//{ removeLowIntensity() */
+template <typename PC>
+typename boost::shared_ptr<PC> PCLFiltration::removeLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed)
+{
+  using pt_t = typename PC::PointType;
+
+  // Prepare pointcloud of removed points
+  typename PC::Ptr removed_pc = boost::make_shared<PC>();
+  removed_pc->header = inout_pc->header;
+  if (return_removed)
+    removed_pc->resize(inout_pc->size());
+  size_t removed_it = 0;
+
+  // Attempt to get the intensity field name's index
+  const auto [intensity_exists, intensity_offset] = getFieldOffset<pt_t>("intensity");
+  if (intensity_exists)
+  {
+    ROS_WARN("[PCLFiltration] Unable to find field name \"intensity\" in point type.");
+    return removed_pc;
+  }
+
+  // Attempt to get the range field name's index
+  const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
+  if (range_exists)
+    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
+  else
+    ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
+
+  for (auto& point : inout_pc->points)
+  {
+    const auto intensity = getFieldValue<float>(point, intensity_offset);
+    // check the removal condition
+    if (intensity < _lidar3d_filter_intensity_thrd)
+    {
+      bool invalid = false;
+
+      // if the range field is available, use it
+      if (range_exists)
+      {
+        // Get the range (in millimeters)
+        const auto range = getFieldValue<uint32_t>(point, range_offset);
+        invalid = range < _lidar3d_filter_intensity_range_mm;
+      }
+      // otherwise, just calculate the range as the norm
+      else
+      {
+        const vec3_t pt = point.getArray3fMap();
+        const float range_sq = pt.squaredNorm();
+        invalid = range_sq < _lidar3d_filter_intensity_range_sq;
+      }
+
+      if (invalid)
+      {
+        if (return_removed)
+          removed_pc->at(removed_it++) = point;
+        invalidatePoint(point);
+      }
+    }
+  }
+
+  return removed_pc;
+}
+
 /*//}*/
 
 /* removeBelowGround() //{ */
@@ -664,7 +756,9 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const 
 /*//}*/
 
 /*//{ invalidatePoint() */
-void PCLFiltration::invalidatePoint(pt_OS1 &point, const float inv_value) {
+template <typename pt_t>
+void PCLFiltration::invalidatePoint(pt_t &point, const float inv_value)
+{
   point.x = inv_value;
   point.y = inv_value;
   point.z = inv_value;

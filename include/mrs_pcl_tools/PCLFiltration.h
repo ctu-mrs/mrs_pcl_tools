@@ -131,18 +131,25 @@ private:
   typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
   template <typename PC>
   void cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc_ptr);
-  void removeCloseAndFarPointCloudOS(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
+  void removeCloseAndFarPointCloudOS(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
                                       unsigned int &valid_points, const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                       const uint32_t &min_range_mm, const uint32_t &max_range_mm, const bool &filter_intensity,
                                       const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd);
 
   template <typename PC>
-  typename boost::shared_ptr<PC> removeCloseAndFarPointCloud(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
+  typename boost::shared_ptr<PC> removeCloseAndFar(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
+
+  template <typename PC>
+  typename boost::shared_ptr<PC> removeLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
+
+  template <typename PC>
+  typename boost::shared_ptr<PC> removeCloseAndFarAndLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
 
   std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                                              const float &min_range_sq, const float &max_range_sq);
 
-  void invalidatePoint(pt_OS1 &point, const float inv_value = std::numeric_limits<float>::quiet_NaN());
+  template <typename pt_t>
+  void invalidatePoint(pt_t &point, const float inv_value = std::numeric_limits<float>::quiet_NaN());
 
   template <typename T>
   void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);
