@@ -88,12 +88,13 @@ private:
   int          _lidar3d_row_step;
   int          _lidar3d_col_step;
 
-  bool         _lidar3d_grrem_use;
-  bool         _lidar3d_grrem_range_use;
-  std::string  _lidar3d_grrem_frame_id;
-  float        _lidar3d_grrem_ransac_max_inlier_dist;
-  float        _lidar3d_grrem_ransac_max_angle_diff;
-  float        _lidar3d_grrem_offset;
+  bool         _lidar3d_groundremoval_use;
+  bool         _lidar3d_groundremoval_range_use;
+  std::string  _lidar3d_groundremoval_frame_id;
+  float        _lidar3d_groundremoval_max_height;
+  float        _lidar3d_groundremoval_ransac_max_inlier_dist;
+  float        _lidar3d_groundremoval_ransac_max_angle_diff;
+  float        _lidar3d_groundremoval_offset;
 
   bool         _lidar3d_cropbox_use;
   std::string  _lidar3d_cropbox_frame_id;
@@ -127,7 +128,7 @@ private:
   void process_msg(typename boost::shared_ptr<PC> pc_ptr);
 
   template <typename PC>
-  typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>& inout_pc_ptr);
+  typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
   template <typename PC>
   void cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc_ptr);
   void removeCloseAndFarPointCloudOS(std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS1::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
@@ -136,7 +137,7 @@ private:
                                       const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd);
 
   template <typename PC>
-  typename boost::shared_ptr<PC> removeCloseAndFarPointCloud(typename boost::shared_ptr<PC>& inout_pc_ptr);
+  typename boost::shared_ptr<PC> removeCloseAndFarPointCloud(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
 
   std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                                              const float &min_range_sq, const float &max_range_sq);
