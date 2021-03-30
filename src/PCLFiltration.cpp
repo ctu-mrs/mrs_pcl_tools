@@ -1,5 +1,6 @@
 #include "mrs_pcl_tools/PCLFiltration.h"
 #include <limits>
+#include <pcl/common/point_tests.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/pcl_base.h>
@@ -10,6 +11,14 @@
 
 namespace mrs_pcl_tools
 {
+  template <typename pc_t>
+  inline bool isfinite(const pc_t& pc)
+  {
+    for (const auto& pt : pc.points)
+      if (!pcl::isFinite(pt))
+        return false;
+    return true;
+  }
 
 /* onInit() //{ */
 void PCLFiltration::onInit() {
@@ -52,8 +61,7 @@ void PCLFiltration::onInit() {
     ROS_WARN("[PCLFiltration]: Ignoring the \"lidar3d/ground_removal/range/use\" parameter because \"lidar3d/ground_removal/use\" is set to false.");
   if (_lidar3d_groundremoval_use && _lidar3d_groundremoval_range_use)
   {
-    mrs_lib::SubscribeHandlerOptions shopts;
-    shopts.nh = nh;
+    mrs_lib::SubscribeHandlerOptions shopts(nh);
     shopts.node_name = "PCLFiltration";
     shopts.no_message_timeout = ros::Duration(5.0);
     mrs_lib::construct_object(_sh_range, shopts, "rangefinder_in");
@@ -230,6 +238,25 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
 
   if (_lidar3d_cropbox_use)
     cropBoxPointCloud(pc_ptr);
+
+  // make sure that no infinite points remain in the pointcloud
+  {
+    const auto orig_pc = pc_ptr;
+    pc_ptr = boost::make_shared<PC>();
+    pc_ptr->header = orig_pc->header;
+    pc_ptr->resize(orig_pc->size());
+    pc_ptr->is_dense = true;
+    size_t it = 0;
+    for (const auto& pt : orig_pc->points)
+    {
+      if (pcl::isFinite(pt))
+        pc_ptr->at(it++) = pt;
+    }
+    pc_ptr->resize(it);
+  }
+
+  if (!isfinite(*pc_ptr))
+    std::cerr << "                                                    [PCLFiltration::process_msg]: pc_ptr are not finite!!\n";
 
   _pub_lidar3d.publish(pc_ptr);
 
