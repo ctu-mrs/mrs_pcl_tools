@@ -46,7 +46,7 @@
       <param name="lidar3d/range_clip/use" type="bool" value="$(arg lidar3d/range_clip/use)" />
       <param name="lidar3d/range_clip/min" type="double" value="$(arg lidar3d/range_clip/min)" />
       <param name="lidar3d/range_clip/max" type="double" value="$(arg lidar3d/range_clip/max)" />
-      <param name="lidar3d/ground_removal/use" type="bool" value="true" />
+      <param name="lidar3d/ground_removal/use" type="bool" value="false" />
       <param name="lidar3d/ground_removal/range/use" type="bool" value="true" />
       <param name="lidar3d/ground_removal/frame_id" type="string" value="gps_origin" />
       <param name="lidar3d/ground_removal/max_height" type="double" value="2.0" />
