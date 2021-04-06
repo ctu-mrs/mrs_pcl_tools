@@ -61,7 +61,8 @@ void PCLFiltration::onInit() {
     ROS_WARN("[PCLFiltration]: Ignoring the \"lidar3d/ground_removal/range/use\" parameter because \"lidar3d/ground_removal/use\" is set to false.");
   if (_lidar3d_groundremoval_use && _lidar3d_groundremoval_range_use)
   {
-    mrs_lib::SubscribeHandlerOptions shopts(nh);
+    mrs_lib::SubscribeHandlerOptions shopts;
+    shopts.nh = nh;
     shopts.node_name = "PCLFiltration";
     shopts.no_message_timeout = ros::Duration(5.0);
     mrs_lib::construct_object(_sh_range, shopts, "rangefinder_in");

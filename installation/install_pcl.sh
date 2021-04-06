@@ -78,7 +78,8 @@ fi
 ################# INSTALLATION #################
 
 # Remove precompiled PCL-ROS dependencies
-sudo apt-get remove ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions libpcl-*
+sudo apt-get install ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions
+# sudo apt-get remove ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions libpcl-* # cross-compilation of pcl_ros and pcl_conversions
 
 # checkout PCL_VERSION (ideally stable)
 cd $GIT_PATH
@@ -100,7 +101,7 @@ echo "This process OFTEN FAILS due to an internal compiler error. In such case, 
 make -j$[$(nproc) - 1]
 sudo make install
 
-# link shared libraries to folder linked by pcl_ros and pcl_conversions (this will also override libpcl-* binaries from debian repository)
+# link shared libraries to path looked up by pcl_ros and pcl_conversions (this will also override libpcl-* binaries from debian repository)
 sudo ln -sf $INSTALL_DIR/lib/libpcl*.so /usr/lib/x86_64-linux-gnu/.
 
 # add flags to ~/.{shell}rc
