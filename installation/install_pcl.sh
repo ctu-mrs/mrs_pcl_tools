@@ -105,11 +105,11 @@ sudo make install
 sudo ln -sf $INSTALL_DIR/lib/libpcl*.so /usr/lib/x86_64-linux-gnu/.
 
 # add flags to ~/.{shell}rc
-bashrc_flagged=`cat ~/.bashrc | grep "PCL_PRECOMPILED_BINARIES" | wc -l`
-zshrc_flagged=`cat ~/.zshrc | grep "PCL_PRECOMPILED_BINARIES" | wc -l`
+bashrc_flagged=`cat ~/.bashrc | grep "PCL_CROSS_COMPILATION" | wc -l`
+zshrc_flagged=`cat ~/.zshrc | grep "PCL_CROSS_COMPILATION" | wc -l`
 if [ "$bashrc_flagged" -lt "1" ]; then
-  echo 'export PCL_PRECOMPILED_BINARIES="false"' >> ~/.bashrc
+  echo 'export PCL_CROSS_COMPILATION="true"' >> ~/.bashrc
 fi
 if [ "$zshrc_flagged" -lt "1" ]; then
-  echo 'export PCL_PRECOMPILED_BINARIES="false"' >> ~/.zshrc
+  echo 'export PCL_CROSS_COMPILATION="true"' >> ~/.zshrc
 fi
