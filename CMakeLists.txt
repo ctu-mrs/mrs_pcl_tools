@@ -1,9 +1,18 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(mrs_pcl_tools)
 
-# we really need to replace the flags because
-# we cannot build this with march=native
-set(CMAKE_CXX_FLAGS "-std=c++17")
+# Override CXX flags inherited from workspace, if precompiled PCL binaries from debian repos are used
+if (DEFINED ENV{PCL_PRECOMPILED_BINARIES})
+  set(PCL_PRECOMPILED_BINARIES $ENV{PCL_PRECOMPILED_BINARIES})
+else()
+  set(PCL_PRECOMPILED_BINARIES "true")
+endif()
+if(${PCL_PRECOMPILED_BINARIES} STREQUAL "true")
+  message("Using precompiled PCL binaries from debian repos. Overriding catkin workspace CMAKE_CXX_FLAGS.")
+  set(CMAKE_CXX_FLAGS "-std=c++17")
+else()
+  message("Using custom-built PCL binaries. Inheriting all CMAKE_CXX_FLAGS from catkin workspace.")
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
