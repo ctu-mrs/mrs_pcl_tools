@@ -52,21 +52,9 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("lidar3d/downsampling/col_step", _lidar3d_col_step, 1);
 
   // load ground removal parameters
-  param_loader.loadParam("lidar3d/ground_removal/use", _lidar3d_groundremoval_use, false);
-  param_loader.loadParam("lidar3d/ground_removal/range/use", _lidar3d_groundremoval_range_use, false);
-  if (!_lidar3d_groundremoval_use && _lidar3d_groundremoval_range_use)
-    ROS_WARN("[PCLFiltration]: Ignoring the \"lidar3d/ground_removal/range/use\" parameter because \"lidar3d/ground_removal/use\" is set to false.");
-  if (_lidar3d_groundremoval_use && _lidar3d_groundremoval_range_use)
-  {
-    mrs_lib::SubscribeHandlerOptions shopts(nh);
-    shopts.node_name = "PCLFiltration";
-    shopts.no_message_timeout = ros::Duration(5.0);
-    mrs_lib::construct_object(_sh_range, shopts, "rangefinder_in");
-
-    _pub_fitted_plane = nh.advertise<visualization_msgs::MarkerArray>("lidar3d_fitted_plane", 10);
-    m_cfg_removeBelowGround = ConfigRemoveBelowGround(param_loader, _transformer, _pub_fitted_plane);
-  }
-  /* param_loader.loadParam("lidar3d/ground_removal", _lidar3d_cropbox_min.x(), -std::numeric_limits<float>::infinity()); */
+  const bool use_ground_removal = param_loader.loadParam2<bool>("lidar3d/ground_removal/use", false);
+  if (use_ground_removal)
+    _filter_removeBelowGround.initialize(nh, param_loader, _transformer, true);
 
   // load cropbox parameters
   param_loader.loadParam("lidar3d/cropbox/frame_id", _lidar3d_cropbox_frame_id, {});
@@ -134,12 +122,8 @@ void PCLFiltration::onInit() {
     _sub_lidar3d                = nh.subscribe("lidar3d_in", 10, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());
     _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 10);
     _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 10);
-    if (_lidar3d_groundremoval_use)
-    {
+    if (_filter_removeBelowGround.used())
       _pub_lidar3d_below_ground = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_below_ground_out", 10);
-    }
-    if (_lidar3d_groundremoval_range_use)
-      _pub_ground_point = nh.advertise<geometry_msgs::PointStamped>("lidar3d_ground_point_out", 10);
   }
 
   if (_depth_republish) {
@@ -216,10 +200,10 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
   const size_t width_before = pc_ptr->width;
   const size_t points_before = pc_ptr->size();
 
-  if (_lidar3d_groundremoval_use)
+  if (_filter_removeBelowGround.used())
   {
     const bool publish_removed = _pub_lidar3d_below_ground.getNumSubscribers() > 0;
-    const typename PC::Ptr pcl_below_ground = removeBelowGround(pc_ptr, m_cfg_removeBelowGround, _sh_range.getMsg());
+    const typename PC::Ptr pcl_below_ground = _filter_removeBelowGround.applyInPlace(pc_ptr);
     if (publish_removed)
       _pub_lidar3d_below_ground.publish(pcl_below_ground);
   }
@@ -697,23 +681,30 @@ typename boost::shared_ptr<PC> PCLFiltration::removeLowIntensity(typename boost:
 /* removeBelowGround() //{ */
 
 template <typename PC>
-typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>& inout_pc, const ConfigRemoveBelowGround& config, const sensor_msgs::Range::ConstPtr range_msg = nullptr)
+typename boost::shared_ptr<PC> RemoveBelowGroundFilter::applyInPlace(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed)
 {
+  typename PC::Ptr removed_pc_ptr = boost::make_shared<PC>();
+  removed_pc_ptr->header = inout_pc->header;
+  if (!initialized)
+  {
+    ROS_ERROR("[RemoveBelowGroundFilter]: not initialized, skipping.");
+    return removed_pc_ptr;
+  }
+
   using pt_t = typename PC::PointType;
   vec3_t ground_point(0,0,0);
   vec3_t ground_normal(0,0,1);
   const auto orig_size = inout_pc->size();
-  typename PC::Ptr removed_pc_ptr = boost::make_shared<PC>();
-  removed_pc_ptr->header = inout_pc->header;
 
   // try to deduce the ground point from the latest rangefinder measurement
   bool range_meas_used = false;
-  if (range_msg != nullptr)
+  if (sh_range.hasMsg())
   {
+    const auto range_msg = sh_range.getMsg();
     if (range_msg->range > range_msg->min_range && range_msg->range < range_msg->max_range)
     {
       const vec3_t range_vec(range_msg->range, 0,0);
-      const auto tf_opt = config.transformer == nullptr ? std::nullopt : config.transformer->getTransform(range_msg->header.frame_id, inout_pc->header.frame_id, range_msg->header.stamp);
+      const auto tf_opt = transformer->getTransform(range_msg->header.frame_id, inout_pc->header.frame_id, range_msg->header.stamp);
       if (tf_opt.has_value())
       {
         ground_point = tf_opt->getTransformEigen().template cast<float>()*range_vec;
@@ -741,7 +732,7 @@ typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>&
   // try to estimate the ground normal from the static frame
   ros::Time stamp;
   pcl_conversions::fromPCL(inout_pc->header.stamp, stamp);
-  const auto tf_opt = config.transformer == nullptr ? std::nullopt : config.transformer->getTransform(config.static_frame_id, inout_pc->header.frame_id, stamp);
+  const auto tf_opt = transformer->getTransform(static_frame_id, inout_pc->header.frame_id, stamp);
   if (tf_opt.has_value())
   {
     const Eigen::Affine3f tf = tf_opt->getTransformEigen().template cast<float>();
@@ -751,7 +742,7 @@ typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>&
       ground_point = tf*vec3_t(0, 0, 0);
 
     // crop out points above a certain height to reduce the number of non-ground-plane points
-    const float plane_d = -ground_normal.dot(ground_point)-config.max_precrop_height;
+    const float plane_d = -ground_normal.dot(ground_point)-max_precrop_height;
     const vec4_t plane_params = -vec4_t(ground_normal.x(), ground_normal.y(), ground_normal.z(), plane_d);
     pcl::IndicesPtr inds_filtered = boost::make_shared<pcl::Indices>();
     pcl::PlaneClipper3D<pt_t> pclip(plane_params);
@@ -762,17 +753,17 @@ typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>&
   }
   else
   {
-    ROS_WARN_STREAM_THROTTLE(1.0, "[PCLFiltration]: Could not get transformation from " << config.static_frame_id << " to " << inout_pc->header.frame_id << ", ground plane may be imprecise.");
+    ROS_WARN_STREAM_THROTTLE(1.0, "[PCLFiltration]: Could not get transformation from " << static_frame_id << " to " << inout_pc->header.frame_id << ", ground plane may be imprecise.");
   }
 
   // prepare a SAC plane model with an angular constraint according to the estimated plane normal
   typename pcl::SampleConsensusModelPerpendicularPlane<pt_t>::Ptr model = boost::make_shared<pcl::SampleConsensusModelPerpendicularPlane<pt_t>>(pc_filtered, true);
   model->setAxis(ground_normal);
-  model->setEpsAngle(config.max_angle_diff);
+  model->setEpsAngle(max_angle_diff);
 
   // actually fit the plane
   pcl::RandomSampleConsensus<pt_t> ransac(model);
-  ransac.setDistanceThreshold(config.max_inlier_dist);
+  ransac.setDistanceThreshold(max_inlier_dist);
   if (!ransac.computeModel())
   {
     ROS_ERROR_STREAM_THROTTLE(1.0, "[PCLFiltration]: Could not fit a ground-plane model! Skipping ground removal.");
@@ -791,23 +782,23 @@ typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>&
 
   // check if the assumed ground point is an inlier of the fitted plane
   const float ground_pt_dist = std::abs(fit_n.dot(ground_point) + fit_d);
-  if (ground_pt_dist >  config.plane_offset)
+  if (ground_pt_dist >  plane_offset)
   {
-    ROS_ERROR_STREAM_THROTTLE(1.0, "[PCLFiltration]: The RANSAC-fitted ground-plane model [" << coeffs.transpose() << "] is too far from the measured ground (" << ground_pt_dist << "m > " << config.max_inlier_dist << "m)! Skipping ground removal.");
+    ROS_ERROR_STREAM_THROTTLE(1.0, "[PCLFiltration]: The RANSAC-fitted ground-plane model [" << coeffs.transpose() << "] is too far from the measured ground (" << ground_pt_dist << "m > " << max_inlier_dist << "m)! Skipping ground removal.");
     return removed_pc_ptr;
   }
 
   std_msgs::Header header;
   pcl_conversions::fromPCL(inout_pc->header, header);
 
-  if (config.pub_fitted_plane.has_value())
+  if (pub_fitted_plane.has_value())
   {
     visualization_msgs::MarkerArray plane_msg = plane_visualization(fit_n, fit_d, header);
-    config.pub_fitted_plane->publish(plane_msg);
+    pub_fitted_plane->publish(plane_msg);
   }
 
   // get indices of points above the plane
-  const vec4_t plane_params(fit_n.x(), fit_n.y(), fit_n.z(), fit_d-config.plane_offset);
+  const vec4_t plane_params(fit_n.x(), fit_n.y(), fit_n.z(), fit_d-plane_offset);
   pcl::IndicesPtr inds_filtered = boost::make_shared<pcl::Indices>();
   pcl::PlaneClipper3D<pt_t> pclip(plane_params);
   pclip.clipPointCloud3D(*inout_pc, *inds_filtered);
@@ -816,7 +807,7 @@ typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>&
   pcl::ExtractIndices<pt_t> ei;
   ei.setIndices(inds_filtered);
   ei.setInputCloud(inout_pc);
-  if (config.return_removed)
+  if (return_removed)
   {
     ei.setNegative(true);
     ei.filter(*removed_pc_ptr);
