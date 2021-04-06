@@ -43,6 +43,7 @@ namespace mrs_pcl_tools
     public:
       void initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer> transformer = nullptr, const bool publish_plane_marker = false)
       {
+        const std::string uav_name = pl.loadParamReusable<std::string>("uav_name");
         const bool range_use = pl.loadParam2<bool>("lidar3d/ground_removal/range/use", false);
         pl.loadParam("lidar3d/ground_removal/static_frame_id", static_frame_id);
         pl.loadParam("lidar3d/ground_removal/max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
@@ -51,14 +52,14 @@ namespace mrs_pcl_tools
         pl.loadParam("lidar3d/ground_removal/plane_offset", plane_offset, 1.0);
   
         if (transformer == nullptr)
-          this->transformer = std::make_shared<mrs_lib::Transformer>("RemoveBelowGroundFilter");
+          this->transformer = std::make_shared<mrs_lib::Transformer>("RemoveBelowGroundFilter", uav_name);
         else
           this->transformer = transformer;
   
         if (range_use)
         {
           mrs_lib::SubscribeHandlerOptions shopts(nh);
-          shopts.node_name = "PCLFiltration";
+          shopts.node_name = "RemoveBelowGroundFilter";
           shopts.no_message_timeout = ros::Duration(5.0);
           mrs_lib::construct_object(sh_range, shopts, "rangefinder_in");
         }
@@ -90,6 +91,8 @@ namespace mrs_pcl_tools
       double max_inlier_dist      = 3.0;              // metres
       double plane_offset         = 1.0;              // metres
   };
+
+#include <impl/remove_below_ground_filter.hpp>
   
   //}
 
