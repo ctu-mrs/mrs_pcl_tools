@@ -32,13 +32,40 @@
 
 namespace mrs_pcl_tools
 {
-
-/* class PCLFiltration //{ */
-class PCLFiltration : public nodelet::Nodelet {
-
   using vec3_t = Eigen::Vector3f;
   using vec4_t = Eigen::Vector4f;
   using quat_t = Eigen::Quaternionf;
+
+  struct ConfigRemoveBelowGround
+  {
+    ConfigRemoveBelowGround() = default;
+
+    ConfigRemoveBelowGround(mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer> transformer, const std::optional<ros::Publisher> pub_fitted_plane = std::nullopt)
+      : transformer(transformer), pub_fitted_plane(pub_fitted_plane)
+    {
+      pl.loadParam("lidar3d/ground_removal/static_frame_id", static_frame_id);
+      pl.loadParam("lidar3d/ground_removal/max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
+      pl.loadParam("lidar3d/ground_removal/ransac/max_inlier_distance", max_inlier_dist, 3.0);
+      pl.loadParam("lidar3d/ground_removal/ransac/max_angle_difference", max_angle_diff, 15.0/180.0*M_PI);
+      pl.loadParam("lidar3d/ground_removal/plane_offset", plane_offset, 1.0);
+    }
+
+    std::shared_ptr<mrs_lib::Transformer> transformer = nullptr;
+    std::optional<ros::Publisher> pub_fitted_plane    = std::nullopt;
+
+    std::string static_frame_id = "";
+    double max_precrop_height   = 1.0;              // metres
+    double max_angle_diff       = 15.0/180.0*M_PI;  // 15 degrees
+    double max_inlier_dist      = 3.0;              // metres
+    double plane_offset         = 1.0;              // metres
+
+    bool return_removed = false;
+  };
+  template <typename PC>
+  typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>& inout_pc, const ConfigRemoveBelowGround& config);
+
+/* class PCLFiltration //{ */
+class PCLFiltration : public nodelet::Nodelet {
 
 public:
   virtual void onInit();
@@ -60,13 +87,15 @@ private:
   ros::Publisher _pub_depth_over_max_range;
   ros::Publisher _pub_rplidar;
 
-  mrs_lib::Transformer _transformer;
+  std::shared_ptr<mrs_lib::Transformer> _transformer;
 
   boost::recursive_mutex                               config_mutex_;
   typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;
   typedef dynamic_reconfigure::Server<Config>          ReconfigureServer;
   boost::shared_ptr<ReconfigureServer>                 reconfigure_server_;
   /* mrs_pcl_tools::mrs_pcl_tools_dynparamConfig         last_drs_config; */
+
+  ConfigRemoveBelowGround m_cfg_removeBelowGround;
 
   void callbackReconfigure(mrs_pcl_tools::pcl_filtration_dynparamConfig &config, uint32_t level);
 
@@ -127,8 +156,6 @@ private:
   template <typename PC>
   void process_msg(typename boost::shared_ptr<PC> pc_ptr);
 
-  template <typename PC>
-  typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
   template <typename PC>
   void cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc_ptr);
   void removeCloseAndFarPointCloudOS(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
