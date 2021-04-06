@@ -43,16 +43,21 @@ namespace mrs_pcl_tools
     public:
       void initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer> transformer = nullptr, const bool publish_plane_marker = false)
       {
-        const std::string uav_name = pl.loadParamReusable<std::string>("uav_name");
-        const bool range_use = pl.loadParam2<bool>("lidar3d/ground_removal/range/use", false);
-        pl.loadParam("lidar3d/ground_removal/static_frame_id", static_frame_id);
-        pl.loadParam("lidar3d/ground_removal/max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
-        pl.loadParam("lidar3d/ground_removal/ransac/max_inlier_distance", max_inlier_dist, 3.0);
-        pl.loadParam("lidar3d/ground_removal/ransac/max_angle_difference", max_angle_diff, 15.0/180.0*M_PI);
-        pl.loadParam("lidar3d/ground_removal/plane_offset", plane_offset, 1.0);
+        pl.loadParam("lidar3d/ground_removal/range/use", range_use, false);
+        pl.loadParam("ground_removal/static_frame_id", static_frame_id);
+        pl.loadParam("ground_removal/max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
+        pl.loadParam("ground_removal/ransac/max_inlier_distance", max_inlier_dist, 3.0);
+        pl.loadParam("ground_removal/ransac/max_angle_difference", max_angle_diff, 15.0/180.0*M_PI);
+        pl.loadParam("ground_removal/plane_offset", plane_offset, 1.0);
   
         if (transformer == nullptr)
+        {
+          const auto pfx = pl.getPrefix();
+          pl.setPrefix("");
+          const std::string uav_name = pl.loadParamReusable<std::string>("uav_name");
+          pl.setPrefix(pfx);
           this->transformer = std::make_shared<mrs_lib::Transformer>("RemoveBelowGroundFilter", uav_name);
+        }
         else
           this->transformer = transformer;
   
@@ -85,6 +90,7 @@ namespace mrs_pcl_tools
       std::optional<ros::Publisher> pub_fitted_plane    = std::nullopt;
       mrs_lib::SubscribeHandler<sensor_msgs::Range> sh_range;
   
+      bool range_use              = false;
       std::string static_frame_id = "";
       double max_precrop_height   = 1.0;              // metres
       double max_angle_diff       = 15.0/180.0*M_PI;  // 15 degrees

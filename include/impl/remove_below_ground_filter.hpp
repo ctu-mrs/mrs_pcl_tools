@@ -166,7 +166,7 @@ typename boost::shared_ptr<PC> RemoveBelowGroundFilter::applyInPlace(typename bo
 
   // try to deduce the ground point from the latest rangefinder measurement
   bool range_meas_used = false;
-  if (sh_range.hasMsg())
+  if (range_use && sh_range.hasMsg())
   {
     const auto range_msg = sh_range.getMsg();
     if (range_msg->range > range_msg->min_range && range_msg->range < range_msg->max_range)

@@ -54,7 +54,11 @@ void PCLFiltration::onInit() {
   // load ground removal parameters
   const bool use_ground_removal = param_loader.loadParam2<bool>("lidar3d/ground_removal/use", false);
   if (use_ground_removal)
+  {
+    param_loader.setPrefix("lidar3d/");
     _filter_removeBelowGround.initialize(nh, param_loader, _transformer, true);
+    param_loader.setPrefix("");
+  }
 
   // load cropbox parameters
   param_loader.loadParam("lidar3d/cropbox/frame_id", _lidar3d_cropbox_frame_id, {});
