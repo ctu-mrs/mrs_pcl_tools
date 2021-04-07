@@ -1,0 +1,202 @@
+<launch>
+  
+  <!-- print used commit -->
+  <param name="/use_sim_time" value="true" />
+
+  <!-- Filtration parameters -->
+  <arg name="UAV_NAME" default="uav1" />
+  <arg name="ROBOT_TYPE" default="CTU_CRAS_NORLAB_X500" />
+
+  <arg name="lidar3d_republish" default="true" />
+  <arg name="depth_republish" default="false" />
+  <arg name="rplidar_republish" default="false" />
+
+  <arg name="lidar3d_topic_in" default="points" />
+  <arg name="lidar3d_publish_cloud_over_max_range" default="false" />
+  <arg name="lidar3d_min_range" default="0.5" />
+  <arg name="lidar3d_max_range" default="20.0" />
+  <arg name="lidar3d_filter_intensity_en" default="false" />
+  <arg name="lidar3d_filter_intensity_thrd" default="100" />
+  <arg name="lidar3d_filter_intensity_range" default="10.0" />
+
+  <arg name="depth_topic_in" default="todo/not_used" />
+  <arg name="depth_image_format" default="false" doc="if depth data come in sensor_msgs/Image format" />
+  <arg name="depth_image_rect_in" default="" />
+  <arg name="depth_image_camera_info_in" default="" />
+  <arg name="depth_publish_cloud_over_max_range" default="false" />
+  <arg name="depth_min_range" default="0.4" />
+  <arg name="depth_max_range" default="5.0" />
+  <arg name="depth_voxel_resolution" default="0.05" />
+  <arg name="depth_minimum_grid_resolution" default="0.0" />
+  <arg name="depth_radius_outlier_radius" default="0.0" />
+  <arg name="depth_radius_outlier_neighbors" default="0" />
+
+  <arg if="$(eval arg('ROBOT_TYPE') == 'MARBLE_QAV500')" name="camera_up_name" default="tof_top" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'MARBLE_QAV500')" name="camera_down_name" default="tof_bottom" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'MARBLE_QAV500')" name="camera_front_name" default="front" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'EXPLORER_DS1')" name="camera_up_name" default="up_rgbd" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'EXPLORER_DS1')" name="camera_down_name" default="down_rgbd" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'EXPLORER_DS1')" name="camera_front_name" default="front_rgbd" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'SSCI_X4')" name="camera_up_name" default="placeholder" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'SSCI_X4')" name="camera_down_name" default="placeholder" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'SSCI_X4')" name="camera_front_name" default="placeholder" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'CTU_CRAS_NORLAB_X500')" name="camera_up_name" default="up_rgbd" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'CTU_CRAS_NORLAB_X500')" name="camera_down_name" default="down_rgbd" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'CTU_CRAS_NORLAB_X500')" name="camera_front_name" default="front" />
+
+  <arg if="$(eval arg('ROBOT_TYPE') == 'MARBLE_QAV500')" name="camera_up_topic" default="$(arg camera_up_name)/depth" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'MARBLE_QAV500')" name="camera_down_topic" default="$(arg camera_down_name)/depth" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'MARBLE_QAV500')" name="camera_front_topic" default="$(arg camera_front_name)/depth" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'EXPLORER_DS1')" name="camera_up_topic" default="$(arg camera_up_name)/depth/image_raw" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'EXPLORER_DS1')" name="camera_down_topic" default="$(arg camera_down_name)/depth/image_raw" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'EXPLORER_DS1')" name="camera_front_topic" default="$(arg camera_front_name)/depth/image_raw" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'SSCI_X4')" name="camera_up_topic" default="placeholder" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'SSCI_X4')" name="camera_down_topic" default="placeholder" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'SSCI_X4')" name="camera_front_topic" default="placeholder" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'CTU_CRAS_NORLAB_X500')" name="camera_up_topic" default="$(arg camera_up_name)/depth/image_raw" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'CTU_CRAS_NORLAB_X500')" name="camera_down_topic" default="$(arg camera_down_name)/depth/image_raw" />
+  <arg if="$(eval arg('ROBOT_TYPE') == 'CTU_CRAS_NORLAB_X500')" name="camera_front_topic" default="placeholder" />
+
+  <arg name="camera_up_publish_cloud_over_max_range" default="true" />
+  <arg name="camera_up_downsample_scale" default="2" />
+  <arg name="camera_up_min_range" default="0.01" />
+  <arg name="camera_up_voxel_grid_resolution" default="0.1" />
+
+  <arg name="camera_down_publish_cloud_over_max_range" default="true" />
+  <arg name="camera_down_downsample_scale" default="2" />
+  <arg name="camera_down_min_range" default="0.01" />
+  <arg name="camera_down_voxel_grid_resolution" default="0.1" />
+  <arg name="camera_down_ground_detection_square_size" default="0.8" />
+  <arg name="camera_down_ground_detection_ransac_dist_thrd" default="0.05" />
+  <arg name="camera_down_ground_detection_n_z_max_diff" default="0.1" />
+
+  <arg name="camera_front_publish_cloud_over_max_range" default="true" />
+  <arg name="camera_front_downsample_scale" default="2" />
+  <arg name="camera_front_min_range" default="0.01" />
+  <arg name="camera_front_voxel_grid_resolution" default="0.1" />
+
+  <arg name="nodelet" default="standalone" />
+  <arg name="nodelet_manager" default="" />
+  <arg name="launch_prefix" default=""/>
+
+
+  <!-- FRAMES -->
+  <arg name="map_frame" default="$(arg UAV_NAME)/base_link" />
+
+  <!-- MAP BUILDER PARAMETERS -->
+  <arg name="resolution" default="0.20" />
+  <arg name="alpha_occupied" default="1.0" />
+  <arg name="alpha_free" default="1.0" />
+  <arg name="sensor_model_hit" default="0.90" />
+  <arg name="sensor_model_miss" default="0.40" />
+  <arg name="sensor_model_min" default="0.3" />
+  <arg name="sensor_model_max" default="0.9" />
+  <arg name="custom_config" default="$(find octomap_server)/config/topics_aloam.yaml" />
+
+  <group ns="$(arg UAV_NAME)">
+    <node pkg="nodelet" type="nodelet" name="pcl_filtration" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" respawn="false" respawn_delay="1.0" >
+
+      <param name="mav_type" type="string" value="$(arg ROBOT_TYPE)" />
+
+      <!-- Parameters -->
+      <param name="lidar3d/republish" type="bool" value="$(arg lidar3d_republish)" />
+      <param name="lidar3d/pcl2_over_max_range" type="bool" value="$(arg lidar3d_publish_cloud_over_max_range)" />
+      <param name="lidar3d/min_range" type="double" value="$(arg lidar3d_min_range)" />
+      <param name="lidar3d/max_range" type="double" value="$(arg lidar3d_max_range)" />
+      <param name="lidar3d/filter/intensity/enable" type="bool" value="$(arg lidar3d_filter_intensity_en)" />
+      <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d_filter_intensity_thrd)" />
+      <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d_filter_intensity_range)" />
+
+      <param name="lidar3d/filter/sor/global/enable" type="bool" value="false" />
+      <param name="lidar3d/filter/sor/global/neighbors" type="int" value="4" />
+      <param name="lidar3d/filter/sor/global/stddev" type="double" value="1" />
+
+      <param name="lidar3d/filter/sor/local/enable" type="bool" value="false" />
+      <param name="lidar3d/filter/sor/local/range" type="double" value="10.0" />
+      <param name="lidar3d/filter/sor/local/close/neighbors" type="int" value="4" />
+      <param name="lidar3d/filter/sor/local/close/stddev" type="double" value="1" />
+      <param name="lidar3d/filter/sor/local/distant/neighbors" type="int" value="4" />
+      <param name="lidar3d/filter/sor/local/distant/stddev" type="double" value="1" />
+      
+      <param name="lidar3d/filter/ror/enable" type="bool" value="false" />
+      <param name="lidar3d/filter/ror/neighbors" type="int" value="1" />
+      <param name="lidar3d/filter/ror/radius" type="double" value="1.0" />
+
+      <param name="camera/up/pcl2_over_max_range" type="bool" value="$(arg camera_up_publish_cloud_over_max_range)" />
+      <param name="camera/up/downsample_scale" type="int" value="$(arg camera_up_downsample_scale)" />
+      <param name="camera/up/min_range" type="double" value="$(arg camera_up_min_range)" />
+      <param name="camera/up/voxel_grid_resolution" type="double" value="$(arg camera_up_voxel_grid_resolution)" />
+
+      <param name="camera/down/pcl2_over_max_range" type="bool" value="$(arg camera_down_publish_cloud_over_max_range)" />
+      <param name="camera/down/downsample_scale" type="int" value="$(arg camera_down_downsample_scale)" />
+      <param name="camera/down/min_range" type="double" value="$(arg camera_down_min_range)" />
+      <param name="camera/down/voxel_grid_resolution" type="double" value="$(arg camera_down_voxel_grid_resolution)" />
+      
+      <param name="camera/down/ground_detection/square_size" type="double" value="$(arg camera_down_ground_detection_square_size)" />
+      <param name="camera/down/ground_detection/ransac_dist_thrd" type="double" value="$(arg camera_down_ground_detection_ransac_dist_thrd)" />
+      <param name="camera/down/ground_detection/n_z_max_diff" type="double" value="$(arg camera_down_ground_detection_n_z_max_diff)" />
+
+      <param name="camera/front/pcl2_over_max_range" type="bool" value="$(arg camera_front_publish_cloud_over_max_range)" />
+      <param name="camera/front/downsample_scale" type="int" value="$(arg camera_front_downsample_scale)" />
+      <param name="camera/front/min_range" type="double" value="$(arg camera_front_min_range)" />
+      <param name="camera/front/voxel_grid_resolution" type="double" value="$(arg camera_front_voxel_grid_resolution)" />
+      
+      <!-- Subscribers -->
+      <remap from="~lidar3d_in" to="$(arg lidar3d_topic_in)" />
+
+      <remap from="~camera_up_in" to="$(arg camera_up_topic)" />
+      <remap from="~camera_down_in" to="$(arg camera_down_topic)" />
+      <remap from="~camera_front_in" to="$(arg camera_front_topic)" />
+
+      <!-- Publishers -->
+      <remap from="~lidar3d_out" to="$(arg lidar3d_topic_in)_processed" />
+      <remap from="~lidar3d_over_max_range_out" to="$(arg lidar3d_topic_in)_over_max_range" />
+
+      <remap from="~camera_up_out" to="$(arg camera_up_name)/points_processed" />
+      <remap from="~camera_up_over_max_range_out" to="$(arg camera_up_name)/points_over_max_range" />
+      <remap from="~camera_down_out" to="$(arg camera_down_name)/points_processed" />
+      <remap from="~camera_down_over_max_range_out" to="$(arg camera_down_name)/points_over_max_range" />
+      <remap from="~camera_front_out" to="$(arg camera_front_name)/points_processed" />
+      <remap from="~camera_front_over_max_range_out" to="$(arg camera_front_name)/points_over_max_range" />
+
+      <remap from="~landing_feasible_out" to="landing_feasible" />
+
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="octomap_server" args="$(arg nodelet) octomap_server/OctomapServerNodelet $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" respawn="true" respawn_delay="1.0" >
+
+      <!-- Load the default param files -->
+      <rosparam file="$(find octomap_server)/config/topics_empty.yaml" />
+      <!-- Load a user param file -->
+      <rosparam if="$(eval not arg('custom_config') == '')" file="$(arg custom_config)" />
+
+      <param name="uav_name" type="string" value="$(arg UAV_NAME)" />
+
+      <param name="publish_free_space" type="bool" value="true" />
+      <param name="resolution" type="double" value="$(arg resolution)" />
+      <param name="frame_id" type="string" value="$(arg map_frame)" />
+      <param name="robot_frame_id" type="string" value="$(arg UAV_NAME)/base_link" />
+      <param name="sensor_model/max_range" type="double" value="-1.0" />
+      <param name="sensor_model/hit" type="double" value="$(arg sensor_model_hit)" />
+      <param name="sensor_model/miss" type="double" value="$(arg sensor_model_miss)" />
+      <param name="sensor_model/min" type="double" value="$(arg sensor_model_min)" />
+      <param name="sensor_model/max" type="double" value="$(arg sensor_model_max)" />
+      <param name="alpha_occupied" type="double" value="$(arg alpha_occupied)" />
+      <param name="alpha_free" type="double" value="$(arg alpha_free)" />
+       
+      <param name="color_free/r" type="double" value="1" />
+      <param name="color_free/g" type="double" value="0.2" />
+      <param name="color_free/b" type="double" value="0.6" />
+
+      <param name="latch" type="bool" value="false" />
+      <param name="filter_ground" type="bool" value="false" />
+      
+      <remap from="occupied_cells_vis_array" to="map/occupied" />
+      <remap from="free_cells_vis_array" to="map/free" />
+
+      <remap from="~change_res" to="~set_resolution" />
+    </node>
+    
+  </group>
+
+</launch>

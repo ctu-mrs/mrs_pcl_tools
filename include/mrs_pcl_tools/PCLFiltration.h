@@ -3,6 +3,8 @@
 /* includes //{ */
 #include "support.h"
 
+#include <pcl-1.8/pcl/PointIndices.h>
+/* #include <pcl/PointIndices.h> */
 #include <variant>
 
 #include <sensor_msgs/LaserScan.h>
@@ -11,9 +13,11 @@
 #include "darpa_mrs_msgs/LandingSpot.h"
 
 #include <image_transport/image_transport.h>
-#include <image_geometry/pinhole_camera_model.h>
+/* #include <image_geometry/pinhole_camera_model.h> */
 
 #include <pcl/filters/crop_box.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
@@ -60,6 +64,21 @@ private:
   uint32_t          _lidar3d_filter_intensity_range_mm;
   long unsigned int _lidar3d_frame = 0;
 
+  bool   _lidar3d_filter_sor_global_en;
+  int    _lidar3d_filter_sor_global_neighbors;
+  double _lidar3d_filter_sor_global_stddev;
+
+  bool   _lidar3d_filter_sor_local_en;
+  double _lidar3d_filter_sor_local_range;
+  int    _lidar3d_filter_sor_local_close_neighbors;
+  double _lidar3d_filter_sor_local_close_stddev;
+  int    _lidar3d_filter_sor_local_distant_neighbors;
+  double _lidar3d_filter_sor_local_distant_stddev;
+
+  bool   _lidar3d_filter_ror_en;
+  int    _lidar3d_filter_ror_neighbors;
+  double _lidar3d_filter_ror_radius;
+
   /* Landing spot detection */
   float _ground_detection_square_size;
   float _ground_detection_ransac_distance_thrd;
@@ -76,6 +95,11 @@ private:
 
   std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                                              const float &min_range_sq, const float &max_range_sq);
+
+  void splitCloudByRange(const PC::Ptr &cloud, boost::shared_ptr<std::vector<int>> &indices_close, boost::shared_ptr<std::vector<int>> &indices_distant,
+                         const double range);
+  void copyCloudOS2XYZ(const PC_OS::Ptr &cloud_OS, PC::Ptr &cloud_xyz);
+  void invalidatePointsAtIndices(const pcl::IndicesConstPtr &indices, PC_OS::Ptr &cloud);
 
   template <typename T>
   void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);

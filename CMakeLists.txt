@@ -1,7 +1,19 @@
+
 cmake_minimum_required(VERSION 2.8.3)
 project(mrs_pcl_tools)
 
-set(CMAKE_CXX_FLAGS "-std=c++17 -fno-diagnostics-color")
+# Override CXX flags inherited from workspace, if precompiled PCL binaries from debian repos are used
+if (DEFINED ENV{PCL_CROSS_COMPILATION})
+  set(PCL_CROSS_COMPILATION $ENV{PCL_CROSS_COMPILATION})
+else()
+  set(PCL_CROSS_COMPILATION "false")
+endif()
+if(${PCL_CROSS_COMPILATION} STREQUAL "false")
+  message("Using precompiled PCL binaries from debian repos. Overriding catkin workspace CMAKE_CXX_FLAGS.")
+  set(CMAKE_CXX_FLAGS "-std=c++17")
+else()
+  message("Using custom-built PCL binaries. Inheriting all CMAKE_CXX_FLAGS from catkin workspace.")
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,7 +36,6 @@ find_package(catkin REQUIRED COMPONENTS
     octomap_ros
     octomap_msgs
     darpa_mrs_msgs
-    image_geometry
 )
 
 add_service_files(DIRECTORY srv/registration FILES
@@ -57,7 +68,7 @@ generate_dynamic_reconfigure_options(
   cfg/pcl_filtration_dynparam.cfg
   cfg/pcl2map_registration_dynparam.cfg
 )
-generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
+generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs darpa_mrs_msgs)
 
 ###################################
 ## catkin specific configuration ##
@@ -66,7 +77,7 @@ generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES PCLSupportLib PCLFiltration PCL2MapRegistration
-  CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs pcl_ros mrs_lib
+  CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs darpa_mrs_msgs pcl_ros mrs_lib
   DEPENDS Eigen
 )
 
@@ -100,12 +111,12 @@ add_definitions(
 # Define PCL_NO_PRECOMPILE to disable using binary version
 # add_definitions(-DPCL_NO_PRECOMPILE)
 
+### LIBRARIES
+
 # Library PCLSupportLib
 add_library(PCLSupportLib
   src/support.cpp
   )
-
-## Specify libraries to link a library or executable target against
 target_link_libraries(
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
 )
@@ -114,32 +125,38 @@ target_link_libraries(
 add_library(PCLFiltration
   src/PCLFiltration.cpp
   )
-
 add_dependencies(PCLFiltration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
-
-## Specify libraries to link a library or executable target against
 target_link_libraries(
   PCLFiltration PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
 )
-
 target_include_directories(PCLFiltration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
 # Nodelet library PCL2MapRegistration
 add_library(PCL2MapRegistration
   src/PCL2MapRegistration.cpp
   )
-
 add_dependencies(PCL2MapRegistration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
-
-## Specify libraries to link a library or executable target against
 target_link_libraries(
   PCL2MapRegistration PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
 )
-
 target_include_directories(PCL2MapRegistration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
-###
-# add_executable(rosbag_cloud_to_pcd src/executables/RosbagCloudToPCD.cpp)
-# target_link_libraries(rosbag_cloud_to_pcd
+# Nodelet library PCLPublishPCDToNetwork
+# add_library(PCLPublishPCDToNetwork
+#   src/PCLPublishPCDToNetwork.cpp
+#   )
+# target_link_libraries(
+#   PCLPublishPCDToNetwork PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+# )
+# target_include_directories(PCLPublishPCDToNetwork SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
+
+# ### EXECUTABLES
+add_executable(rosbag_cloud_to_pcd src/executables/RosbagCloudToPCD.cpp)
+target_link_libraries(rosbag_cloud_to_pcd
+  PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+)
+
+# add_executable(estimate_cloud_to_cloud_drift src/executables/EstimateCloudToCloudDrift.cpp)
+# target_link_libraries(estimate_cloud_to_cloud_drift
 #   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
 # )

@@ -1,4 +1,5 @@
 #include "mrs_pcl_tools/PCLFiltration.h"
+#include <pcl/pcl_base.h>
 
 namespace mrs_pcl_tools
 {
@@ -29,6 +30,21 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("lidar3d/filter/intensity/range", _lidar3d_filter_intensity_range_sq, std::numeric_limits<float>::max());
   _lidar3d_filter_intensity_range_mm = _lidar3d_filter_intensity_range_sq * 1000;
   _lidar3d_filter_intensity_range_sq *= _lidar3d_filter_intensity_range_sq;
+
+  param_loader.loadParam("lidar3d/filter/sor/global/enable", _lidar3d_filter_sor_global_en, false);
+  param_loader.loadParam("lidar3d/filter/sor/global/neighbors", _lidar3d_filter_sor_global_neighbors, std::numeric_limits<int>::max());
+  param_loader.loadParam("lidar3d/filter/sor/global/stddev", _lidar3d_filter_sor_global_stddev, 1.0);
+
+  param_loader.loadParam("lidar3d/filter/sor/local/enable", _lidar3d_filter_sor_local_en, false);
+  param_loader.loadParam("lidar3d/filter/sor/local/range", _lidar3d_filter_sor_local_range, std::numeric_limits<double>::max());
+  param_loader.loadParam("lidar3d/filter/sor/local/close/neighbors", _lidar3d_filter_sor_local_close_neighbors, std::numeric_limits<int>::max());
+  param_loader.loadParam("lidar3d/filter/sor/local/close/stddev", _lidar3d_filter_sor_local_close_stddev, 1.0);
+  param_loader.loadParam("lidar3d/filter/sor/local/distant/neighbors", _lidar3d_filter_sor_local_distant_neighbors, std::numeric_limits<int>::max());
+  param_loader.loadParam("lidar3d/filter/sor/local/distant/stddev", _lidar3d_filter_sor_local_distant_stddev, 1.0);
+
+  param_loader.loadParam("lidar3d/filter/ror/enable", _lidar3d_filter_ror_en, false);
+  param_loader.loadParam("lidar3d/filter/ror/neighbors", _lidar3d_filter_ror_neighbors, 0);
+  param_loader.loadParam("lidar3d/filter/ror/radius", _lidar3d_filter_ror_radius, 1.0);
 
   _sub_lidar3d                = nh.subscribe("lidar3d_in", 10, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());
   _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 10);
@@ -62,11 +78,11 @@ void PCLFiltration::onInit() {
     _mav_type->lidar_row_step                  = 1;
     _mav_type->process_cameras                 = true;
     _mav_type->filter_out_projected_self_frame = true;
-    _mav_type->skip_nth_lidar_frame            = 4;           // 20 Hz -> 15 Hz
-    _mav_type->keep_nth_vert_camera_frame      = 2;           // 20 Hz -> 10 Hz
-    _mav_type->keep_nth_front_camera_frame     = 2;           // 20 Hz -> 10 Hz
-    _mav_type->focal_length_vert_camera        = 686.32f;     // hfov -> 1.50098
-    _mav_type->focal_length_front_camera       = 671.28f;     //
+    _mav_type->skip_nth_lidar_frame            = 4;        // 20 Hz -> 15 Hz
+    _mav_type->keep_nth_vert_camera_frame      = 2;        // 20 Hz -> 10 Hz
+    _mav_type->keep_nth_front_camera_frame     = 2;        // 20 Hz -> 10 Hz
+    _mav_type->focal_length_vert_camera        = 686.32f;  // hfov -> 1.50098
+    _mav_type->focal_length_front_camera       = 671.28f;  //
     _mav_type->vert_camera_max_range           = 10.0f;
     _mav_type->front_camera_max_range          = 10.0f;
   } else if (mav_type_name == "EXPLORER_DS1") {
@@ -193,6 +209,21 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
   _lidar3d_filter_intensity_en       = config.lidar3d_filter_intensity_en;
   _lidar3d_filter_intensity_thrd     = config.lidar3d_filter_intensity_thrd;
   _lidar3d_filter_intensity_range_sq = std::pow(config.lidar3d_filter_intensity_rng, 2);
+
+  _lidar3d_filter_sor_global_en        = config.lidar3d_filter_sor_global_en;
+  _lidar3d_filter_sor_global_neighbors = config.lidar3d_filter_sor_global_neighbors;
+  _lidar3d_filter_sor_global_stddev    = config.lidar3d_filter_sor_global_stddev;
+
+  _lidar3d_filter_sor_local_en                = config.lidar3d_filter_sor_local_en;
+  _lidar3d_filter_sor_local_range             = config.lidar3d_filter_sor_local_range;
+  _lidar3d_filter_sor_local_close_neighbors   = config.lidar3d_filter_sor_local_close_neighbors;
+  _lidar3d_filter_sor_local_close_stddev      = config.lidar3d_filter_sor_local_close_stddev;
+  _lidar3d_filter_sor_local_distant_neighbors = config.lidar3d_filter_sor_local_distant_neighbors;
+  _lidar3d_filter_sor_local_distant_stddev    = config.lidar3d_filter_sor_local_distant_stddev;
+
+  _lidar3d_filter_ror_en        = config.lidar3d_filter_ror_en;
+  _lidar3d_filter_ror_neighbors = config.lidar3d_filter_ror_neighbors;
+  _lidar3d_filter_ror_radius    = config.lidar3d_filter_ror_radius;
 }
 //}
 
@@ -231,6 +262,83 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
   } else {
     NODELET_INFO_ONCE("[PCLFiltration] Subscribing 3D LIDAR messages. Point type: pcl::PointXYZI. MAV type: %s.", _mav_type->name.c_str());
     removeCloseAndFarPointCloud(cloud, cloud_over_max_range, points_after, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_sq, _lidar3d_max_range_sq);
+  }
+
+  if (_lidar3d_filter_sor_global_en) {
+
+    // Convert ouster_ros cloud to XYZ only
+    PC::Ptr cloud_xyz = boost::make_shared<PC>();
+    PC::Ptr cloud_tmp = boost::make_shared<PC>();
+    copyCloudOS2XYZ(cloud, cloud_xyz);
+
+    // Apply SOR filter
+    pcl::StatisticalOutlierRemoval<pt_XYZ> sor(true);
+    sor.setInputCloud(cloud_xyz);
+    sor.setMeanK(_lidar3d_filter_sor_global_neighbors);
+    sor.setStddevMulThresh(_lidar3d_filter_sor_global_stddev);
+    sor.filter(*cloud_tmp);
+
+    // Invalidate ouster_ros cloud at indices selected by SOR
+    invalidatePointsAtIndices(sor.getRemovedIndices(), cloud);
+  } else if (_lidar3d_filter_sor_local_en) {
+
+    PC::Ptr                             cloud_tmp = boost::make_shared<PC>();
+    PC::Ptr                             cloud_xyz = boost::make_shared<PC>();
+    boost::shared_ptr<std::vector<int>> indices_close(new std::vector<int>());
+    boost::shared_ptr<std::vector<int>> indices_distant(new std::vector<int>());
+
+    copyCloudOS2XYZ(cloud, cloud_xyz);
+    splitCloudByRange(cloud_xyz, indices_close, indices_distant, _lidar3d_filter_sor_local_range);
+
+    // Apply SOR filter: close
+    if (indices_close->size() > 0) {
+      pcl::StatisticalOutlierRemoval<pt_XYZ> sor_close(true);
+      sor_close.setInputCloud(cloud_xyz);
+      sor_close.setIndices(indices_close);
+      sor_close.setMeanK(_lidar3d_filter_sor_local_close_neighbors);
+      sor_close.setStddevMulThresh(_lidar3d_filter_sor_local_close_stddev);
+      sor_close.filter(*cloud_tmp);
+
+      invalidatePointsAtIndices(sor_close.getRemovedIndices(), cloud);
+    }
+
+    // Apply SOR filter: distant
+    if (indices_distant->size() > 0) {
+      pcl::StatisticalOutlierRemoval<pt_XYZ> sor_distant(true);
+      sor_distant.setInputCloud(cloud_xyz);
+      sor_distant.setIndices(indices_distant);
+      sor_distant.setMeanK(_lidar3d_filter_sor_local_distant_neighbors);
+      sor_distant.setStddevMulThresh(_lidar3d_filter_sor_local_distant_stddev);
+      sor_distant.filter(*cloud_tmp);
+
+      // Invalidate ouster_ros cloud at indices selected by SOR
+      invalidatePointsAtIndices(sor_distant.getRemovedIndices(), cloud);
+    }
+  }
+
+  if (_lidar3d_filter_ror_en) {
+
+    // Convert ouster_ros cloud to XYZ only
+    PC::Ptr cloud_xyz = boost::make_shared<PC>();
+    PC::Ptr cloud_tmp = boost::make_shared<PC>();
+    copyCloudOS2XYZ(cloud, cloud_xyz);
+
+    // ROR requires finite points only
+    pcl::PointIndices::Ptr finite_indices = boost::make_shared<pcl::PointIndices>();
+    for (int i = 0; i < cloud_xyz->size(); i++) {
+      if (cloud_xyz->at(i).getArray3fMap().allFinite()) {
+        finite_indices->indices.push_back(i);
+      }
+    }
+
+    pcl::RadiusOutlierRemoval<pt_XYZ> outrem(true);
+    outrem.setInputCloud(cloud_xyz);
+    outrem.setIndices(finite_indices);
+    outrem.setRadiusSearch(_lidar3d_filter_ror_radius);
+    outrem.setMinNeighborsInRadius(_lidar3d_filter_ror_neighbors);
+    outrem.setKeepOrganized(true);
+    outrem.filter(*cloud_tmp);
+    invalidatePointsAtIndices(outrem.getRemovedIndices(), cloud);
   }
 
   publishCloud(_pub_lidar3d, *cloud);
@@ -709,6 +817,49 @@ void PCLFiltration::invalidatePoint(pt_OS &point) {
   point.z         = nan;
   point.range     = 0;
   point.intensity = 0;
+}
+/*//}*/
+
+/*//{ copyCloudOS2XYZ() */
+void PCLFiltration::copyCloudOS2XYZ(const PC_OS::Ptr &cloud_OS, PC::Ptr &cloud_xyz) {
+
+  cloud_xyz->header   = cloud_OS->header;
+  cloud_xyz->height   = 1;
+  cloud_xyz->width    = cloud_OS->width * cloud_OS->height;
+  cloud_xyz->is_dense = cloud_OS->is_dense;
+  cloud_xyz->resize(cloud_OS->size());
+
+  for (int i = 0; i < cloud_OS->size(); i++) {
+    cloud_xyz->at(i).x = cloud_OS->at(i).x;
+    cloud_xyz->at(i).y = cloud_OS->at(i).y;
+    cloud_xyz->at(i).z = cloud_OS->at(i).z;
+  }
+}
+/*//}*/
+
+/*//{ splitCloudByRange() */
+void PCLFiltration::splitCloudByRange(const PC::Ptr &cloud, boost::shared_ptr<std::vector<int>> &indices_close,
+                                      boost::shared_ptr<std::vector<int>> &indices_distant, const double range) {
+
+  for (int i = 0; i < cloud->size(); i++) {
+
+    const Eigen::Vector3f pt       = cloud->at(i).getArray3fMap();
+    const float           pt_range = pt.norm();
+
+    if (pt_range < range) {
+      indices_close->push_back(i);
+    } else {
+      indices_distant->push_back(i);
+    }
+  }
+}
+/*//}*/
+
+/*//{ invalidatePointsAtIndices() */
+void PCLFiltration::invalidatePointsAtIndices(const pcl::IndicesConstPtr &indices, PC_OS::Ptr &cloud) {
+  for (auto it = indices->begin(); it != indices->end(); it++) {
+    invalidatePoint(cloud->at(*it));
+  }
 }
 /*//}*/
 
