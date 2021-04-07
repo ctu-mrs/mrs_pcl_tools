@@ -81,8 +81,8 @@ void PCLFiltration::onInit() {
     _mav_type->skip_nth_lidar_frame            = 4;        // 20 Hz -> 15 Hz
     _mav_type->keep_nth_vert_camera_frame      = 2;        // 20 Hz -> 10 Hz
     _mav_type->keep_nth_front_camera_frame     = 2;        // 20 Hz -> 10 Hz
-    _mav_type->focal_length_vert_camera        = 686.32f;  // hfov -> 1.50098
-    _mav_type->focal_length_front_camera       = 671.28f;  //
+    _mav_type->focal_length_vert_camera        = 343.158f; // hfov -> 1.50098
+    _mav_type->focal_length_front_camera       = 343.158f; //
     _mav_type->vert_camera_max_range           = 10.0f;
     _mav_type->front_camera_max_range          = 10.0f;
   } else if (mav_type_name == "EXPLORER_DS1") {
@@ -137,7 +137,7 @@ void PCLFiltration::onInit() {
 
     /* Bottom camera */
     _camera_down                      = std::make_shared<Camera>();
-    _camera_down->name                = std::string("camera-top");
+    _camera_down->name                = std::string("camera-bottom");
     _camera_down->focal_length        = _mav_type->focal_length_vert_camera;
     _camera_down->max_range           = _mav_type->vert_camera_max_range;
     _camera_down->detect_landing_area = false;  // TODO: detect landing are should be set here to true
