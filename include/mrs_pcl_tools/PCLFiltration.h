@@ -11,6 +11,7 @@
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 #include "darpa_mrs_msgs/LandingSpot.h"
+#include "darpa_mrs_msgs/FogDetection.h"
 
 #include <image_transport/image_transport.h>
 /* #include <image_geometry/pinhole_camera_model.h> */
@@ -75,6 +76,14 @@ private:
   int    _lidar3d_filter_sor_local_distant_neighbors;
   double _lidar3d_filter_sor_local_distant_stddev;
 
+  bool           _fog_detector_en;
+  int            _fog_detector_mean_k;
+  double         _fog_detector_mean_exp;
+  double         _fog_detector_stddev_exp;
+  double         _fog_detector_mean_thrd;
+  double         _fog_detector_stddev_thrd;
+  ros::Publisher _pub_fog_detection;
+
   bool   _lidar3d_filter_ror_en;
   int    _lidar3d_filter_ror_neighbors;
   double _lidar3d_filter_ror_radius;
@@ -100,6 +109,9 @@ private:
                          const double range);
   void copyCloudOS2XYZ(const PC_OS::Ptr &cloud_OS, PC::Ptr &cloud_xyz);
   void invalidatePointsAtIndices(const pcl::IndicesConstPtr &indices, PC_OS::Ptr &cloud);
+
+  void detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp);
+  void generateNNStatistics(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, double &mean, double &stddev, const int mean_k);
 
   template <typename T>
   void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);

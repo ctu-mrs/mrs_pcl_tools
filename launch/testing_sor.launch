@@ -111,16 +111,23 @@
       <param name="lidar3d/filter/sor/global/neighbors" type="int" value="4" />
       <param name="lidar3d/filter/sor/global/stddev" type="double" value="1" />
 
-      <param name="lidar3d/filter/sor/local/enable" type="bool" value="false" />
-      <param name="lidar3d/filter/sor/local/range" type="double" value="10.0" />
-      <param name="lidar3d/filter/sor/local/close/neighbors" type="int" value="4" />
-      <param name="lidar3d/filter/sor/local/close/stddev" type="double" value="1" />
+      <param name="lidar3d/filter/sor/local/enable" type="bool" value="true" />
+      <param name="lidar3d/filter/sor/local/range" type="double" value="3.0" />
+      <param name="lidar3d/filter/sor/local/close/neighbors" type="int" value="10" />
+      <param name="lidar3d/filter/sor/local/close/stddev" type="double" value="0.1" />
       <param name="lidar3d/filter/sor/local/distant/neighbors" type="int" value="4" />
       <param name="lidar3d/filter/sor/local/distant/stddev" type="double" value="1" />
       
       <param name="lidar3d/filter/ror/enable" type="bool" value="false" />
       <param name="lidar3d/filter/ror/neighbors" type="int" value="1" />
       <param name="lidar3d/filter/ror/radius" type="double" value="1.0" />
+      
+      <param name="lidar3d/filter/fog/enable" type="bool" value="true" />
+      <param name="lidar3d/filter/fog/nn_k" type="int" value="3" />
+      <param name="lidar3d/filter/fog/mean/expected" type="double" value="0.1" />
+      <param name="lidar3d/filter/fog/stddev/expected" type="double" value="0.1" />
+      <param name="lidar3d/filter/fog/mean/thrd" type="double" value="0.03" />
+      <param name="lidar3d/filter/fog/stddev/thrd" type="double" value="0.03" />
 
       <param name="camera/up/pcl2_over_max_range" type="bool" value="$(arg camera_up_publish_cloud_over_max_range)" />
       <param name="camera/up/downsample_scale" type="int" value="$(arg camera_up_downsample_scale)" />
@@ -160,6 +167,7 @@
       <remap from="~camera_front_over_max_range_out" to="$(arg camera_front_name)/points_over_max_range" />
 
       <remap from="~landing_feasible_out" to="landing_feasible" />
+      <remap from="~fog_detection_out" to="fog_detection" />
 
     </node>
 

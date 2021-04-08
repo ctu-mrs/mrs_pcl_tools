@@ -46,6 +46,14 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("lidar3d/filter/ror/neighbors", _lidar3d_filter_ror_neighbors, 0);
   param_loader.loadParam("lidar3d/filter/ror/radius", _lidar3d_filter_ror_radius, 1.0);
 
+
+  param_loader.loadParam("lidar3d/filter/fog/enable", _fog_detector_en, false);
+  param_loader.loadParam("lidar3d/filter/fog/nn_k", _fog_detector_mean_k, 5);
+  param_loader.loadParam("lidar3d/filter/fog/mean/expected", _fog_detector_mean_exp, std::numeric_limits<double>::max());
+  param_loader.loadParam("lidar3d/filter/fog/stddev/expected", _fog_detector_stddev_exp, std::numeric_limits<double>::max());
+  param_loader.loadParam("lidar3d/filter/fog/mean/thrd", _fog_detector_mean_thrd, std::numeric_limits<double>::max());
+  param_loader.loadParam("lidar3d/filter/fog/stddev/thrd", _fog_detector_stddev_thrd, std::numeric_limits<double>::max());
+
   _sub_lidar3d                = nh.subscribe("lidar3d_in", 10, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());
   _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 10);
   _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 10);
@@ -188,6 +196,8 @@ void PCLFiltration::onInit() {
     ros::shutdown();
   }
 
+  _pub_fog_detection = nh.advertise<darpa_mrs_msgs::FogDetection>("fog_detection_out", 1);
+
   reconfigure_server_.reset(new ReconfigureServer(config_mutex_, nh));
   /* reconfigure_server_->updateConfig(last_drs_config); */
   ReconfigureServer::CallbackType f = boost::bind(&PCLFiltration::callbackReconfigure, this, _1, _2);
@@ -224,6 +234,13 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
   _lidar3d_filter_ror_en        = config.lidar3d_filter_ror_en;
   _lidar3d_filter_ror_neighbors = config.lidar3d_filter_ror_neighbors;
   _lidar3d_filter_ror_radius    = config.lidar3d_filter_ror_radius;
+
+  _fog_detector_en          = config.fog_detector_en;
+  _fog_detector_mean_k      = config.fog_detector_mean_k;
+  _fog_detector_mean_exp    = config.fog_detector_mean_exp;
+  _fog_detector_stddev_exp  = config.fog_detector_stddev_exp;
+  _fog_detector_mean_thrd   = config.fog_detector_mean_thrd;
+  _fog_detector_stddev_thrd = config.fog_detector_stddev_thrd;
 }
 //}
 
@@ -292,6 +309,9 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
 
     // Apply SOR filter: close
     if (indices_close->size() > 0) {
+
+      detectFog(cloud_xyz, indices_close, _lidar3d_filter_sor_local_range, msg->header.stamp);
+
       pcl::StatisticalOutlierRemoval<pt_XYZ> sor_close(true);
       sor_close.setInputCloud(cloud_xyz);
       sor_close.setIndices(indices_close);
@@ -313,6 +333,18 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
 
       // Invalidate ouster_ros cloud at indices selected by SOR
       invalidatePointsAtIndices(sor_distant.getRemovedIndices(), cloud);
+    }
+  } else if (_fog_detector_en) {
+
+    PC::Ptr                             cloud_xyz = boost::make_shared<PC>();
+    boost::shared_ptr<std::vector<int>> indices_close(new std::vector<int>());
+    boost::shared_ptr<std::vector<int>> indices_distant(new std::vector<int>());
+
+    copyCloudOS2XYZ(cloud, cloud_xyz);
+    splitCloudByRange(cloud_xyz, indices_close, indices_distant, _lidar3d_filter_sor_local_range);
+
+    if (indices_close->size() > 0) {
+      detectFog(cloud_xyz, indices_close, _lidar3d_filter_sor_local_range, msg->header.stamp);
     }
   }
 
@@ -817,6 +849,89 @@ void PCLFiltration::invalidatePoint(pt_OS &point) {
   point.z         = nan;
   point.range     = 0;
   point.intensity = 0;
+}
+/*//}*/
+
+/*//{ detectFog() */
+void PCLFiltration::detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp) {
+
+  if (!_fog_detector_en) {
+    return;
+  }
+
+  // Estimate mean and stddev of local data
+  double mean_data, stddev_data;
+  generateNNStatistics(cloud, indices, mean_data, stddev_data, _fog_detector_mean_k);
+
+  const bool in_fog =
+      std::fabs(_fog_detector_mean_exp - mean_data) < _fog_detector_mean_thrd && std::fabs(_fog_detector_stddev_exp - stddev_data) < _fog_detector_stddev_thrd;
+
+  if (_pub_fog_detection.getNumSubscribers() > 0) {
+    darpa_mrs_msgs::FogDetection::Ptr fog_detection_msg = boost::make_shared<darpa_mrs_msgs::FogDetection>();
+    fog_detection_msg->stamp                            = stamp;
+    fog_detection_msg->in_fog                           = in_fog;
+    fog_detection_msg->detection_range                  = range;
+    fog_detection_msg->data_mean                        = mean_data;
+    fog_detection_msg->data_stddev                      = stddev_data;
+    try {
+      _pub_fog_detection.publish(fog_detection_msg);
+    }
+    catch (...) {
+      NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", _pub_fog_detection.getTopic().c_str());
+    }
+  }
+}
+/*//}*/
+
+/*//{ generateNNStatistics() */
+void PCLFiltration::generateNNStatistics(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, double &mean, double &stddev,
+                                         const int mean_k) {
+
+  pcl::search::KdTree<pt_XYZ>::Ptr tree = boost::make_shared<pcl::search::KdTree<pt_XYZ>>(false);
+  tree->setInputCloud(cloud);
+
+  // Allocate enough space to hold the results
+  std::vector<int>   nn_indices(mean_k);
+  std::vector<float> nn_dists(mean_k);
+
+  std::vector<float> distances(indices->size(), 0.0f);
+
+  size_t k               = 0;
+  int    valid_distances = 0;
+
+  // Go over all the points and calculate the mean or smallest distance
+  for (const auto &i : *indices) {
+
+    if (!std::isfinite(cloud->at(i).x) || !std::isfinite(cloud->at(i).y) || !std::isfinite(cloud->at(i).z)) {
+      k++;
+      continue;
+    }
+
+    if (tree->nearestKSearch(i, mean_k, nn_indices, nn_dists) == 0) {
+      k++;
+      NODELET_WARN("[PCLFiltration::generateNNStatistics] Searching for the closest %d neighbors failed.\n", mean_k);
+      continue;
+    }
+
+    // Minimum distance (if mean_k == 2) or mean distance
+    double dist_sum = 0;
+    for (int j = 1; j < mean_k; ++j) {
+      dist_sum += sqrt(nn_dists[j]);
+    }
+    distances[k++] = static_cast<float>(dist_sum / static_cast<float>(mean_k - 1));
+    valid_distances++;
+  }
+
+  // Estimate the mean and the standard deviation of the distance vector
+  double sum = 0, sq_sum = 0;
+  for (const float &d : distances) {
+    sum += d;
+    sq_sum += d * d;
+  }
+
+  mean                  = sum / static_cast<double>(valid_distances);
+  const double variance = (sq_sum - sum * sum / static_cast<double>(valid_distances)) / (static_cast<double>(valid_distances) - 1);
+  stddev                = sqrt(variance);
 }
 /*//}*/
 
