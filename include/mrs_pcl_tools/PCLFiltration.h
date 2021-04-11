@@ -48,6 +48,8 @@ private:
 
   ros::Subscriber _sub_lidar3d;
   ros::Subscriber _sub_depth;
+  ros::Subscriber _sub_depth_up;
+  ros::Subscriber _sub_depth_down;
   ros::Subscriber _sub_rplidar;
   mrs_lib::SubscribeHandler<sensor_msgs::Range> _sh_range;
 
@@ -58,6 +60,10 @@ private:
   ros::Publisher _pub_ground_point;
   ros::Publisher _pub_depth;
   ros::Publisher _pub_depth_over_max_range;
+  ros::Publisher _pub_depth_up;
+  ros::Publisher _pub_depth_over_max_range_up;
+  ros::Publisher _pub_depth_down;
+  ros::Publisher _pub_depth_over_max_range_down;
   ros::Publisher _pub_rplidar;
 
   mrs_lib::Transformer _transformer;
