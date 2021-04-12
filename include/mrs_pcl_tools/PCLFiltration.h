@@ -76,12 +76,14 @@ private:
   int    _lidar3d_filter_sor_local_distant_neighbors;
   double _lidar3d_filter_sor_local_distant_stddev;
 
-  bool           _fog_detector_en;
-  int            _fog_detector_mean_k;
-  double         _fog_detector_mean_exp;
-  double         _fog_detector_stddev_exp;
-  double         _fog_detector_mean_thrd;
-  double         _fog_detector_stddev_thrd;
+  bool   _fog_detector_en;
+  int    _fog_detector_mean_k;
+  double _fog_detector_z_test_prob_thrd;
+  double _fog_detector_mean_exp;
+  double _fog_detector_stddev_exp;
+  int    _fog_detector_sample_size_exp;
+  /* double         _fog_detector_mean_thrd; */
+  /* double         _fog_detector_stddev_thrd; */
   ros::Publisher _pub_fog_detection;
 
   bool   _lidar3d_filter_ror_en;
@@ -111,7 +113,11 @@ private:
   void invalidatePointsAtIndices(const pcl::IndicesConstPtr &indices, PC_OS::Ptr &cloud);
 
   void detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp);
-  void generateNNStatistics(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, double &mean, double &stddev, const int mean_k);
+  void generateNNStatistics(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, double &mean, double &stddev, int &sample_size,
+                            const int mean_k);
+
+  double zTest(const double mean_1, const double stddev_1, const int sample_size_1, const double mean_2, const double stddev_2, const int sample_size_2);
+  double zTableLookup(const double z);
 
   template <typename T>
   void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);

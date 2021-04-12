@@ -1,4 +1,5 @@
 #include "mrs_pcl_tools/PCLFiltration.h"
+#include <cmath>
 #include <pcl/pcl_base.h>
 
 namespace mrs_pcl_tools
@@ -49,10 +50,12 @@ void PCLFiltration::onInit() {
 
   param_loader.loadParam("lidar3d/filter/fog/enable", _fog_detector_en, false);
   param_loader.loadParam("lidar3d/filter/fog/nn_k", _fog_detector_mean_k, 5);
-  param_loader.loadParam("lidar3d/filter/fog/mean/expected", _fog_detector_mean_exp, std::numeric_limits<double>::max());
-  param_loader.loadParam("lidar3d/filter/fog/stddev/expected", _fog_detector_stddev_exp, std::numeric_limits<double>::max());
-  param_loader.loadParam("lidar3d/filter/fog/mean/thrd", _fog_detector_mean_thrd, std::numeric_limits<double>::max());
-  param_loader.loadParam("lidar3d/filter/fog/stddev/thrd", _fog_detector_stddev_thrd, std::numeric_limits<double>::max());
+  param_loader.loadParam("lidar3d/filter/fog/subt_mean", _fog_detector_mean_exp, 0.0);
+  param_loader.loadParam("lidar3d/filter/fog/subt_stddev", _fog_detector_stddev_exp, 0.0);
+  param_loader.loadParam("lidar3d/filter/fog/subt_sample_size", _fog_detector_sample_size_exp, 1);
+  param_loader.loadParam("lidar3d/filter/fog/z_test_prob_thrd", _fog_detector_z_test_prob_thrd, 0.7);
+  /* param_loader.loadParam("lidar3d/filter/fog/mean/thrd", _fog_detector_mean_thrd, std::numeric_limits<double>::max()); */
+  /* param_loader.loadParam("lidar3d/filter/fog/stddev/thrd", _fog_detector_stddev_thrd, std::numeric_limits<double>::max()); */
 
   _sub_lidar3d                = nh.subscribe("lidar3d_in", 10, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());
   _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 10);
@@ -86,11 +89,11 @@ void PCLFiltration::onInit() {
     _mav_type->lidar_row_step                  = 1;
     _mav_type->process_cameras                 = true;
     _mav_type->filter_out_projected_self_frame = true;
-    _mav_type->skip_nth_lidar_frame            = 4;        // 20 Hz -> 15 Hz
-    _mav_type->keep_nth_vert_camera_frame      = 2;        // 20 Hz -> 10 Hz
-    _mav_type->keep_nth_front_camera_frame     = 2;        // 20 Hz -> 10 Hz
-    _mav_type->focal_length_vert_camera        = 343.158f; // hfov -> 1.50098
-    _mav_type->focal_length_front_camera       = 343.158f; //
+    _mav_type->skip_nth_lidar_frame            = 4;         // 20 Hz -> 15 Hz
+    _mav_type->keep_nth_vert_camera_frame      = 2;         // 20 Hz -> 10 Hz
+    _mav_type->keep_nth_front_camera_frame     = 2;         // 20 Hz -> 10 Hz
+    _mav_type->focal_length_vert_camera        = 343.158f;  // hfov -> 1.50098
+    _mav_type->focal_length_front_camera       = 343.158f;  //
     _mav_type->vert_camera_max_range           = 10.0f;
     _mav_type->front_camera_max_range          = 10.0f;
   } else if (mav_type_name == "EXPLORER_DS1") {
@@ -235,12 +238,12 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
   _lidar3d_filter_ror_neighbors = config.lidar3d_filter_ror_neighbors;
   _lidar3d_filter_ror_radius    = config.lidar3d_filter_ror_radius;
 
-  _fog_detector_en          = config.fog_detector_en;
-  _fog_detector_mean_k      = config.fog_detector_mean_k;
-  _fog_detector_mean_exp    = config.fog_detector_mean_exp;
-  _fog_detector_stddev_exp  = config.fog_detector_stddev_exp;
-  _fog_detector_mean_thrd   = config.fog_detector_mean_thrd;
-  _fog_detector_stddev_thrd = config.fog_detector_stddev_thrd;
+  _fog_detector_en         = config.fog_detector_en;
+  _fog_detector_mean_k     = config.fog_detector_mean_k;
+  _fog_detector_mean_exp   = config.fog_detector_mean_exp;
+  _fog_detector_stddev_exp = config.fog_detector_stddev_exp;
+  /* _fog_detector_mean_thrd   = config.fog_detector_mean_thrd; */
+  /* _fog_detector_stddev_thrd = config.fog_detector_stddev_thrd; */
 }
 //}
 
@@ -861,10 +864,16 @@ void PCLFiltration::detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std:
 
   // Estimate mean and stddev of local data
   double mean_data, stddev_data;
-  generateNNStatistics(cloud, indices, mean_data, stddev_data, _fog_detector_mean_k);
+  int    sample_size_data;
+  generateNNStatistics(cloud, indices, mean_data, stddev_data, sample_size_data, _fog_detector_mean_k);
 
-  const bool in_fog =
-      std::fabs(_fog_detector_mean_exp - mean_data) < _fog_detector_mean_thrd && std::fabs(_fog_detector_stddev_exp - stddev_data) < _fog_detector_stddev_thrd;
+  /* const bool in_fog = */
+  /*     std::fabs(_fog_detector_mean_exp - mean_data) < _fog_detector_mean_thrd && std::fabs(_fog_detector_stddev_exp - stddev_data) <
+   * _fog_detector_stddev_thrd; */
+
+  const double z      = zTest(_fog_detector_mean_exp, _fog_detector_stddev_exp, _fog_detector_sample_size_exp, mean_data, stddev_data, sample_size_data);
+  const double cndf   = zTableLookup(z);
+  const bool   in_fog = cndf < _fog_detector_z_test_prob_thrd;
 
   if (_pub_fog_detection.getNumSubscribers() > 0) {
     darpa_mrs_msgs::FogDetection::Ptr fog_detection_msg = boost::make_shared<darpa_mrs_msgs::FogDetection>();
@@ -873,6 +882,9 @@ void PCLFiltration::detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std:
     fog_detection_msg->detection_range                  = range;
     fog_detection_msg->data_mean                        = mean_data;
     fog_detection_msg->data_stddev                      = stddev_data;
+    fog_detection_msg->data_sample_size                 = sample_size_data;
+    fog_detection_msg->z                                = z;
+    fog_detection_msg->cndf                             = cndf;
     try {
       _pub_fog_detection.publish(fog_detection_msg);
     }
@@ -885,7 +897,7 @@ void PCLFiltration::detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std:
 
 /*//{ generateNNStatistics() */
 void PCLFiltration::generateNNStatistics(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, double &mean, double &stddev,
-                                         const int mean_k) {
+                                         int &sample_size, const int mean_k) {
 
   pcl::search::KdTree<pt_XYZ>::Ptr tree = boost::make_shared<pcl::search::KdTree<pt_XYZ>>(false);
   tree->setInputCloud(cloud);
@@ -896,8 +908,8 @@ void PCLFiltration::generateNNStatistics(const PC::Ptr &cloud, const boost::shar
 
   std::vector<float> distances(indices->size(), 0.0f);
 
-  size_t k               = 0;
-  int    valid_distances = 0;
+  size_t k    = 0;
+  sample_size = 0;
 
   // Go over all the points and calculate the mean or smallest distance
   for (const auto &i : *indices) {
@@ -919,7 +931,7 @@ void PCLFiltration::generateNNStatistics(const PC::Ptr &cloud, const boost::shar
       dist_sum += sqrt(nn_dists[j]);
     }
     distances[k++] = static_cast<float>(dist_sum / static_cast<float>(mean_k - 1));
-    valid_distances++;
+    sample_size++;
   }
 
   // Estimate the mean and the standard deviation of the distance vector
@@ -929,8 +941,8 @@ void PCLFiltration::generateNNStatistics(const PC::Ptr &cloud, const boost::shar
     sq_sum += d * d;
   }
 
-  mean                  = sum / static_cast<double>(valid_distances);
-  const double variance = (sq_sum - sum * sum / static_cast<double>(valid_distances)) / (static_cast<double>(valid_distances) - 1);
+  mean                  = sum / static_cast<double>(sample_size);
+  const double variance = (sq_sum - sum * sum / static_cast<double>(sample_size)) / (static_cast<double>(sample_size) - 1);
   stddev                = sqrt(variance);
 }
 /*//}*/
@@ -975,6 +987,23 @@ void PCLFiltration::invalidatePointsAtIndices(const pcl::IndicesConstPtr &indice
   for (auto it = indices->begin(); it != indices->end(); it++) {
     invalidatePoint(cloud->at(*it));
   }
+}
+/*//}*/
+
+/*//{ zTest() */
+double PCLFiltration::zTest(const double mean_1, const double stddev_1, const int sample_size_1, const double mean_2, const double stddev_2,
+                            const int sample_size_2) {
+  // Too noisy with sample size included in the formula
+  /* return (mean_1 - mean_2) / std::sqrt((stddev_1 * stddev_1 / double(sample_size_1)) + (stddev_2 * stddev_2 / double(sample_size_2))); */
+  return (mean_1 - mean_2) / std::sqrt(stddev_1 * stddev_1 + stddev_2 * stddev_2);
+}
+/*//}*/
+
+/*//{ zTableLookup() */
+double PCLFiltration::zTableLookup(const double z) {
+  // Return cummulative normal distribution function
+  // URL: https://stackoverflow.com/questions/58371163/how-to-change-the-z-value-to-the-one-from-the-table-z-table-from-normal-distrib
+  return 0.5 * std::erfc(-z * M_SQRT1_2);
 }
 /*//}*/
 

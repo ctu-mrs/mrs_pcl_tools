@@ -117,17 +117,20 @@
       <param name="lidar3d/filter/sor/local/close/stddev" type="double" value="0.1" />
       <param name="lidar3d/filter/sor/local/distant/neighbors" type="int" value="4" />
       <param name="lidar3d/filter/sor/local/distant/stddev" type="double" value="1" />
-      
+
       <param name="lidar3d/filter/ror/enable" type="bool" value="false" />
       <param name="lidar3d/filter/ror/neighbors" type="int" value="1" />
       <param name="lidar3d/filter/ror/radius" type="double" value="1.0" />
-      
+
       <param name="lidar3d/filter/fog/enable" type="bool" value="true" />
       <param name="lidar3d/filter/fog/nn_k" type="int" value="3" />
-      <param name="lidar3d/filter/fog/mean/expected" type="double" value="0.1" />
-      <param name="lidar3d/filter/fog/stddev/expected" type="double" value="0.1" />
-      <param name="lidar3d/filter/fog/mean/thrd" type="double" value="0.03" />
-      <param name="lidar3d/filter/fog/stddev/thrd" type="double" value="0.03" />
+      <!-- Parameters of subt fog (measured in sphere with radius of 3 metre) -->
+      <param name="lidar3d/filter/fog/subt_mean" type="double" value="0.1" />
+      <param name="lidar3d/filter/fog/subt_stddev" type="double" value="0.1" />
+      <!-- <param name="lidar3d/filter/fog/subt_sample_size" type="int" value="4120" /> -->
+      <param name="lidar3d/filter/fog/z_test_prob_thrd" type="double" value="0.6" />
+      <!-- <param name="lidar3d/filter/fog/mean/thrd" type="double" value="0.03" /> -->
+      <!-- <param name="lidar3d/filter/fog/stddev/thrd" type="double" value="0.03" /> -->
 
       <param name="camera/up/pcl2_over_max_range" type="bool" value="$(arg camera_up_publish_cloud_over_max_range)" />
       <param name="camera/up/downsample_scale" type="int" value="$(arg camera_up_downsample_scale)" />
@@ -138,7 +141,7 @@
       <param name="camera/down/downsample_scale" type="int" value="$(arg camera_down_downsample_scale)" />
       <param name="camera/down/min_range" type="double" value="$(arg camera_down_min_range)" />
       <param name="camera/down/voxel_grid_resolution" type="double" value="$(arg camera_down_voxel_grid_resolution)" />
-      
+
       <param name="camera/down/ground_detection/square_size" type="double" value="$(arg camera_down_ground_detection_square_size)" />
       <param name="camera/down/ground_detection/ransac_dist_thrd" type="double" value="$(arg camera_down_ground_detection_ransac_dist_thrd)" />
       <param name="camera/down/ground_detection/n_z_max_diff" type="double" value="$(arg camera_down_ground_detection_n_z_max_diff)" />
@@ -147,7 +150,7 @@
       <param name="camera/front/downsample_scale" type="int" value="$(arg camera_front_downsample_scale)" />
       <param name="camera/front/min_range" type="double" value="$(arg camera_front_min_range)" />
       <param name="camera/front/voxel_grid_resolution" type="double" value="$(arg camera_front_voxel_grid_resolution)" />
-      
+
       <!-- Subscribers -->
       <remap from="~lidar3d_in" to="$(arg lidar3d_topic_in)" />
 
@@ -191,20 +194,20 @@
       <param name="sensor_model/max" type="double" value="$(arg sensor_model_max)" />
       <param name="alpha_occupied" type="double" value="$(arg alpha_occupied)" />
       <param name="alpha_free" type="double" value="$(arg alpha_free)" />
-       
+
       <param name="color_free/r" type="double" value="1" />
       <param name="color_free/g" type="double" value="0.2" />
       <param name="color_free/b" type="double" value="0.6" />
 
       <param name="latch" type="bool" value="false" />
       <param name="filter_ground" type="bool" value="false" />
-      
+
       <remap from="occupied_cells_vis_array" to="map/occupied" />
       <remap from="free_cells_vis_array" to="map/free" />
 
       <remap from="~change_res" to="~set_resolution" />
     </node>
-    
+
   </group>
 
 </launch>
