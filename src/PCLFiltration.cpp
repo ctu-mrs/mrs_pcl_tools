@@ -882,8 +882,8 @@ void PCLFiltration::detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std:
     fog_detection_msg->detection_range                  = range;
     fog_detection_msg->data_mean                        = mean_data;
     fog_detection_msg->data_stddev                      = stddev_data;
-    fog_detection_msg->data_sample_size                 = sample_size_data;
-    fog_detection_msg->z                                = z;
+    /* fog_detection_msg->data_sample_size                 = sample_size_data; */
+    /* fog_detection_msg->z                                = z; */
     fog_detection_msg->cndf                             = cndf;
     try {
       _pub_fog_detection.publish(fog_detection_msg);
