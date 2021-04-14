@@ -85,6 +85,9 @@ void PCLFiltration::onInit() {
     _sub_depth                = nh.subscribe("depth_in", 1, &PCLFiltration::depthCallback, this, ros::TransportHints().tcpNoDelay());
     _pub_depth                = nh.advertise<sensor_msgs::PointCloud2>("depth_out", 10);
     _pub_depth_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("depth_over_max_range_out", 10);
+
+    _sub_depth_up                = nh.subscribe("depth_up_in", 1, &PCLFiltration::depthCallback, this, ros::TransportHints().tcpNoDelay());
+    _sub_depth_down                = nh.subscribe("depth_down_in", 1, &PCLFiltration::depthCallback, this, ros::TransportHints().tcpNoDelay());
   }
 
   if (_rplidar_republish) {

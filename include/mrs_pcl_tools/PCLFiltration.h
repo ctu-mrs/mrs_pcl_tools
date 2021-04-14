@@ -25,6 +25,8 @@ private:
 
   ros::Subscriber _sub_lidar3d;
   ros::Subscriber _sub_depth;
+  ros::Subscriber _sub_depth_up;
+  ros::Subscriber _sub_depth_down;
   ros::Subscriber _sub_rplidar;
 
   ros::Publisher _pub_lidar3d;
