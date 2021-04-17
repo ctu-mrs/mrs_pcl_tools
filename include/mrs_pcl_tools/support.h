@@ -14,8 +14,12 @@ namespace mrs_pcl_tools
 {
 
 // TODO: template
-void applyVoxelGridFilter(const PC_NORM::Ptr &cloud_in, PC_NORM::Ptr &cloud_out, const float &leaf_size);
-void applyVoxelGridFilter(PC_NORM::Ptr &cloud, const float &leaf_size);
+void                 applyVoxelGridFilter(const PC_NORM::Ptr &cloud_in, PC_NORM::Ptr &cloud_out, const float &leaf_size);
+void                 applyVoxelGridFilter(PC_NORM::Ptr &cloud, const float &leaf_size);
+pcl::IndicesConstPtr getInvalidIndicesSorFilterIndices(const bool enable, const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices,
+                                                       const int mean_k, const double stddev_mul);
+pcl::IndicesConstPtr getInvalidIndicesSorFilter(const bool enable, const PC::Ptr &cloud, const int mean_k, const double stddev_mul);
+pcl::IndicesConstPtr getInvalidIndicesRorFilter(const bool enable, const PC::Ptr &cloud, const double radius, const int neighbors);
 
 std::optional<PC::Ptr>      loadPcXYZ(const std::string &pcd_file);
 std::optional<PC_NORM::Ptr> loadPcNormals(const std::string &pcd_file);

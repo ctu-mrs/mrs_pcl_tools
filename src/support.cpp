@@ -1,4 +1,5 @@
 #include "mrs_pcl_tools/support.h"
+#include <pcl/pcl_base.h>
 
 namespace mrs_pcl_tools
 {
@@ -13,6 +14,79 @@ void applyVoxelGridFilter(const PC_NORM::Ptr &cloud_in, PC_NORM::Ptr &cloud_out,
 
 void applyVoxelGridFilter(PC_NORM::Ptr &cloud, const float &leaf_size) {
   applyVoxelGridFilter(cloud, cloud, leaf_size);
+}
+/*//}*/
+
+/*//{ getInvalidIndicesSorFilterIndices() */
+pcl::IndicesConstPtr getInvalidIndicesSorFilterIndices(const bool enable, const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const int mean_k,
+                                                const double stddev_mul) {
+
+  if (!enable || indices->empty()) {
+    return boost::make_shared<pcl::Indices>();
+  }
+
+  pcl::StatisticalOutlierRemoval<pt_XYZ> sor(true);
+  sor.setInputCloud(cloud);
+  sor.setIndices(indices);
+  sor.setMeanK(mean_k);
+  sor.setStddevMulThresh(stddev_mul);
+
+  PC::Ptr cloud_tmp = boost::make_shared<PC>();
+  sor.filter(*cloud_tmp);
+
+  return sor.getRemovedIndices();
+}
+/*//}*/
+
+/*//{ getInvalidIndicesSorFilter() */
+pcl::IndicesConstPtr getInvalidIndicesSorFilter(const bool enable, const PC::Ptr &cloud, const int mean_k, const double stddev_mul) {
+
+  if (!enable) {
+    return boost::make_shared<pcl::Indices>();
+  }
+
+  pcl::StatisticalOutlierRemoval<pt_XYZ> sor(true);
+  sor.setInputCloud(cloud);
+  sor.setMeanK(mean_k);
+  sor.setStddevMulThresh(stddev_mul);
+
+  PC::Ptr cloud_tmp = boost::make_shared<PC>();
+  sor.filter(*cloud_tmp);
+
+  return sor.getRemovedIndices();
+}
+/*//}*/
+
+/*//{ getInvalidIndicesRorFilter() */
+pcl::IndicesConstPtr getInvalidIndicesRorFilter(const bool enable, const PC::Ptr &cloud, const double radius, const int neighbors) {
+
+  if (!enable) {
+    return boost::make_shared<pcl::Indices>();
+  }
+
+  // ROR requires finite points only
+  boost::shared_ptr<std::vector<int>> indices(new std::vector<int>());
+  for (int i = 0; i < cloud->size(); i++) {
+    if (cloud->at(i).getArray3fMap().allFinite()) {
+      indices->push_back(i);
+    }
+  }
+
+  if (indices->empty()) {
+    return boost::make_shared<pcl::Indices>();
+  }
+
+  pcl::RadiusOutlierRemoval<pt_XYZ> outrem(true);
+  outrem.setInputCloud(cloud);
+  outrem.setIndices(indices);
+  outrem.setRadiusSearch(radius);
+  outrem.setMinNeighborsInRadius(neighbors);
+  outrem.setKeepOrganized(true);
+
+  PC::Ptr cloud_tmp = boost::make_shared<PC>();
+  outrem.filter(*cloud_tmp);
+
+  return outrem.getRemovedIndices();
 }
 /*//}*/
 

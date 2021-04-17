@@ -284,103 +284,47 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
     removeCloseAndFarPointCloud(cloud, cloud_over_max_range, points_after, msg, _lidar3d_pcl2_over_max_range, _lidar3d_min_range_sq, _lidar3d_max_range_sq);
   }
 
-  if (_lidar3d_filter_sor_global_en) {
 
-    // Convert ouster_ros cloud to XYZ only
-    PC::Ptr cloud_xyz = boost::make_shared<PC>();
-    PC::Ptr cloud_tmp = boost::make_shared<PC>();
-    copyCloudOS2XYZ(cloud, cloud_xyz);
+  // Convert ouster_ros cloud to XYZ only
+  PC::Ptr cloud_xyz = boost::make_shared<PC>();
+  copyCloudOS2XYZ(cloud, cloud_xyz);
 
-    // Apply SOR filter
-    pcl::StatisticalOutlierRemoval<pt_XYZ> sor(true);
-    sor.setInputCloud(cloud_xyz);
-    sor.setMeanK(_lidar3d_filter_sor_global_neighbors);
-    sor.setStddevMulThresh(_lidar3d_filter_sor_global_stddev);
-    sor.filter(*cloud_tmp);
-
-    // Invalidate ouster_ros cloud at indices selected by SOR
-    invalidatePointsAtIndices(sor.getRemovedIndices(), cloud);
-  } else if (_lidar3d_filter_sor_local_en) {
-
-    PC::Ptr                             cloud_tmp = boost::make_shared<PC>();
-    PC::Ptr                             cloud_xyz = boost::make_shared<PC>();
-    boost::shared_ptr<std::vector<int>> indices_close(new std::vector<int>());
-    boost::shared_ptr<std::vector<int>> indices_distant(new std::vector<int>());
-
-    copyCloudOS2XYZ(cloud, cloud_xyz);
+  boost::shared_ptr<std::vector<int>> indices_close;
+  boost::shared_ptr<std::vector<int>> indices_distant;
+  if (_lidar3d_filter_sor_local_en || _fog_detector_en) {
+    indices_close   = boost::make_shared<std::vector<int>>();
+    indices_distant = boost::make_shared<std::vector<int>>();
     splitCloudByRange(cloud_xyz, indices_close, indices_distant, _lidar3d_filter_sor_local_range);
-
-    // Apply SOR filter: close
-    if (indices_close->size() > 0) {
-
-      detectFog(cloud_xyz, indices_close, _lidar3d_filter_sor_local_range, msg->header.stamp);
-
-      pcl::StatisticalOutlierRemoval<pt_XYZ> sor_close(true);
-      sor_close.setInputCloud(cloud_xyz);
-      sor_close.setIndices(indices_close);
-      sor_close.setMeanK(_lidar3d_filter_sor_local_close_neighbors);
-      sor_close.setStddevMulThresh(_lidar3d_filter_sor_local_close_stddev);
-      sor_close.filter(*cloud_tmp);
-
-      invalidatePointsAtIndices(sor_close.getRemovedIndices(), cloud);
-    }
-
-    // Apply SOR filter: distant
-    if (indices_distant->size() > 0) {
-      pcl::StatisticalOutlierRemoval<pt_XYZ> sor_distant(true);
-      sor_distant.setInputCloud(cloud_xyz);
-      sor_distant.setIndices(indices_distant);
-      sor_distant.setMeanK(_lidar3d_filter_sor_local_distant_neighbors);
-      sor_distant.setStddevMulThresh(_lidar3d_filter_sor_local_distant_stddev);
-      sor_distant.filter(*cloud_tmp);
-
-      // Invalidate ouster_ros cloud at indices selected by SOR
-      invalidatePointsAtIndices(sor_distant.getRemovedIndices(), cloud);
-    }
-  } else if (_fog_detector_en) {
-
-    PC::Ptr                             cloud_xyz = boost::make_shared<PC>();
-    boost::shared_ptr<std::vector<int>> indices_close(new std::vector<int>());
-    boost::shared_ptr<std::vector<int>> indices_distant(new std::vector<int>());
-
-    copyCloudOS2XYZ(cloud, cloud_xyz);
-    splitCloudByRange(cloud_xyz, indices_close, indices_distant, _lidar3d_filter_sor_local_range);
-
-    if (indices_close->size() > 0) {
-      detectFog(cloud_xyz, indices_close, _lidar3d_filter_sor_local_range, msg->header.stamp);
-    }
   }
 
-  if (_lidar3d_filter_ror_en) {
+  // Run filters in parallel
+  auto thr_ror_global = std::async(getInvalidIndicesRorFilter, _lidar3d_filter_ror_en, cloud_xyz, _lidar3d_filter_ror_radius, _lidar3d_filter_ror_neighbors);
 
-    // Convert ouster_ros cloud to XYZ only
-    PC::Ptr cloud_xyz = boost::make_shared<PC>();
-    PC::Ptr cloud_tmp = boost::make_shared<PC>();
-    copyCloudOS2XYZ(cloud, cloud_xyz);
+  auto thr_sor_global =
+      std::async(getInvalidIndicesSorFilter, _lidar3d_filter_sor_global_en, cloud_xyz, _lidar3d_filter_sor_global_neighbors, _lidar3d_filter_sor_global_stddev);
 
-    // ROR requires finite points only
-    pcl::PointIndices::Ptr finite_indices = boost::make_shared<pcl::PointIndices>();
-    for (int i = 0; i < cloud_xyz->size(); i++) {
-      if (cloud_xyz->at(i).getArray3fMap().allFinite()) {
-        finite_indices->indices.push_back(i);
-      }
-    }
+  auto thr_sor_local_close = std::async(getInvalidIndicesSorFilterIndices, _lidar3d_filter_sor_local_en, cloud_xyz, indices_close,
+                                        _lidar3d_filter_sor_local_close_neighbors, _lidar3d_filter_sor_local_close_stddev);
 
-    pcl::RadiusOutlierRemoval<pt_XYZ> outrem(true);
-    outrem.setInputCloud(cloud_xyz);
-    outrem.setIndices(finite_indices);
-    outrem.setRadiusSearch(_lidar3d_filter_ror_radius);
-    outrem.setMinNeighborsInRadius(_lidar3d_filter_ror_neighbors);
-    outrem.setKeepOrganized(true);
-    outrem.filter(*cloud_tmp);
-    invalidatePointsAtIndices(outrem.getRemovedIndices(), cloud);
-  }
+  auto thr_sor_local_distant = std::async(getInvalidIndicesSorFilterIndices, _lidar3d_filter_sor_local_en, cloud_xyz, indices_distant,
+                                          _lidar3d_filter_sor_local_close_neighbors, _lidar3d_filter_sor_local_close_stddev);
+
+  std::thread thr_fog_detection(&PCLFiltration::detectFog, this, cloud_xyz, indices_close, _lidar3d_filter_sor_local_range, msg->header.stamp);
+
+  // Apply all filters
+  invalidatePointsAtIndices(thr_sor_local_close.get(), cloud);
+  invalidatePointsAtIndices(thr_sor_local_distant.get(), cloud);
+  invalidatePointsAtIndices(thr_sor_global.get(), cloud);
+  invalidatePointsAtIndices(thr_ror_global.get(), cloud);
 
   publishCloud(_pub_lidar3d, *cloud);
 
   if (_lidar3d_pcl2_over_max_range) {
     publishCloud(_pub_lidar3d_over_max_range, *cloud_over_max_range);
   }
+
+  // Wait for fog detection finish
+  thr_fog_detection.join();
 
   NODELET_INFO_THROTTLE(
       5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %d, after: %d; dim before: (w: %d, h: %d), after: (w: %d, h: %d)).",
@@ -858,7 +802,7 @@ void PCLFiltration::invalidatePoint(pt_OS &point) {
 /*//{ detectFog() */
 void PCLFiltration::detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp) {
 
-  if (!_fog_detector_en) {
+  if (!_fog_detector_en || indices->empty()) {
     return;
   }
 
@@ -884,7 +828,7 @@ void PCLFiltration::detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std:
     fog_detection_msg->data_stddev                      = stddev_data;
     /* fog_detection_msg->data_sample_size                 = sample_size_data; */
     /* fog_detection_msg->z                                = z; */
-    fog_detection_msg->cndf                             = cndf;
+    fog_detection_msg->cndf = cndf;
     try {
       _pub_fog_detection.publish(fog_detection_msg);
     }

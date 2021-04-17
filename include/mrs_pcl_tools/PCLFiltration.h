@@ -3,9 +3,11 @@
 /* includes //{ */
 #include "support.h"
 
-#include <pcl-1.8/pcl/PointIndices.h>
-/* #include <pcl/PointIndices.h> */
+/* #include <pcl-1.8/pcl/PointIndices.h> */
+#include <pcl/PointIndices.h>
 #include <variant>
+#include <future>
+#include <thread>
 
 #include <sensor_msgs/LaserScan.h>
 
@@ -17,8 +19,6 @@
 /* #include <image_geometry/pinhole_camera_model.h> */
 
 #include <pcl/filters/crop_box.h>
-#include <pcl/filters/statistical_outlier_removal.h>
-#include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
