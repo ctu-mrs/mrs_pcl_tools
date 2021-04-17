@@ -1,4 +1,5 @@
 #include "mrs_pcl_tools/support.h"
+#include "pcl/PointIndices.h"
 #include <pcl/pcl_base.h>
 
 namespace mrs_pcl_tools
@@ -18,11 +19,11 @@ void applyVoxelGridFilter(PC_NORM::Ptr &cloud, const float &leaf_size) {
 /*//}*/
 
 /*//{ getInvalidIndicesSorFilterIndices() */
-pcl::IndicesConstPtr getInvalidIndicesSorFilterIndices(const bool enable, const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const int mean_k,
-                                                const double stddev_mul) {
+pcl::IndicesConstPtr getInvalidIndicesSorFilterIndices(const bool enable, const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices,
+                                                       const int mean_k, const double stddev_mul) {
 
   if (!enable || indices->empty()) {
-    return boost::make_shared<pcl::Indices>();
+    return boost::make_shared<std::vector<int>>();
   }
 
   pcl::StatisticalOutlierRemoval<pt_XYZ> sor(true);
@@ -42,7 +43,7 @@ pcl::IndicesConstPtr getInvalidIndicesSorFilterIndices(const bool enable, const 
 pcl::IndicesConstPtr getInvalidIndicesSorFilter(const bool enable, const PC::Ptr &cloud, const int mean_k, const double stddev_mul) {
 
   if (!enable) {
-    return boost::make_shared<pcl::Indices>();
+    return boost::make_shared<std::vector<int>>();
   }
 
   pcl::StatisticalOutlierRemoval<pt_XYZ> sor(true);
@@ -61,7 +62,7 @@ pcl::IndicesConstPtr getInvalidIndicesSorFilter(const bool enable, const PC::Ptr
 pcl::IndicesConstPtr getInvalidIndicesRorFilter(const bool enable, const PC::Ptr &cloud, const double radius, const int neighbors) {
 
   if (!enable) {
-    return boost::make_shared<pcl::Indices>();
+    return boost::make_shared<std::vector<int>>();
   }
 
   // ROR requires finite points only
@@ -73,7 +74,7 @@ pcl::IndicesConstPtr getInvalidIndicesRorFilter(const bool enable, const PC::Ptr
   }
 
   if (indices->empty()) {
-    return boost::make_shared<pcl::Indices>();
+    return boost::make_shared<std::vector<int>>();
   }
 
   pcl::RadiusOutlierRemoval<pt_XYZ> outrem(true);
