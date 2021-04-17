@@ -76,12 +76,15 @@ private:
   int    _lidar3d_filter_sor_local_distant_neighbors;
   double _lidar3d_filter_sor_local_distant_stddev;
 
+  bool   _lidar3d_over_max_range_filter_sor_global_en;
+  int    _lidar3d_over_max_range_filter_sor_global_neighbors;
+  double _lidar3d_over_max_range_filter_sor_global_stddev;
+
   bool   _fog_detector_en;
   int    _fog_detector_mean_k;
   double _fog_detector_z_test_prob_thrd;
   double _fog_detector_mean_exp;
   double _fog_detector_stddev_exp;
-  int    _fog_detector_sample_size_exp;
   /* double         _fog_detector_mean_thrd; */
   /* double         _fog_detector_stddev_thrd; */
   ros::Publisher _pub_fog_detection;

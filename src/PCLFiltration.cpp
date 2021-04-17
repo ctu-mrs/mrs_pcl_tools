@@ -47,12 +47,14 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("lidar3d/filter/ror/neighbors", _lidar3d_filter_ror_neighbors, 0);
   param_loader.loadParam("lidar3d/filter/ror/radius", _lidar3d_filter_ror_radius, 1.0);
 
+  param_loader.loadParam("lidar3d/over_max_range/filter/sor/enable", _lidar3d_over_max_range_filter_sor_global_en, false);
+  param_loader.loadParam("lidar3d/over_max_range/filter/sor/neighbors", _lidar3d_over_max_range_filter_sor_global_neighbors, 1);
+  param_loader.loadParam("lidar3d/over_max_range/filter/sor/stddev", _lidar3d_over_max_range_filter_sor_global_stddev, 1.0);
 
   param_loader.loadParam("lidar3d/filter/fog/enable", _fog_detector_en, false);
   param_loader.loadParam("lidar3d/filter/fog/nn_k", _fog_detector_mean_k, 5);
   param_loader.loadParam("lidar3d/filter/fog/subt_mean", _fog_detector_mean_exp, 0.0);
   param_loader.loadParam("lidar3d/filter/fog/subt_stddev", _fog_detector_stddev_exp, 0.0);
-  param_loader.loadParam("lidar3d/filter/fog/subt_sample_size", _fog_detector_sample_size_exp, 1);
   param_loader.loadParam("lidar3d/filter/fog/z_test_prob_thrd", _fog_detector_z_test_prob_thrd, 0.7);
   /* param_loader.loadParam("lidar3d/filter/fog/mean/thrd", _fog_detector_mean_thrd, std::numeric_limits<double>::max()); */
   /* param_loader.loadParam("lidar3d/filter/fog/stddev/thrd", _fog_detector_stddev_thrd, std::numeric_limits<double>::max()); */
@@ -287,6 +289,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
 
   // Convert ouster_ros cloud to XYZ only
   PC::Ptr cloud_xyz = boost::make_shared<PC>();
+  PC::Ptr cloud_xyz_over_max_range;
   copyCloudOS2XYZ(cloud, cloud_xyz);
 
   boost::shared_ptr<std::vector<int>> indices_close;
@@ -295,6 +298,10 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
     indices_close   = boost::make_shared<std::vector<int>>();
     indices_distant = boost::make_shared<std::vector<int>>();
     splitCloudByRange(cloud_xyz, indices_close, indices_distant, _lidar3d_filter_sor_local_range);
+  }
+  if (_lidar3d_pcl2_over_max_range && _lidar3d_over_max_range_filter_sor_global_en) {
+    cloud_xyz_over_max_range = boost::make_shared<PC>();
+    copyCloudOS2XYZ(cloud_over_max_range, cloud_xyz_over_max_range);
   }
 
   // Run filters in parallel
@@ -307,7 +314,10 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
                                         _lidar3d_filter_sor_local_close_neighbors, _lidar3d_filter_sor_local_close_stddev);
 
   auto thr_sor_local_distant = std::async(getInvalidIndicesSorFilterIndices, _lidar3d_filter_sor_local_en, cloud_xyz, indices_distant,
-                                          _lidar3d_filter_sor_local_close_neighbors, _lidar3d_filter_sor_local_close_stddev);
+                                          _lidar3d_filter_sor_local_distant_neighbors, _lidar3d_filter_sor_local_distant_stddev);
+
+  auto thr_sor_global_over_max_range = std::async(getInvalidIndicesSorFilter, _lidar3d_over_max_range_filter_sor_global_en, cloud_xyz_over_max_range,
+                                                  _lidar3d_over_max_range_filter_sor_global_neighbors, _lidar3d_over_max_range_filter_sor_global_stddev);
 
   std::thread thr_fog_detection(&PCLFiltration::detectFog, this, cloud_xyz, indices_close, _lidar3d_filter_sor_local_range, msg->header.stamp);
 
@@ -316,6 +326,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
   invalidatePointsAtIndices(thr_sor_local_distant.get(), cloud);
   invalidatePointsAtIndices(thr_sor_global.get(), cloud);
   invalidatePointsAtIndices(thr_ror_global.get(), cloud);
+  invalidatePointsAtIndices(thr_sor_global_over_max_range.get(), cloud_over_max_range);
 
   publishCloud(_pub_lidar3d, *cloud);
 
@@ -815,7 +826,7 @@ void PCLFiltration::detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std:
   /*     std::fabs(_fog_detector_mean_exp - mean_data) < _fog_detector_mean_thrd && std::fabs(_fog_detector_stddev_exp - stddev_data) <
    * _fog_detector_stddev_thrd; */
 
-  const double z      = zTest(_fog_detector_mean_exp, _fog_detector_stddev_exp, _fog_detector_sample_size_exp, mean_data, stddev_data, sample_size_data);
+  const double z      = zTest(_fog_detector_mean_exp, _fog_detector_stddev_exp, 1, mean_data, stddev_data, sample_size_data);
   const double cndf   = zTableLookup(z);
   const bool   in_fog = cndf < _fog_detector_z_test_prob_thrd;
 

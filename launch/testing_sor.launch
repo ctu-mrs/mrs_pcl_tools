@@ -132,6 +132,10 @@
       <!-- <param name="lidar3d/filter/fog/mean/thrd" type="double" value="0.03" /> -->
       <!-- <param name="lidar3d/filter/fog/stddev/thrd" type="double" value="0.03" /> -->
 
+      <param name="lidar3d/over_max_range/filter/sor/enable" type="bool" value="false" />
+      <param name="lidar3d/over_max_range/filter/sor/neighbors" type="int" value="4" />
+      <param name="lidar3d/over_max_range/filter/sor/stddev" type="double" value="1" />
+
       <param name="camera/up/pcl2_over_max_range" type="bool" value="$(arg camera_up_publish_cloud_over_max_range)" />
       <param name="camera/up/downsample_scale" type="int" value="$(arg camera_up_downsample_scale)" />
       <param name="camera/up/min_range" type="double" value="$(arg camera_up_min_range)" />
