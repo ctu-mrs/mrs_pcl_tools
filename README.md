@@ -25,7 +25,7 @@ cd mrs_pcl_tools/installation
 **After installation**:
 
 - rebuild all your packages depending on PCL (including `mrs_lib`, `catkin clean && catkin build` is recommended on all your workspaces)
-- add this snippet to `CmakeLists.txt` file of your PCL-dependent packages
+- add this snippet to `CMakeLists.txt` file of your PCL-dependent packages
 ```cmake
 # Point Cloud Library: Override CXX flags inherited from catkin workspace, if precompiled PCL binaries from Debian repositories are used
 if (DEFINED ENV{PCL_CROSS_COMPILATION})
