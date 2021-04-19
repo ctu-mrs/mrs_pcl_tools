@@ -32,7 +32,7 @@ PCL_VERSION_MAJOR=1.10
 PCL_VERSION_FULL=$PCL_VERSION_MAJOR.1
 
 # IMPORTANT: These variables should match the settings of your catkin workspace
-PROFILE="RelWithDebInfo" # RelWithDebInfo, Release, Debug
+PROFILE="Release" # RelWithDebInfo, Release, Debug
 BUILD_WITH_MARCH_NATIVE=true
 CMAKE_STANDARD=17
 
