@@ -32,13 +32,78 @@
 
 namespace mrs_pcl_tools
 {
-
-/* class PCLFiltration //{ */
-class PCLFiltration : public nodelet::Nodelet {
-
   using vec3_t = Eigen::Vector3f;
   using vec4_t = Eigen::Vector4f;
   using quat_t = Eigen::Quaternionf;
+
+  /* class RemoveBelowGroundFilter //{ */
+  
+  class RemoveBelowGroundFilter
+  {
+    public:
+      void initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer> transformer = nullptr, const bool publish_plane_marker = false)
+      {
+        pl.loadParam("lidar3d/ground_removal/range/use", range_use, false);
+        pl.loadParam("ground_removal/static_frame_id", static_frame_id);
+        pl.loadParam("ground_removal/max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
+        pl.loadParam("ground_removal/ransac/max_inlier_distance", max_inlier_dist, 3.0);
+        pl.loadParam("ground_removal/ransac/max_angle_difference", max_angle_diff, 15.0/180.0*M_PI);
+        pl.loadParam("ground_removal/plane_offset", plane_offset, 1.0);
+  
+        if (transformer == nullptr)
+        {
+          const auto pfx = pl.getPrefix();
+          pl.setPrefix("");
+          const std::string uav_name = pl.loadParamReusable<std::string>("uav_name");
+          pl.setPrefix(pfx);
+          this->transformer = std::make_shared<mrs_lib::Transformer>("RemoveBelowGroundFilter", uav_name);
+        }
+        else
+          this->transformer = transformer;
+  
+        if (range_use)
+        {
+          mrs_lib::SubscribeHandlerOptions shopts(nh);
+          shopts.node_name = "RemoveBelowGroundFilter";
+          shopts.no_message_timeout = ros::Duration(5.0);
+          mrs_lib::construct_object(sh_range, shopts, "rangefinder_in");
+        }
+  
+        if (publish_plane_marker)
+          pub_fitted_plane = nh.advertise<visualization_msgs::MarkerArray>("lidar3d_fitted_plane", 10);
+  
+        initialized = true;
+      }
+  
+      bool used() const
+      {
+        return initialized;
+      }
+  
+      template <typename PC>
+      typename boost::shared_ptr<PC> applyInPlace(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
+  
+    private:
+      bool initialized = false;
+  
+      std::shared_ptr<mrs_lib::Transformer> transformer = nullptr;
+      std::optional<ros::Publisher> pub_fitted_plane    = std::nullopt;
+      mrs_lib::SubscribeHandler<sensor_msgs::Range> sh_range;
+  
+      bool range_use              = false;
+      std::string static_frame_id = "";
+      double max_precrop_height   = 1.0;              // metres
+      double max_angle_diff       = 15.0/180.0*M_PI;  // 15 degrees
+      double max_inlier_dist      = 3.0;              // metres
+      double plane_offset         = 1.0;              // metres
+  };
+
+#include <impl/remove_below_ground_filter.hpp>
+  
+  //}
+
+/* class PCLFiltration //{ */
+class PCLFiltration : public nodelet::Nodelet {
 
 public:
   virtual void onInit();
@@ -49,7 +114,6 @@ private:
   ros::Subscriber _sub_lidar3d;
   ros::Subscriber _sub_depth;
   ros::Subscriber _sub_rplidar;
-  mrs_lib::SubscribeHandler<sensor_msgs::Range> _sh_range;
 
   ros::Publisher _pub_lidar3d;
   ros::Publisher _pub_lidar3d_over_max_range;
@@ -60,13 +124,15 @@ private:
   ros::Publisher _pub_depth_over_max_range;
   ros::Publisher _pub_rplidar;
 
-  mrs_lib::Transformer _transformer;
+  std::shared_ptr<mrs_lib::Transformer> _transformer;
 
   boost::recursive_mutex                               config_mutex_;
   typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;
   typedef dynamic_reconfigure::Server<Config>          ReconfigureServer;
   boost::shared_ptr<ReconfigureServer>                 reconfigure_server_;
   /* mrs_pcl_tools::mrs_pcl_tools_dynparamConfig         last_drs_config; */
+
+  RemoveBelowGroundFilter _filter_removeBelowGround;
 
   void callbackReconfigure(mrs_pcl_tools::pcl_filtration_dynparamConfig &config, uint32_t level);
 
@@ -87,14 +153,6 @@ private:
   int          _lidar3d_filter_intensity_thrd;
   int          _lidar3d_row_step;
   int          _lidar3d_col_step;
-
-  bool         _lidar3d_groundremoval_use;
-  bool         _lidar3d_groundremoval_range_use;
-  std::string  _lidar3d_groundremoval_frame_id;
-  float        _lidar3d_groundremoval_max_height;
-  float        _lidar3d_groundremoval_ransac_max_inlier_dist;
-  float        _lidar3d_groundremoval_ransac_max_angle_diff;
-  float        _lidar3d_groundremoval_offset;
 
   bool         _lidar3d_cropbox_use;
   std::string  _lidar3d_cropbox_frame_id;
@@ -127,8 +185,6 @@ private:
   template <typename PC>
   void process_msg(typename boost::shared_ptr<PC> pc_ptr);
 
-  template <typename PC>
-  typename boost::shared_ptr<PC> removeBelowGround(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
   template <typename PC>
   void cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc_ptr);
   void removeCloseAndFarPointCloudOS(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,

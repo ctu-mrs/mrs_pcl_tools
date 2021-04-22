@@ -12,6 +12,7 @@
   <arg name="lidar3d/range_clip/use" default="true" />
   <arg name="lidar3d/range_clip/min" default="0.45" />
   <arg name="lidar3d/range_clip/max" default="20.0" />
+  <arg name="lidar3d/ground_removal/use" default="false" />
   <arg name="lidar3d/downsampling/dynamic_row_selection" default="false" />
   <arg name="lidar3d/downsampling/row_step" default="1" doc="dynamic=false: will keep every n-th row; dynamic=true: number of iterations" />
   <arg name="lidar3d/downsampling/col_step" default="1" doc="will keep every n-th column" />
@@ -46,10 +47,10 @@
       <param name="lidar3d/range_clip/use" type="bool" value="$(arg lidar3d/range_clip/use)" />
       <param name="lidar3d/range_clip/min" type="double" value="$(arg lidar3d/range_clip/min)" />
       <param name="lidar3d/range_clip/max" type="double" value="$(arg lidar3d/range_clip/max)" />
-      <param name="lidar3d/ground_removal/use" type="bool" value="false" />
+      <param name="lidar3d/ground_removal/use" type="bool" value="$(arg lidar3d/ground_removal/use)" />
       <param name="lidar3d/ground_removal/range/use" type="bool" value="true" />
-      <param name="lidar3d/ground_removal/frame_id" type="string" value="gps_origin" />
-      <param name="lidar3d/ground_removal/max_height" type="double" value="2.0" />
+      <param name="lidar3d/ground_removal/static_frame_id" type="string" value="gps_origin" />
+      <param name="lidar3d/ground_removal/max_precrop_height" type="double" value="2.0" />
       <param name="lidar3d/ground_removal/ransac/max_inlier_distance" type="double" value="0.5" />
       <param name="lidar3d/ground_removal/offset" type="double" value="1.0" />
       <param name="lidar3d/downsampling/dynamic_row_selection" type="bool" value="$(arg lidar3d/downsampling/dynamic_row_selection)" />
