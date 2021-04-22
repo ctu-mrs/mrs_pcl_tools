@@ -35,6 +35,28 @@ public:
   virtual void onInit();
 
 private:
+  /* CAMERA processing */
+  struct Camera
+  {
+  public:
+    std::string       name;
+    bool              detect_landing_area;
+    bool              publish_pcl2_over_max_range;
+    int               downsample_scale;
+    float             voxel_grid_resolution;
+    float             min_range;
+    float             max_range;
+    float             focal_length;
+    float             hfov;
+    long unsigned int keep_nth_frame;
+    long unsigned int data_frame;
+    ros::Subscriber   sub_image;
+    ros::Publisher    pub_cloud;
+    ros::Publisher    pub_cloud_over_max_range;
+    ros::Publisher    pub_landing_spot;
+  };
+
+private:
   bool is_initialized = false;
 
   ros::Subscriber _sub_lidar3d;
@@ -42,7 +64,8 @@ private:
   ros::Publisher _pub_lidar3d;
   ros::Publisher _pub_lidar3d_over_max_range;
 
-  ros::Timer _timer_check_subscribers;
+  ros::Timer _timer_fog_detection;
+  void       fogDetectionTimer(const ros::TimerEvent &event);
 
   boost::recursive_mutex                               config_mutex_;
   typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;
@@ -85,6 +108,17 @@ private:
   double _fog_detector_z_test_prob_thrd;
   double _fog_detector_mean_exp;
   double _fog_detector_stddev_exp;
+
+  std::mutex _mutex_fog_detector_data;
+  bool       _fog_detector_lidar_flag = false;
+  bool       _fog_detector_depth_flag = false;
+  ros::Time  _fog_detector_lidar_time_last;
+  ros::Time  _fog_detector_depth_time_last;
+  float      _fog_detector_lidar_data_mean;
+  float      _fog_detector_lidar_data_stddev;
+  float      _fog_detector_lidar_cndf;
+  float      _fog_detector_depth_point_ratio;
+
   /* double         _fog_detector_mean_thrd; */
   /* double         _fog_detector_stddev_thrd; */
   ros::Publisher _pub_fog_detection;
@@ -115,35 +149,18 @@ private:
   void copyCloudOS2XYZ(const PC_OS::Ptr &cloud_OS, PC::Ptr &cloud_xyz);
   void invalidatePointsAtIndices(const pcl::IndicesConstPtr &indices, PC_OS::Ptr &cloud);
 
-  void detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp);
-  void generateNNStatistics(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, double &mean, double &stddev, int &sample_size,
+  void detectFogInLidarData(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp);
+  bool detectFogInDepthData(const PC::Ptr &cloud, const std::shared_ptr<Camera> &camera, const float points_ratio, const int image_width,
+                            const int image_height, const float cloud_resolution);
+  void generateNNStatistics(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, float &mean, float &stddev, int &sample_size,
                             const int mean_k);
+
 
   double zTest(const double mean_1, const double stddev_1, const int sample_size_1, const double mean_2, const double stddev_2, const int sample_size_2);
   double zTableLookup(const double z);
 
   template <typename T>
   void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);
-
-  /* CAMERA processing */
-  struct Camera
-  {
-  public:
-    std::string       name;
-    bool              detect_landing_area;
-    bool              publish_pcl2_over_max_range;
-    int               downsample_scale;
-    float             voxel_grid_resolution;
-    float             min_range;
-    float             max_range;
-    float             focal_length;
-    long unsigned int keep_nth_frame;
-    long unsigned int data_frame;
-    ros::Subscriber   sub_image;
-    ros::Publisher    pub_cloud;
-    ros::Publisher    pub_cloud_over_max_range;
-    ros::Publisher    pub_landing_spot;
-  };
 
   std::shared_ptr<Camera> _camera_up;
   std::shared_ptr<Camera> _camera_down;
@@ -183,6 +200,8 @@ private:
     unsigned long int keep_nth_front_camera_frame;
     float             focal_length_vert_camera;
     float             focal_length_front_camera;
+    float             hfov_vert_camera;
+    float             hfov_front_camera;
     float             vert_camera_max_range;
     float             front_camera_max_range;
   };

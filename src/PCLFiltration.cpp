@@ -1,4 +1,5 @@
 #include "mrs_pcl_tools/PCLFiltration.h"
+#include <algorithm>
 #include <cmath>
 #include <pcl/pcl_base.h>
 
@@ -82,6 +83,8 @@ void PCLFiltration::onInit() {
     _mav_type->skip_nth_lidar_frame            = 4;               // 20 Hz -> 15 Hz
     _mav_type->keep_nth_vert_camera_frame      = 3;               // 30 Hz -> 10 Hz
     _mav_type->keep_nth_front_camera_frame     = 3;               // 30 Hz -> 10 Hz
+    _mav_type->hfov_vert_camera                = 1.08210414f;     // 62deg hfov, 224 px width
+    _mav_type->hfov_front_camera               = 1.51843645f;     // 87deg hfov, 640 px width
     _mav_type->focal_length_vert_camera        = 186.4f;          // 62deg hfov, 224 px width
     _mav_type->focal_length_front_camera       = 303.668661581f;  // 87deg hfov, 640 px width
     _mav_type->vert_camera_max_range           = 4.0f;
@@ -91,9 +94,11 @@ void PCLFiltration::onInit() {
     _mav_type->lidar_row_step                  = 1;
     _mav_type->process_cameras                 = true;
     _mav_type->filter_out_projected_self_frame = true;
-    _mav_type->skip_nth_lidar_frame            = 4;         // 20 Hz -> 15 Hz
-    _mav_type->keep_nth_vert_camera_frame      = 2;         // 20 Hz -> 10 Hz
-    _mav_type->keep_nth_front_camera_frame     = 2;         // 20 Hz -> 10 Hz
+    _mav_type->skip_nth_lidar_frame            = 4;  // 20 Hz -> 15 Hz
+    _mav_type->keep_nth_vert_camera_frame      = 2;  // 20 Hz -> 10 Hz
+    _mav_type->keep_nth_front_camera_frame     = 2;  // 20 Hz -> 10 Hz
+    _mav_type->hfov_vert_camera                = 1.50098f;
+    _mav_type->hfov_front_camera               = 1.50098f;
     _mav_type->focal_length_vert_camera        = 343.158f;  // hfov -> 1.50098
     _mav_type->focal_length_front_camera       = 343.158f;  //
     _mav_type->vert_camera_max_range           = 10.0f;
@@ -103,9 +108,11 @@ void PCLFiltration::onInit() {
     _mav_type->lidar_row_step                  = 1;
     _mav_type->process_cameras                 = true;
     _mav_type->filter_out_projected_self_frame = false;
-    _mav_type->skip_nth_lidar_frame            = 0;          // 10 Hz
-    _mav_type->keep_nth_vert_camera_frame      = 2;          // 20 Hz -> 10 Hz
-    _mav_type->keep_nth_front_camera_frame     = 2;          // 20 Hz -> 10 Hz
+    _mav_type->skip_nth_lidar_frame            = 0;  // 10 Hz
+    _mav_type->keep_nth_vert_camera_frame      = 2;  // 20 Hz -> 10 Hz
+    _mav_type->keep_nth_front_camera_frame     = 2;  // 20 Hz -> 10 Hz
+    _mav_type->hfov_vert_camera                = 1.0472f;
+    _mav_type->hfov_front_camera               = 1.0472f;
     _mav_type->focal_length_vert_camera        = 554.25469;  //
     _mav_type->focal_length_front_camera       = 554.25469;  //
     _mav_type->vert_camera_max_range           = 10.0f;
@@ -118,6 +125,8 @@ void PCLFiltration::onInit() {
     _mav_type->skip_nth_lidar_frame            = 0;     // 10 Hz
     _mav_type->keep_nth_vert_camera_frame      = 0;     // no cam
     _mav_type->keep_nth_front_camera_frame     = 0;     // no cam
+    _mav_type->hfov_vert_camera                = 0.0f;  // no cam
+    _mav_type->hfov_front_camera               = 0.0f;  // no cam
     _mav_type->focal_length_vert_camera        = 0.0f;  // no cam
     _mav_type->focal_length_front_camera       = 0.0f;  // no cam
     _mav_type->vert_camera_max_range           = 0.0f;  // no cam
@@ -134,6 +143,7 @@ void PCLFiltration::onInit() {
     /* Upper camera */
     _camera_up                      = std::make_shared<Camera>();
     _camera_up->name                = std::string("camera-top");
+    _camera_up->hfov                = _mav_type->hfov_vert_camera;
     _camera_up->focal_length        = _mav_type->focal_length_vert_camera;
     _camera_up->max_range           = _mav_type->vert_camera_max_range;
     _camera_up->detect_landing_area = false;
@@ -151,6 +161,7 @@ void PCLFiltration::onInit() {
     /* Bottom camera */
     _camera_down                      = std::make_shared<Camera>();
     _camera_down->name                = std::string("camera-bottom");
+    _camera_down->hfov                = _mav_type->hfov_vert_camera;
     _camera_down->focal_length        = _mav_type->focal_length_vert_camera;
     _camera_down->max_range           = _mav_type->vert_camera_max_range;
     _camera_down->detect_landing_area = false;  // TODO: detect landing are should be set here to true
@@ -175,6 +186,7 @@ void PCLFiltration::onInit() {
     /* Front camera */
     _camera_front                      = std::make_shared<Camera>();
     _camera_front->name                = std::string("camera-front");
+    _camera_front->hfov                = _mav_type->hfov_front_camera;
     _camera_front->focal_length        = _mav_type->focal_length_front_camera;
     _camera_front->max_range           = _mav_type->front_camera_max_range;
     _camera_front->detect_landing_area = false;
@@ -201,7 +213,8 @@ void PCLFiltration::onInit() {
     ros::shutdown();
   }
 
-  _pub_fog_detection = nh.advertise<darpa_mrs_msgs::FogDetection>("fog_detection_out", 1);
+  _pub_fog_detection   = nh.advertise<darpa_mrs_msgs::FogDetection>("fog_detection_out", 1);
+  _timer_fog_detection = nh.createTimer(ros::Rate(5.0), &PCLFiltration::fogDetectionTimer, this);
 
   reconfigure_server_.reset(new ReconfigureServer(config_mutex_, nh));
   /* reconfigure_server_->updateConfig(last_drs_config); */
@@ -319,7 +332,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
   auto thr_sor_global_over_max_range = std::async(getInvalidIndicesSorFilter, _lidar3d_over_max_range_filter_sor_global_en, cloud_xyz_over_max_range,
                                                   _lidar3d_over_max_range_filter_sor_global_neighbors, _lidar3d_over_max_range_filter_sor_global_stddev);
 
-  std::thread thr_fog_detection(&PCLFiltration::detectFog, this, cloud_xyz, indices_close, _lidar3d_filter_sor_local_range, msg->header.stamp);
+  std::thread thr_fog_detection(&PCLFiltration::detectFogInLidarData, this, cloud_xyz, indices_close, _lidar3d_filter_sor_local_range, msg->header.stamp);
 
   // Apply all filters
   invalidatePointsAtIndices(thr_sor_local_close.get(), cloud);
@@ -372,6 +385,12 @@ void PCLFiltration::callbackCameraImage(const sensor_msgs::Image::ConstPtr &dept
     vg.filter(*clouds_both.first);
   }
 
+  const bool in_fog = detectFogInDepthData(clouds_both.first, camera, 0.15f, depth_msg->width, depth_msg->height, camera->voxel_grid_resolution);
+  if (in_fog) {
+    NODELET_INFO_THROTTLE(0.5, "[PCLFiltration] Camera detects fog. Processed data will not be published out.");
+    return;
+  }
+
   NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed camera data (run time: %0.1f ms; points before: %d, after: %ld, over_max_range: %ld).", t.toc(),
                         depth_msg->height * depth_msg->width, clouds_both.first->points.size(), clouds_both.second->points.size());
 
@@ -396,7 +415,6 @@ void PCLFiltration::callbackCameraImage(const sensor_msgs::Image::ConstPtr &dept
 
   // Publish data
   publishCloud(camera->pub_cloud, *clouds_both.first);
-
 
   // Publish data over max range
   if (camera->publish_pcl2_over_max_range) {
@@ -810,49 +828,110 @@ void PCLFiltration::invalidatePoint(pt_OS &point) {
 }
 /*//}*/
 
-/*//{ detectFog() */
-void PCLFiltration::detectFog(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp) {
+/*//{ detectFogInLidarData() */
+void PCLFiltration::detectFogInLidarData(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp) {
 
   if (!_fog_detector_en || indices->empty()) {
     return;
   }
 
   // Estimate mean and stddev of local data
-  double mean_data, stddev_data;
-  int    sample_size_data;
-  generateNNStatistics(cloud, indices, mean_data, stddev_data, sample_size_data, _fog_detector_mean_k);
+  float data_mean, data_stddev;
+  int   sample_size_data;
+  generateNNStatistics(cloud, indices, data_mean, data_stddev, sample_size_data, _fog_detector_mean_k);
 
   /* const bool in_fog = */
   /*     std::fabs(_fog_detector_mean_exp - mean_data) < _fog_detector_mean_thrd && std::fabs(_fog_detector_stddev_exp - stddev_data) <
    * _fog_detector_stddev_thrd; */
 
-  const double z      = zTest(_fog_detector_mean_exp, _fog_detector_stddev_exp, 1, mean_data, stddev_data, sample_size_data);
-  const double cndf   = zTableLookup(z);
-  const bool   in_fog = cndf < _fog_detector_z_test_prob_thrd;
+  const double z = zTest(_fog_detector_mean_exp, _fog_detector_stddev_exp, 1, data_mean, data_stddev, sample_size_data);
+  {
+    std::scoped_lock lock(_mutex_fog_detector_data);
 
-  if (_pub_fog_detection.getNumSubscribers() > 0) {
-    darpa_mrs_msgs::FogDetection::Ptr fog_detection_msg = boost::make_shared<darpa_mrs_msgs::FogDetection>();
-    fog_detection_msg->stamp                            = stamp;
-    fog_detection_msg->in_fog                           = in_fog;
-    fog_detection_msg->detection_range                  = range;
-    fog_detection_msg->data_mean                        = mean_data;
-    fog_detection_msg->data_stddev                      = stddev_data;
-    /* fog_detection_msg->data_sample_size                 = sample_size_data; */
-    /* fog_detection_msg->z                                = z; */
-    fog_detection_msg->cndf = cndf;
-    try {
-      _pub_fog_detection.publish(fog_detection_msg);
-    }
-    catch (...) {
-      NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", _pub_fog_detection.getTopic().c_str());
+    const double cndf        = zTableLookup(z);
+    _fog_detector_lidar_flag = cndf < _fog_detector_z_test_prob_thrd;
+
+    _fog_detector_lidar_data_mean   = data_mean;
+    _fog_detector_lidar_data_stddev = data_stddev;
+    _fog_detector_lidar_cndf        = cndf;
+
+    if (_fog_detector_lidar_flag) {
+      _fog_detector_lidar_time_last = stamp;
     }
   }
 }
 /*//}*/
 
+/*//{ detectFogInDepthData() */
+bool PCLFiltration::detectFogInDepthData(const PC::Ptr &cloud, const std::shared_ptr<Camera> &camera, const float points_ratio_thrd, const int image_width,
+                                         const int image_height, const float cloud_resolution) {
+
+  if (!_fog_detector_en || cloud->empty() || cloud_resolution <= 0.0f || points_ratio_thrd < 0.0f) {
+    return false;
+  }
+
+  // Precompute ranges of all points (x-axis is original distance in the depth image)
+  std::vector<float> depths(cloud->size());
+  float              depth_max;
+  for (int i = 0; i < cloud->size(); i++) {
+    const auto &point = cloud->at(i);
+    depths.at(i)      = point.x;
+    if (point.x > depth_max) {
+      depth_max = point.x;
+    }
+  }
+
+  // Compute number of points up to range R
+  const float R                = depth_max / 1.5f;
+  const int   true_point_count = std::count_if(depths.begin(), depths.end(), [&R](const float d) { return d < R; });
+
+  if (true_point_count == 0) {
+    /* NODELET_ERROR("[PCLFiltration::detectFogInDepthData] true point count is 0"); */
+    return false;
+  }
+
+  // Compute camera vertical field of view
+  const float tan_hfov_half = std::tan(camera->hfov / 2.0f);
+  const float vfov_half     = std::atan(tan_hfov_half * float(image_height) / float(image_width));
+
+  // Compute pyramid parameters (depth R, base dimensions a/b)
+  const float a      = 2.0f * R * tan_hfov_half;
+  const float b      = 2.0f * R * std::sin(vfov_half);
+  const float volume = a * b * R / 3.0f;
+
+  // Compute the expected number of points in full pyramid volume at the resolution of input cloud
+  const int full_point_count = volume / std::pow(cloud_resolution, 3);
+
+  if (full_point_count == 0) {
+    /* NODELET_ERROR("[PCLFiltration::detectFogInDepthData] full point count is 0"); */
+    return false;
+  }
+
+  // Compute the ratio of points in the pyramid
+  const float true_points_ratio = float(true_point_count) / float(full_point_count);
+
+  {
+    std::scoped_lock lock(_mutex_fog_detector_data);
+
+    // Apply simple thresholding (a lot of points within the pyramid means a fog probability is high)
+    _fog_detector_depth_flag = true_points_ratio > points_ratio_thrd;
+
+    if (_fog_detector_depth_flag) {
+      _fog_detector_depth_time_last   = ros::Time::now();
+      _fog_detector_depth_point_ratio = true_points_ratio;
+    }
+  }
+
+  NODELET_INFO_THROTTLE(1.0, "[PCLFiltration::detectFogInDepthData] in_fog: %s, R: %0.1f, volume: %0.1f, ratio: %0.1f (point count -> true: %d, full: %d)",
+                        _fog_detector_depth_flag ? "true" : "false", R, volume, true_points_ratio, true_point_count, full_point_count);
+
+  return _fog_detector_depth_flag;
+}
+/*//}*/
+
 /*//{ generateNNStatistics() */
-void PCLFiltration::generateNNStatistics(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, double &mean, double &stddev,
-                                         int &sample_size, const int mean_k) {
+void PCLFiltration::generateNNStatistics(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, float &mean, float &stddev, int &sample_size,
+                                         const int mean_k) {
 
   pcl::search::KdTree<pt_XYZ>::Ptr tree = boost::make_shared<pcl::search::KdTree<pt_XYZ>>(false);
   tree->setInputCloud(cloud);
@@ -881,7 +960,7 @@ void PCLFiltration::generateNNStatistics(const PC::Ptr &cloud, const boost::shar
     }
 
     // Minimum distance (if mean_k == 2) or mean distance
-    double dist_sum = 0;
+    float dist_sum = 0;
     for (int j = 1; j < mean_k; ++j) {
       dist_sum += sqrt(nn_dists[j]);
     }
@@ -890,15 +969,15 @@ void PCLFiltration::generateNNStatistics(const PC::Ptr &cloud, const boost::shar
   }
 
   // Estimate the mean and the standard deviation of the distance vector
-  double sum = 0, sq_sum = 0;
+  float sum = 0, sq_sum = 0;
   for (const float &d : distances) {
     sum += d;
     sq_sum += d * d;
   }
 
-  mean                  = sum / static_cast<double>(sample_size);
-  const double variance = (sq_sum - sum * sum / static_cast<double>(sample_size)) / (static_cast<double>(sample_size) - 1);
-  stddev                = sqrt(variance);
+  mean                 = sum / static_cast<float>(sample_size);
+  const float variance = (sq_sum - sum * sum / static_cast<float>(sample_size)) / (static_cast<float>(sample_size) - 1);
+  stddev               = sqrt(variance);
 }
 /*//}*/
 
@@ -959,6 +1038,52 @@ double PCLFiltration::zTableLookup(const double z) {
   // Return cummulative normal distribution function
   // URL: https://stackoverflow.com/questions/58371163/how-to-change-the-z-value-to-the-one-from-the-table-z-table-from-normal-distrib
   return 0.5 * std::erfc(-z * M_SQRT1_2);
+}
+/*//}*/
+
+/*//{ fogDetectionTimer() */
+void PCLFiltration::fogDetectionTimer(const ros::TimerEvent &event) {
+
+  if (_pub_fog_detection.getNumSubscribers() > 0) {
+
+    const ros::Time now  = ros::Time::now();
+    const double    secs = 1.0;
+
+    darpa_mrs_msgs::FogDetection::Ptr msg = boost::make_shared<darpa_mrs_msgs::FogDetection>();
+    msg->stamp                            = now;
+
+    {
+      std::scoped_lock lock(_mutex_fog_detector_data);
+
+      bool lidar_in_fog = _fog_detector_lidar_flag;
+      if (lidar_in_fog && (now - _fog_detector_lidar_time_last).toSec() > secs) {
+        _fog_detector_lidar_flag = false;
+        lidar_in_fog             = false;
+      }
+
+      bool depth_in_fog = _fog_detector_depth_flag;
+      if (depth_in_fog && (now - _fog_detector_depth_time_last).toSec() > secs) {
+        _fog_detector_depth_flag = false;
+        depth_in_fog             = false;
+      }
+
+      msg->in_fog                = lidar_in_fog || depth_in_fog;
+      msg->lidar_in_fog          = lidar_in_fog;
+      msg->depth_in_fog          = depth_in_fog;
+      msg->lidar_detection_range = _lidar3d_filter_sor_local_range;
+      msg->lidar_data_mean       = _fog_detector_lidar_data_mean;
+      msg->lidar_data_stddev     = _fog_detector_lidar_data_stddev;
+      msg->lidar_cndf            = _fog_detector_lidar_cndf;
+      msg->depth_point_ratio     = _fog_detector_depth_point_ratio;
+    }
+
+    try {
+      _pub_fog_detection.publish(msg);
+    }
+    catch (...) {
+      NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", _pub_fog_detection.getTopic().c_str());
+    }
+  }
 }
 /*//}*/
 

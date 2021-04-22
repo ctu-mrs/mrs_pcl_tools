@@ -112,11 +112,11 @@
       <param name="lidar3d/filter/sor/global/stddev" type="double" value="1" />
 
       <param name="lidar3d/filter/sor/local/enable" type="bool" value="true" />
-      <param name="lidar3d/filter/sor/local/range" type="double" value="3.0" />
+      <param name="lidar3d/filter/sor/local/range" type="double" value="5.0" />
       <param name="lidar3d/filter/sor/local/close/neighbors" type="int" value="10" />
       <param name="lidar3d/filter/sor/local/close/stddev" type="double" value="0.1" />
-      <param name="lidar3d/filter/sor/local/distant/neighbors" type="int" value="4" />
-      <param name="lidar3d/filter/sor/local/distant/stddev" type="double" value="1" />
+      <param name="lidar3d/filter/sor/local/distant/neighbors" type="int" value="1" />
+      <param name="lidar3d/filter/sor/local/distant/stddev" type="double" value="5.0" />
 
       <param name="lidar3d/filter/ror/enable" type="bool" value="false" />
       <param name="lidar3d/filter/ror/neighbors" type="int" value="1" />
