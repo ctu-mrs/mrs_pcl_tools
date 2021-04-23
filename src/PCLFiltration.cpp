@@ -37,7 +37,9 @@ void PCLFiltration::onInit() {
   _transformer = std::make_shared<mrs_lib::Transformer>("PCLFiltration", uav_name);
 
   /* 3D LIDAR */
+  param_loader.loadParam("lidar3d/keep_organized", _lidar3d_keep_organized, true);
   param_loader.loadParam("lidar3d/republish", _lidar3d_republish, false);
+  param_loader.loadParam("lidar3d/invalid_value", _lidar3d_invalid_value, std::numeric_limits<float>::quiet_NaN());
   param_loader.loadParam("lidar3d/range_clip/use", _lidar3d_rangeclip_use, false);
   param_loader.loadParam("lidar3d/range_clip/min", _lidar3d_rangeclip_min_sq, 0.4f);
   param_loader.loadParam("lidar3d/range_clip/max", _lidar3d_rangeclip_max_sq, 100.0f);
@@ -84,8 +86,8 @@ void PCLFiltration::onInit() {
     ros::shutdown();
   }
 
-  param_loader.loadParam("lidar3d/filter/intensity/enable", _lidar3d_filter_intensity_en, false);
-  param_loader.loadParam("lidar3d/filter/intensity/threshold", _lidar3d_filter_intensity_thrd, std::numeric_limits<int>::max());
+  param_loader.loadParam("lidar3d/filter/intensity/use", _lidar3d_filter_intensity_use, false);
+  param_loader.loadParam("lidar3d/filter/intensity/threshold", _lidar3d_filter_intensity_threshold, std::numeric_limits<int>::max());
   param_loader.loadParam("lidar3d/filter/intensity/range", _lidar3d_filter_intensity_range_sq, std::numeric_limits<float>::max());
   _lidar3d_filter_intensity_range_mm = _lidar3d_filter_intensity_range_sq * 1000;
   _lidar3d_filter_intensity_range_sq *= _lidar3d_filter_intensity_range_sq;
@@ -159,9 +161,9 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
   }
   NODELET_INFO("[PCLFiltration] Reconfigure callback.");
 
-  _lidar3d_filter_intensity_en       = config.lidar3d_filter_intensity_en;
-  _lidar3d_filter_intensity_thrd     = config.lidar3d_filter_intensity_thrd;
-  _lidar3d_filter_intensity_range_sq = std::pow(config.lidar3d_filter_intensity_rng, 2);
+  _lidar3d_filter_intensity_use       = config.lidar3d_filter_intensity_use;
+  _lidar3d_filter_intensity_threshold = config.lidar3d_filter_intensity_threshold;
+  _lidar3d_filter_intensity_range_sq  = std::pow(config.lidar3d_filter_intensity_range, 2);
 }
 //}
 
@@ -220,10 +222,17 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
       _pub_lidar3d_over_max_range.publish(pcl_over_max_range);
   }
 
+  if (_lidar3d_filter_intensity_use)
+  {
+    const bool publish_removed = false; // if anyone actually needs to publish the removed points, then implement the publisher etc.
+    removeLowIntensity(pc_ptr, publish_removed);
+  }
+
   if (_lidar3d_cropbox_use)
     cropBoxPointCloud(pc_ptr);
 
   // make sure that no infinite points remain in the pointcloud
+  if (!_lidar3d_keep_organized)
   {
     const auto orig_pc = pc_ptr;
     pc_ptr = boost::make_shared<PC>();
@@ -400,6 +409,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFar(typename boost::
       invalidatePoint(point);
     }
   }
+  removed_pc->resize(removed_it);
 
   return removed_pc;
 }
@@ -445,7 +455,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
     {
       const auto range = getFieldValue<uint32_t>(point, range_offset);
       invalid_range = range < _lidar3d_rangeclip_min_mm || range > _lidar3d_rangeclip_max_mm;
-      invalid_intensity = intensity < _lidar3d_filter_intensity_thrd && range < _lidar3d_filter_intensity_range_mm;
+      invalid_intensity = intensity < _lidar3d_filter_intensity_threshold && range < _lidar3d_filter_intensity_range_mm;
     }
     // otherwise, just calculate the range as the norm
     else
@@ -453,7 +463,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
       const vec3_t pt = point.getArray3fMap();
       const float range_sq = pt.squaredNorm();
       invalid_range = range_sq < _lidar3d_rangeclip_min_sq || range_sq > _lidar3d_rangeclip_max_sq;
-      invalid_intensity = intensity < _lidar3d_filter_intensity_thrd && range_sq < _lidar3d_filter_intensity_range_sq;
+      invalid_intensity = intensity < _lidar3d_filter_intensity_threshold && range_sq < _lidar3d_filter_intensity_range_sq;
     }
 
     // check the removal condition
@@ -464,6 +474,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
       invalidatePoint(point);
     }
   }
+  removed_pc->resize(removed_it);
 
   return removed_pc;
 }
@@ -501,7 +512,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeLowIntensity(typename boost:
   {
     const auto intensity = getFieldValue<float>(point, intensity_offset);
     // check the removal condition
-    if (intensity < _lidar3d_filter_intensity_thrd)
+    if (intensity < _lidar3d_filter_intensity_threshold)
     {
       bool invalid = false;
 
@@ -528,6 +539,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeLowIntensity(typename boost:
       }
     }
   }
+  removed_pc->resize(removed_it);
 
   return removed_pc;
 }
@@ -558,6 +570,7 @@ void PCLFiltration::cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc)
     }
   }
 
+  cb.setKeepOrganized(_lidar3d_keep_organized);
   cb.setNegative(false);
   cb.setMin(_lidar3d_cropbox_min);
   cb.setMax(_lidar3d_cropbox_max);
@@ -628,11 +641,11 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const 
 
 /*//{ invalidatePoint() */
 template <typename pt_t>
-void PCLFiltration::invalidatePoint(pt_t &point, const float inv_value)
+void PCLFiltration::invalidatePoint(pt_t &point)
 {
-  point.x = inv_value;
-  point.y = inv_value;
-  point.z = inv_value;
+  point.x = _lidar3d_invalid_value;
+  point.y = _lidar3d_invalid_value;
+  point.z = _lidar3d_invalid_value;
 }
 /*//}*/
 

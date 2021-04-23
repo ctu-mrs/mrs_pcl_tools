@@ -16,9 +16,9 @@
   <arg name="lidar3d/downsampling/dynamic_row_selection" default="false" />
   <arg name="lidar3d/downsampling/row_step" default="1" doc="dynamic=false: will keep every n-th row; dynamic=true: number of iterations" />
   <arg name="lidar3d/downsampling/col_step" default="1" doc="will keep every n-th column" />
-  <arg name="lidar3d/filter_intensity_en" default="false" />
-  <arg name="lidar3d/filter_intensity_thrd" default="100" />
-  <arg name="lidar3d/filter_intensity_range" default="10.0" />
+  <arg name="lidar3d/filter_intensity/use" default="false" />
+  <arg name="lidar3d/filter_intensity/threshold" default="100" />
+  <arg name="lidar3d/filter_intensity/range" default="10.0" />
 
   <arg name="depth_topic_in" default="rs_d435/points" />
   <arg name="depth_image_format" default="true" doc="if depth data come in sensor_msgs/Image format" />
@@ -56,9 +56,9 @@
       <param name="lidar3d/downsampling/dynamic_row_selection" type="bool" value="$(arg lidar3d/downsampling/dynamic_row_selection)" />
       <param name="lidar3d/downsampling/row_step" type="int" value="$(arg lidar3d/downsampling/row_step)" />
       <param name="lidar3d/downsampling/col_step" type="int" value="$(arg lidar3d/downsampling/col_step)" />
-      <param name="lidar3d/filter/intensity/enable" type="bool" value="$(arg lidar3d/filter_intensity_en)" />
-      <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d/filter_intensity_thrd)" />
-      <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d/filter_intensity_range)" />
+      <param name="lidar3d/filter/intensity/use" type="bool" value="$(arg lidar3d/filter_intensity/use)" />
+      <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d/filter_intensity/threshold)" />
+      <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d/filter_intensity/range)" />
 
       <param name="depth/republish" type="bool" value="$(arg depth_republish)" />
       <param name="depth/pcl2_over_max_range" type="bool" value="$(arg depth_publish_cloud_over_max_range)" />

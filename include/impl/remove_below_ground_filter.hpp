@@ -281,6 +281,7 @@ typename boost::shared_ptr<PC> RemoveBelowGroundFilter::applyInPlace(typename bo
     ei.filter(*removed_pc_ptr);
     ei.setNegative(false);
   }
+  ei.setKeepOrganized(keep_organized);
   ei.filter(*inout_pc);
 
   return removed_pc_ptr;

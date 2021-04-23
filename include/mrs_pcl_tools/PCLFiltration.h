@@ -43,7 +43,8 @@ namespace mrs_pcl_tools
     public:
       void initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer> transformer = nullptr, const bool publish_plane_marker = false)
       {
-        pl.loadParam("lidar3d/ground_removal/range/use", range_use, false);
+        keep_organized = pl.loadParamReusable<bool>("keep_organized", false);
+        pl.loadParam("ground_removal/range/use", range_use, false);
         pl.loadParam("ground_removal/static_frame_id", static_frame_id);
         pl.loadParam("ground_removal/max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
         pl.loadParam("ground_removal/ransac/max_inlier_distance", max_inlier_dist, 3.0);
@@ -90,6 +91,7 @@ namespace mrs_pcl_tools
       std::optional<ros::Publisher> pub_fitted_plane    = std::nullopt;
       mrs_lib::SubscribeHandler<sensor_msgs::Range> sh_range;
   
+      bool keep_organized         = false;
       bool range_use              = false;
       std::string static_frame_id = "";
       double max_precrop_height   = 1.0;              // metres
@@ -138,7 +140,9 @@ private:
 
   /* 3D LIDAR */
   void         lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
+  bool         _lidar3d_keep_organized;
   bool         _lidar3d_republish;
+  float        _lidar3d_invalid_value;
   bool         _lidar3d_dynamic_row_selection_enabled;
 
   bool         _lidar3d_rangeclip_use;
@@ -147,10 +151,10 @@ private:
   uint32_t     _lidar3d_rangeclip_min_mm;
   uint32_t     _lidar3d_rangeclip_max_mm;
 
-  bool         _lidar3d_filter_intensity_en;
+  bool         _lidar3d_filter_intensity_use;
   float        _lidar3d_filter_intensity_range_sq;
   uint32_t     _lidar3d_filter_intensity_range_mm;
-  int          _lidar3d_filter_intensity_thrd;
+  int          _lidar3d_filter_intensity_threshold;
   int          _lidar3d_row_step;
   int          _lidar3d_col_step;
 
@@ -205,7 +209,7 @@ private:
                                                              const float &min_range_sq, const float &max_range_sq);
 
   template <typename pt_t>
-  void invalidatePoint(pt_t &point, const float inv_value = std::numeric_limits<float>::quiet_NaN());
+  void invalidatePoint(pt_t &point);
 
   template <typename T>
   void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);
