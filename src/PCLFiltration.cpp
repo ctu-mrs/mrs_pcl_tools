@@ -248,9 +248,6 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
     pc_ptr->resize(it);
   }
 
-  if (!isfinite(*pc_ptr))
-    std::cerr << "                                                    [PCLFiltration::process_msg]: pc_ptr are not finite!!\n";
-
   _pub_lidar3d.publish(pc_ptr);
 
   if (_lidar3d_dynamic_row_selection_enabled)
