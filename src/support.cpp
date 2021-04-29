@@ -135,32 +135,28 @@ bool hasField(const std::string &field, const sensor_msgs::PointCloud2::ConstPtr
 /*//}*/
 
 /*//{ publishCloud() */
-void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &cloud) {
+template <typename T>
+void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> &cloud) {
   if (pub.getNumSubscribers() > 0) {
-    sensor_msgs::PointCloud2::Ptr cloud_msg = boost::make_shared<sensor_msgs::PointCloud2>();
-    pcl::toROSMsg(*cloud, *cloud_msg);
-    publishCloudMsg(pub, cloud_msg);
-  }
-}
-/*//}*/
-
-/*//{ publishCloud() */
-void publishCloud(const ros::Publisher &pub, const PC::Ptr &cloud) {
-  if (pub.getNumSubscribers() > 0) {
-    sensor_msgs::PointCloud2::Ptr cloud_msg = boost::make_shared<sensor_msgs::PointCloud2>();
-    pcl::toROSMsg(*cloud, *cloud_msg);
-    publishCloudMsg(pub, cloud_msg);
+    try {
+      pub.publish(cloud);
+    }
+    catch (...) {
+      ROS_ERROR("[mrs_pcl_tools::publishCloud]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+    }
   }
 }
 /*//}*/
 
 /*//{ publishCloudMsg() */
-void publishCloudMsg(const ros::Publisher &pub, const sensor_msgs::PointCloud2::Ptr &cloud_msg) {
-  try {
-    pub.publish(cloud_msg);
-  }
-  catch (...) {
-    ROS_ERROR("[PCLSupportLibrary]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+void publishCloudMsg(const ros::Publisher &pub, const sensor_msgs::PointCloud2::ConstPtr &cloud_msg) {
+  if (pub.getNumSubscribers() > 0) {
+    try {
+      pub.publish(cloud_msg);
+    }
+    catch (...) {
+      ROS_ERROR("[mrs_pcl_tools::publishCloudMsg]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+    }
   }
 }
 /*//}*/

@@ -17,14 +17,15 @@
 
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/Range.h>
-#include <sensor_msgs/Range.h>
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/CameraInfo.h>
+#include <sensor_msgs/image_encodings.h>
 #include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/Transform.h>
 #include <visualization_msgs/MarkerArray.h>
 
 #include <boost/smart_ptr/make_shared_array.hpp>
 #include <limits>
-
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
@@ -103,6 +104,293 @@ namespace mrs_pcl_tools
 #include <impl/remove_below_ground_filter.hpp>
   
   //}
+  
+  /* class SensorDepthCamera //{ */
+
+  /*//{ DepthTraits */
+  // Encapsulate differences between processing float and uint16_t depths
+  template<typename T> struct DepthTraits {};
+
+  template<>
+    struct DepthTraits<uint16_t>
+    {
+      static inline bool valid(uint16_t depth) { return depth != 0; }
+      static inline float toMeters(uint16_t depth) { return depth * 0.001f; } // originally mm
+      static inline uint16_t fromMeters(float depth) { return (depth * 1000.0f) + 0.5f; }
+    };
+
+  template<>
+    struct DepthTraits<float>
+    {
+      static inline bool valid(float depth) { return std::isfinite(depth); }
+      static inline float toMeters(float depth) { return depth; }
+      static inline float fromMeters(float depth) { return depth; }
+    };
+  /*//}*/
+  
+  class SensorDepthCamera
+  {
+    public:
+      void initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::string &prefix, const std::string &name)
+      {
+        _nh         = nh;
+        sensor_name = name;
+ 
+        pl.loadParam("depth/" + sensor_name + "/filter/downsample/step/col", downsample_step_col, 1);
+        pl.loadParam("depth/" + sensor_name + "/filter/downsample/step/row", downsample_step_row, 1);
+        if (downsample_step_col < 1)
+          downsample_step_col = 1;
+        if (downsample_step_row < 1)
+          downsample_step_row = 1;
+
+        pl.loadParam("depth/" + sensor_name + "/filter/range_clip/min", range_clip_min, 0.0f);
+        pl.loadParam("depth/" + sensor_name + "/filter/range_clip/max", range_clip_max, std::numeric_limits<float>::max());
+        range_clip_use                     = range_clip_max > 0.0f && range_clip_max > range_clip_min;
+        artificial_depth_of_removed_points = range_clip_use ? 2.0f * range_clip_max : 1000.0f;
+        
+        pl.loadParam("depth/" + sensor_name + "/filter/voxel_grid/resolution", voxel_grid_resolution, 0.0f);
+        voxel_grid_use = voxel_grid_resolution > 0.0f;
+        
+        pl.loadParam("depth/" + sensor_name + "/filter/radius_outlier/radius", radius_outlier_radius, 0.0f);
+        pl.loadParam("depth/" + sensor_name + "/filter/radius_outlier/neighbors", radius_outlier_neighbors, 0);
+        radius_outlier_use = radius_outlier_radius > 0.0f && radius_outlier_neighbors > 0;
+        
+        pl.loadParam("depth/" + sensor_name + "/filter/minimum_grid/resolution", minimum_grid_resolution, 0.0f);
+        minimum_grid_use = minimum_grid_use > 0.0f;
+        
+        pl.loadParam("depth/" + sensor_name + "/filter/bilateral/sigma_S", bilateral_sigma_S, 0.0f);
+        pl.loadParam("depth/" + sensor_name + "/filter/bilateral/sigma_R", bilateral_sigma_R, 0.0f);
+        bilateral_use = bilateral_sigma_S > 0.0f && bilateral_sigma_R > 0.0f;
+
+        pl.loadParam("depth/" + sensor_name + "/topic/depth_in", depth_in);
+        pl.loadParam("depth/" + sensor_name + "/topic/depth_camera_info_in", depth_camera_info_in);
+        pl.loadParam("depth/" + sensor_name + "/topic/points_out", points_out);
+        pl.loadParam("depth/" + sensor_name + "/topic/points_over_max_range_out", points_over_max_range_out, std::string(""));
+
+        publish_over_max_range = points_over_max_range_out.size() > 0 && range_clip_use;
+
+        if (prefix.size() > 0) {
+
+          depth_in             = "/" + prefix + "/" + depth_in;
+          depth_camera_info_in = "/" + prefix + "/" + depth_camera_info_in;
+          points_out           = "/" + prefix + "/" + points_out;
+          
+          if (publish_over_max_range)
+            points_over_max_range_out = "/" + prefix + "/" + points_over_max_range_out;
+        }
+  
+        // Start subscribe handler for depth camera info
+        mrs_lib::SubscribeHandlerOptions shopts(_nh);
+        shopts.node_name  = "SensorDepthCamera::CameraInfo::" + sensor_name;
+        shopts.threadsafe = true;
+        sh_camera_info    = mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> (shopts, depth_camera_info_in);
+        mrs_lib::construct_object(sh_camera_info, shopts, depth_camera_info_in, ros::Duration(1.0), &SensorDepthCamera::process_camera_info_msg, this);
+  
+        initialized = true;
+      }
+
+    private:
+
+      /*//{ convertDepthToCloud() */
+      // Depth conversion inspired by: https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
+      template<typename T>
+        void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr &cloud_out, PC::Ptr &cloud_over_max_range_out, const bool return_removed) {
+
+          const unsigned int max_points_count = (image_height / downsample_step_row) * (image_width / downsample_step_col);
+
+          cloud_out                = boost::make_shared<PC>();
+          cloud_out->resize(max_points_count);
+          if (return_removed)
+            cloud_over_max_range_out = boost::make_shared<PC>();
+            cloud_over_max_range_out->resize(max_points_count);
+
+          const T* depth_row = reinterpret_cast<const T*>(&depth_msg->data[0]);
+          const int row_step = downsample_step_row * depth_msg->step / sizeof(T);
+
+          int points_cloud                = 0;
+          int points_cloud_over_max_range = 0;
+
+          for (int v = 0; v < (int)depth_msg->height; v+=downsample_step_row, depth_row += row_step) 
+          {
+            for (int u = 0; u < (int)depth_msg->width; u+=downsample_step_col)
+            {
+              const auto  depth_raw = depth_row[u];
+              const bool  valid     = DepthTraits<T>::valid(depth_raw);
+              const float depth     = DepthTraits<T>::toMeters(depth_raw);
+
+              // Convert to point cloud points and optionally clip range
+              if (valid && (!range_clip_use || depth > range_clip_min && depth <= range_clip_max)) {
+
+                imagePointToCloudPoint(u, v, depth, cloud_out->points.at(points_cloud++));
+
+              } else if (return_removed && (!valid || (range_clip_use && depth <= range_clip_min || depth > range_clip_max))) {
+
+                imagePointToCloudPoint(u, v, artificial_depth_of_removed_points, cloud_over_max_range_out->points.at(points_cloud_over_max_range++));
+              }
+            }
+          }
+
+          // Fill headers
+          cloud_out->width    = points_cloud;
+          cloud_out->height   = points_cloud > 0 ? 1 : 0;
+          cloud_out->is_dense = true;
+          pcl_conversions::toPCL(depth_msg->header, cloud_out->header);
+          cloud_out->points.resize(points_cloud);
+
+          // Publish depth msg data over range_clip_max
+          if (return_removed) {
+            cloud_over_max_range_out->width    = points_cloud_over_max_range;
+            cloud_over_max_range_out->height   = points_cloud_over_max_range > 0 ? 1 : 0;
+            cloud_over_max_range_out->is_dense = true;
+            cloud_over_max_range_out->header   = cloud_out->header;
+            cloud_over_max_range_out->points.resize(points_cloud_over_max_range);
+          }
+        }
+      /*//}*/
+
+      /*//{ imagePointToCloudPoint() */
+      void imagePointToCloudPoint(const int x, const int y, const float depth, pt_XYZ &point) {
+
+        const float dc = depth * focal_length_inverse;
+
+        point.x = (x - image_center_x) * dc;
+        point.y = (y - image_center_y) * dc;
+        point.z = depth;
+      }
+      /*//}*/
+
+      /*//{ process_depth_msg() */
+      void process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs::Image>& sh) {
+
+        // TODO: keep ordered
+
+        if (!initialized)
+          return;
+
+        PC::Ptr cloud, cloud_over_max_range;
+        const auto depth_msg = sh.getMsg();
+
+        if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1 || depth_msg->encoding == sensor_msgs::image_encodings::MONO16)
+        {
+          convertDepthToCloud<uint16_t>(depth_msg, cloud, cloud_over_max_range, publish_over_max_range);
+        }
+        else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1)
+        {
+          convertDepthToCloud<float>(depth_msg, cloud, cloud_over_max_range, publish_over_max_range);
+        }
+        else
+        {
+          ROS_ERROR_THROTTLE(5.0, "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
+          return;
+        }
+        
+        // TODO: apply filters
+
+        pub_points.publish(cloud);
+        if (publish_over_max_range)
+          pub_points_over_max_range.publish(cloud_over_max_range);
+
+      }
+      /*//}*/
+
+      /*//{ process_camera_info_msg() */
+      void process_camera_info_msg(mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo>& sh) {
+
+        if (!initialized || has_camera_info)
+          return;
+
+        const auto msg = sh.getMsg();
+
+        // Store data required for 2D -> 3D projection
+        image_width          = msg->width; 
+        image_height         = msg->height; 
+        focal_length         = msg->K.at(0);
+        image_center_x       = msg->K.at(2);
+        image_center_y       = msg->K.at(5);
+
+        const bool valid = image_width > 0 && image_height > 0 && focal_length > 0.0 && image_center_x >= 0.0 && image_center_y >= 0.0;
+
+        if (valid) {
+
+          // Shutdown this subscribe handler
+          has_camera_info = true;
+          sh_camera_info.stop();
+
+          ROS_INFO("[SensorDepthCamera::process_camera_info_msg::%s] Received valid depth camera info (width: %d, height: %d, focal length: %0.2f, cx: %0.1f, cy: %0.1f)", sensor_name.c_str(), image_width, image_height, focal_length, image_center_x, image_center_y);
+
+          focal_length_inverse = 1.0 / focal_length;
+
+          // Advertise publishers
+          pub_points = _nh.advertise<sensor_msgs::PointCloud2>(points_out, 10);
+          if (publish_over_max_range) {
+            pub_points_over_max_range = _nh.advertise<sensor_msgs::PointCloud2>(points_over_max_range_out, 10);
+          }
+
+          // Start subscribe handler for depth data
+          mrs_lib::SubscribeHandlerOptions shopts(_nh);
+          shopts.node_name  = "SensorDepthCamera::Image::" + sensor_name;
+          shopts.threadsafe = true;
+          sh_depth          = mrs_lib::SubscribeHandler<sensor_msgs::Image> (shopts, depth_in);
+          mrs_lib::construct_object(sh_depth, shopts, depth_in, ros::Duration(1.0), &SensorDepthCamera::process_depth_msg, this);
+        }
+      }
+      /*//}*/
+
+ 
+    private:
+      bool initialized = false;
+      ros::NodeHandle _nh;
+      ros::Publisher pub_points;
+      ros::Publisher pub_points_over_max_range;
+
+      mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
+      mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
+
+    private:
+        
+      std::string depth_in, depth_camera_info_in, points_out, points_over_max_range_out;
+      std::string sensor_name;
+      
+      bool has_camera_info = false;
+      bool publish_over_max_range;
+
+      unsigned int image_width;
+      unsigned int image_height;
+
+      float artificial_depth_of_removed_points;
+      float image_center_x;
+      float image_center_y;
+      float focal_length;
+      float focal_length_inverse;
+
+    // Filters parameters
+    private:
+
+      int  downsample_step_col;
+      int  downsample_step_row;
+
+      bool range_clip_use;
+      float range_clip_min;
+      float range_clip_max;
+
+      bool voxel_grid_use;
+      float voxel_grid_resolution;
+
+      bool radius_outlier_use;
+      float radius_outlier_radius;
+      int radius_outlier_neighbors;
+
+      bool minimum_grid_use;
+      float minimum_grid_resolution;
+
+      bool bilateral_use;
+      float bilateral_sigma_S;
+      float bilateral_sigma_R;
+  
+  };
+
+  
+  //}
 
 /* class PCLFiltration //{ */
 class PCLFiltration : public nodelet::Nodelet {
@@ -166,19 +454,7 @@ private:
 
 
   /* Depth camera */
-  void  depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
-  bool  _depth_republish;
-  bool  _depth_pcl2_over_max_range;
-  bool  _depth_use_bilateral;
-  bool  _depth_use_radius_outlier_filter;
-  float _depth_min_range_sq;
-  float _depth_max_range_sq;
-  float _depth_minimum_grid_resolution;
-  float _depth_bilateral_sigma_S;
-  float _depth_bilateral_sigma_R;
-  float _depth_voxel_resolution;
-  float _depth_radius_outlier_filter_radius;
-  int   _depth_radius_outlier_filter_neighbors;
+  std::vector<std::shared_ptr<SensorDepthCamera>> _sensors_depth_cameras;
 
   /* RPLidar */
   void  rplidarCallback(const sensor_msgs::LaserScan::ConstPtr msg);
@@ -210,9 +486,6 @@ private:
 
   template <typename pt_t>
   void invalidatePoint(pt_t &point);
-
-  template <typename T>
-  void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);
 
   visualization_msgs::MarkerArray plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::Header& header);
 };

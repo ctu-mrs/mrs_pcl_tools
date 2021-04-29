@@ -8,6 +8,7 @@
 #include <octomap_msgs/conversions.h>
 #include <octomap_msgs/Octomap.h>
 
+#include <ros/message_traits.h>
 #include <visualization_msgs/MarkerArray.h>
 
 namespace mrs_pcl_tools
@@ -29,9 +30,10 @@ bool hasNormals(const std::string &pcd_file);
 bool hasNormals(const sensor_msgs::PointCloud2::ConstPtr &cloud);
 bool hasField(const std::string &field, const sensor_msgs::PointCloud2::ConstPtr &msg);
 
-void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &cloud);
-void publishCloud(const ros::Publisher &pub, const PC::Ptr &cloud);
-void publishCloudMsg(const ros::Publisher &pub, const sensor_msgs::PointCloud2::Ptr &cloud_msg);
+template <typename T>
+void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> &cloud);
+
+void publishCloudMsg(const ros::Publisher &pub, const sensor_msgs::PointCloud2::ConstPtr &cloud_msg);
 
 void printEigenMatrix(const Eigen::Matrix4f &mat, const std::string &prefix = "");
 
