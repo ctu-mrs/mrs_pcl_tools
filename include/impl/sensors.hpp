@@ -1,4 +1,3 @@
-
 /* class SensorDepthCamera //{ */
 
 /*//{ initialize() */
@@ -16,7 +15,7 @@ void SensorDepthCamera::initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl
   pl.loadParam("depth/" + sensor_name + "/filter/range_clip/min", range_clip_min, 0.0f);
   pl.loadParam("depth/" + sensor_name + "/filter/range_clip/max", range_clip_max, std::numeric_limits<float>::max());
   range_clip_use                     = range_clip_max > 0.0f && range_clip_max > range_clip_min;
-  artificial_depth_of_removed_points = range_clip_use ? 2.0f * range_clip_max : 1000.0f;
+  artificial_depth_of_removed_points = range_clip_use ? 10.0f * range_clip_max : 1000.0f;
 
   pl.loadParam("depth/" + sensor_name + "/filter/voxel_grid/resolution", voxel_grid_resolution, 0.0f);
   voxel_grid_use = voxel_grid_resolution > 0.0f;
@@ -26,7 +25,7 @@ void SensorDepthCamera::initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl
   radius_outlier_use = radius_outlier_radius > 0.0f && radius_outlier_neighbors > 0;
 
   pl.loadParam("depth/" + sensor_name + "/filter/minimum_grid/resolution", minimum_grid_resolution, 0.0f);
-  minimum_grid_use = minimum_grid_use > 0.0f;
+  minimum_grid_use = minimum_grid_resolution > 0.0f;
 
   pl.loadParam("depth/" + sensor_name + "/filter/bilateral/sigma_S", bilateral_sigma_S, 0.0f);
   pl.loadParam("depth/" + sensor_name + "/filter/bilateral/sigma_R", bilateral_sigma_R, 0.0f);
@@ -66,6 +65,8 @@ void SensorDepthCamera::initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl
 template <typename T>
 void SensorDepthCamera::convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& cloud_out, PC::Ptr& cloud_over_max_range_out,
                                             const bool return_removed) {
+
+  // TODO: keep ordered
 
   const unsigned int max_points_count = (image_height / downsample_step_row) * (image_width / downsample_step_col);
 
@@ -131,13 +132,11 @@ void SensorDepthCamera::imagePointToCloudPoint(const int x, const int y, const f
 /*//{ process_depth_msg() */
 void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs::Image>& sh) {
 
-  // TODO: keep ordered
-
   if (!initialized)
     return;
 
-  PC::Ptr    cloud, cloud_over_max_range;
-  const auto depth_msg = sh.getMsg();
+  PC::Ptr     cloud, cloud_over_max_range;
+  const auto& depth_msg = sh.getMsg();
 
   if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1 || depth_msg->encoding == sensor_msgs::image_encodings::MONO16) {
     convertDepthToCloud<uint16_t>(depth_msg, cloud, cloud_over_max_range, publish_over_max_range);
@@ -148,7 +147,19 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
     return;
   }
 
-  // TODO: apply filters
+  // Apply filters to the original cloud (beware, the filters are applied in sequential order: no parallelization)
+  if (voxel_grid_use) {
+    cloud = mrs_pcl_tools::filters::applyVoxelGridFilter(cloud, voxel_grid_resolution);
+  }
+  if (radius_outlier_use) {
+    cloud = mrs_pcl_tools::filters::applyRadiusOutlierFilter(cloud, radius_outlier_radius, radius_outlier_neighbors);
+  }
+  if (bilateral_use) {
+    cloud = mrs_pcl_tools::filters::applyBilateralFilter(cloud, bilateral_sigma_S, bilateral_sigma_R);
+  }
+  if (minimum_grid_use) {
+    cloud = mrs_pcl_tools::filters::applyMinimumGridFilter(cloud, minimum_grid_resolution);
+  }
 
   pub_points.publish(cloud);
   if (publish_over_max_range)

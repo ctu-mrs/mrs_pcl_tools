@@ -71,8 +71,8 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
   PC_NORM::Ptr pc_src_filt  = boost::make_shared<PC_NORM>();
   {
     std::scoped_lock lock(_mutex_registration);
-    applyVoxelGridFilter(_pc_map, pc_targ_filt, _clouds_voxel_leaf);
-    applyVoxelGridFilter(_pc_offline, pc_src_filt, _clouds_voxel_leaf);
+    pc_targ_filt = filters::applyVoxelGridFilter(_pc_map, _clouds_voxel_leaf);
+    pc_src_filt  = filters::applyVoxelGridFilter(_pc_offline, _clouds_voxel_leaf);
 
     // for debugging: apply random translation on the slam pc
     applyRandomTransformation(pc_src_filt);
@@ -141,9 +141,9 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   // Voxelize both clouds
   {
     std::scoped_lock lock(_mutex_registration);
-    applyVoxelGridFilter(_pc_map, pc_targ_filt, _clouds_voxel_leaf);
+    pc_targ_filt = filters::applyVoxelGridFilter(_pc_map, _clouds_voxel_leaf);
   }
-  applyVoxelGridFilter(pc_src, pc_src_filt, _clouds_voxel_leaf);
+  pc_src_filt = filters::applyVoxelGridFilter(pc_src, _clouds_voxel_leaf);
 
   // Match centroids and move pc_src min-z to pc_targ min-z
   const Eigen::Matrix4f T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);

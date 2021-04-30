@@ -104,7 +104,7 @@ namespace mrs_pcl_tools
 #include <impl/remove_below_ground_filter.hpp>
   
   //}
-  
+
 /* class SensorDepthCamera //{ */
 
 /*//{ DepthTraits */
@@ -206,10 +206,10 @@ private:
   float bilateral_sigma_R;
 };
 
-#include <impl/sensors.hpp>
+#include "impl/sensors.hpp"
 
 //}
-  
+
 /* class PCLFiltration //{ */
 class PCLFiltration : public nodelet::Nodelet {
 
@@ -285,10 +285,6 @@ private:
 
   template <typename PC>
   void cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc_ptr);
-  void removeCloseAndFarPointCloudOS(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
-                                      unsigned int &valid_points, const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
-                                      const uint32_t &min_range_mm, const uint32_t &max_range_mm, const bool &filter_intensity,
-                                      const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd);
 
   template <typename PC>
   typename boost::shared_ptr<PC> removeCloseAndFar(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);

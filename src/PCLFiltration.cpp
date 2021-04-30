@@ -27,7 +27,7 @@ void PCLFiltration::onInit() {
   ros::Time::waitForValid();
 
   // Set PCL verbosity level to errors and higher
-  pcl::console::setVerbosityLevel(pcl::console::L_ERROR);
+  /* pcl::console::setVerbosityLevel(pcl::console::L_ERROR); */
 
   // Get parameters from config file
   mrs_lib::ParamLoader param_loader(nh, "PCLFiltration");
@@ -249,71 +249,6 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
       "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
       t.toc(), points_before, points_after, width_before, height_before, width_after, height_after);
 }
-//}
-
-/* depthCallback() //{ */
-/* void PCLFiltration::depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) { */
-/*   if (is_initialized && _depth_republish) { */
-/*     NODELET_INFO_ONCE("[PCLFiltration] Received first depth camera message."); */
-/*     TicToc t; */
-
-/*     unsigned int points_before = msg->height * msg->width; */
-
-/*     std::pair<PC::Ptr, PC::Ptr> clouds = removeCloseAndFarPointCloudXYZ(msg, _depth_pcl2_over_max_range, _depth_min_range_sq, _depth_max_range_sq); */
-
-/*     PC::Ptr pcl = clouds.first; */
-
-/*     // Voxel grid sampling */
-/*     if (_depth_voxel_resolution > 0.0f) { */
-/*       /1* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied voxel sampling filter (res: %0.2f m).", _depth_voxel_resolution); *1/ */
-/*       pcl::VoxelGrid<pt_XYZ> vg; */
-/*       vg.setInputCloud(pcl); */
-/*       vg.setLeafSize(_depth_voxel_resolution, _depth_voxel_resolution, _depth_voxel_resolution); */
-/*       vg.filter(*pcl); */
-/*     } */
-
-/*     // Radius outlier filter */
-/*     if (_depth_use_radius_outlier_filter) { */
-/*       pcl::RadiusOutlierRemoval<pt_XYZ> outrem; */
-/*       outrem.setInputCloud(pcl); */
-/*       outrem.setRadiusSearch(_depth_radius_outlier_filter_radius); */
-/*       outrem.setMinNeighborsInRadius(_depth_radius_outlier_filter_neighbors); */
-/*       outrem.setKeepOrganized(true); */
-/*       outrem.filter(*pcl); */
-/*     } */
-
-/*     // Bilateral filter */
-/*     if (_depth_use_bilateral) { */
-/*       /1* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied fast bilateral OMP filter (sigma S: %0.2f, sigma R: %0.2f).", _depth_bilateral_sigma_S,
- * *1/ */
-/*       /1*                       _depth_bilateral_sigma_R); *1/ */
-/*       pcl::FastBilateralFilterOMP<pt_XYZ> fbf; */
-/*       fbf.setInputCloud(pcl); */
-/*       fbf.setSigmaS(_depth_bilateral_sigma_S); */
-/*       fbf.setSigmaR(_depth_bilateral_sigma_R); */
-/*       fbf.applyFilter(*pcl); */
-/*     } */
-
-/*     // Grid minimum */
-/*     if (_depth_minimum_grid_resolution > 0.0f) { */
-/*       /1* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied minimum grid filter (res: %0.2f m).", _depth_minimum_grid_resolution); *1/ */
-/*       pcl::GridMinimum<pt_XYZ> gmf(_depth_minimum_grid_resolution); */
-/*       gmf.setInputCloud(pcl); */
-/*       gmf.filter(*pcl); */
-/*     } */
-
-/*     // Publish data */
-/*     publishCloud(_pub_depth, *pcl); */
-
-/*     // Publish data over max range */
-/*     if (_depth_pcl2_over_max_range) { */
-/*       publishCloud(_pub_depth_over_max_range, *clouds.second); */
-/*     } */
-
-/*     NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed depth camera data (run time: %0.1f ms; points before: %d, after: %ld).", t.toc(), points_before, */
-/*                           pcl->points.size()); */
-/*   } */
-/* } */
 //}
 
 /* rplidarCallback() //{ */
