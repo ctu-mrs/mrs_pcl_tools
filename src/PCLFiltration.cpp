@@ -633,6 +633,17 @@ void PCLFiltration::invalidatePoint(pt_t &point)
 }
 /*//}*/
 
+/*//{ invalidatePointsAtIndices() */
+template <typename PC>
+void PCLFiltration::invalidatePointsAtIndices(const pcl::IndicesConstPtr &indices, typename boost::shared_ptr<PC> &cloud)
+{
+  for (auto it = indices->begin(); it != indices->end(); it++)
+  {
+    invalidatePoint(cloud->at(*it));
+  }
+}
+/*//}*/
+
 }  // namespace mrs_pcl_tools
 
 PLUGINLIB_EXPORT_CLASS(mrs_pcl_tools::PCLFiltration, nodelet::Nodelet);
