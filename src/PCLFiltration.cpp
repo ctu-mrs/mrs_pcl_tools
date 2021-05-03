@@ -264,11 +264,11 @@ template <typename pt_t>
 std::tuple<bool, std::size_t> getFieldOffset(const std::string& field_name)
 {
   std::vector<pcl::PCLPointField> fields;
-  const int range_idx = pcl::getFieldIndex<pt_t>(field_name, fields);
-  if (range_idx == -1)
+  const int field_idx = pcl::getFieldIndex<pt_t>(field_name, fields);
+  if (field_idx == -1)
     return {false, 0};
-  const std::size_t range_offset = fields.at(range_idx).offset;
-  return {true, range_offset};
+  const std::size_t field_offset = fields.at(field_idx).offset;
+  return {true, field_offset};
 }
 
 template <typename T, typename pt_t>
@@ -298,9 +298,9 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFar(typename boost::
   // Attempt to get the range field name's index
   const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
   if (range_exists)
-    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
-  else
     ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
+  else
+    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
 
   for (auto& point : inout_pc->points)
   {
@@ -349,7 +349,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
 
   // Attempt to get the intensity field name's index
   const auto [intensity_exists, intensity_offset] = getFieldOffset<pt_t>("intensity");
-  if (intensity_exists)
+  if (!intensity_exists)
   {
     ROS_WARN("[PCLFiltration] Unable to find field name \"intensity\" in point type.");
     return removeCloseAndFar(inout_pc, return_removed);
@@ -358,9 +358,9 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
   // Attempt to get the range field name's index
   const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
   if (range_exists)
-    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
-  else
     ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
+  else
+    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
 
   for (auto& point : inout_pc->points)
   {
@@ -414,7 +414,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeLowIntensity(typename boost:
 
   // Attempt to get the intensity field name's index
   const auto [intensity_exists, intensity_offset] = getFieldOffset<pt_t>("intensity");
-  if (intensity_exists)
+  if (!intensity_exists)
   {
     ROS_WARN("[PCLFiltration] Unable to find field name \"intensity\" in point type.");
     return removed_pc;
@@ -423,9 +423,9 @@ typename boost::shared_ptr<PC> PCLFiltration::removeLowIntensity(typename boost:
   // Attempt to get the range field name's index
   const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
   if (range_exists)
-    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
-  else
     ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
+  else
+    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
 
   for (auto& point : inout_pc->points)
   {
