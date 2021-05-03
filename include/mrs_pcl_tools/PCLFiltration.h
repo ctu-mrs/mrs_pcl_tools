@@ -250,6 +250,7 @@ private:
   bool         _lidar3d_republish;
   float        _lidar3d_invalid_value;
   bool         _lidar3d_dynamic_row_selection_enabled;
+  bool         _lidar3d_downsample_use;
 
   bool         _lidar3d_rangeclip_use;
   float        _lidar3d_rangeclip_min_sq;
@@ -294,6 +295,9 @@ private:
 
   template <typename PC>
   typename boost::shared_ptr<PC> removeCloseAndFarAndLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
+
+  template <typename PC>
+  void downsample(boost::shared_ptr<PC>& inout_pc_ptr, const size_t scale_row, const size_t scale_col, const size_t row_offset = 0);
 
   std::pair<PC::Ptr, PC::Ptr> removeCloseAndFarPointCloudXYZ(const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
                                                              const float &min_range_sq, const float &max_range_sq);

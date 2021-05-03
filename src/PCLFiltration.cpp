@@ -6,9 +6,6 @@
 #include <pcl/pcl_base.h>
 #include <pcl/point_traits.h>
 
-// 1: new ouster_ros driver; 0: old os1_driver
-#define OUSTER_ORDERING_TRANSPOSE 1
-
 namespace mrs_pcl_tools
 {
   template <typename pc_t>
@@ -53,6 +50,18 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("lidar3d/downsampling/row_step", _lidar3d_row_step, 1);
   param_loader.loadParam("lidar3d/downsampling/col_step", _lidar3d_col_step, 1);
 
+  // load dynamic row selection
+  if (_lidar3d_dynamic_row_selection_enabled && _lidar3d_row_step > 1 && _lidar3d_row_step % 2 != 0) {
+    NODELET_ERROR("[PCLFiltration]: Dynamic selection of lidar rows is enabled, but `lidar_row_step` is not even and/or greater than 1. Ending nodelet.");
+    ros::shutdown();
+  } 
+
+  _lidar3d_downsample_use = _lidar3d_dynamic_row_selection_enabled || _lidar3d_row_step > 1 || _lidar3d_col_step > 1;
+  if (_lidar3d_downsample_use)
+    NODELET_INFO("[PCLFiltration] Downsampling of input lidar data is enabled -> dynamically: %s, row step: %d, col step: %d", _lidar3d_dynamic_row_selection_enabled ? "true" : "false", _lidar3d_row_step, _lidar3d_col_step);
+  else
+    NODELET_INFO("[PCLFiltration] Downsampling of input lidar data is disabled.");
+
   // load ground removal parameters
   const bool use_ground_removal = param_loader.loadParam2<bool>("lidar3d/ground_removal/use", false);
   if (use_ground_removal)
@@ -80,12 +89,6 @@ void PCLFiltration::onInit() {
   // the user can override this behavior by setting the "lidar3d/cropbox/use" parameter
   param_loader.loadParam("lidar3d/cropbox/use", _lidar3d_cropbox_use, cbox_use_default);
 
-  // load dynamic row selection
-  if (_lidar3d_dynamic_row_selection_enabled && _lidar3d_row_step % 2 != 0) {
-    NODELET_ERROR("[PCLFiltration]: Dynamic selection of lidar rows is enabled, but `lidar_row_step` is not even. Ending nodelet.");
-    ros::shutdown();
-  }
-
   param_loader.loadParam("lidar3d/filter/intensity/use", _lidar3d_filter_intensity_use, false);
   param_loader.loadParam("lidar3d/filter/intensity/threshold", _lidar3d_filter_intensity_threshold, std::numeric_limits<int>::max());
   param_loader.loadParam("lidar3d/filter/intensity/range", _lidar3d_filter_intensity_range_sq, std::numeric_limits<float>::max());
@@ -108,7 +111,6 @@ void PCLFiltration::onInit() {
     NODELET_ERROR("[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
     ros::shutdown();
   }
-
 
   if (_lidar3d_republish) {
 
@@ -191,6 +193,11 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
   const size_t height_before = pc_ptr->height;
   const size_t width_before = pc_ptr->width;
   const size_t points_before = pc_ptr->size();
+
+  if (_lidar3d_downsample_use)
+  {
+    downsample(pc_ptr, _lidar3d_row_step, _lidar3d_col_step, _lidar3d_dynamic_row_selection_offset);
+  }
 
   if (_filter_removeBelowGround.used())
   {
@@ -495,6 +502,57 @@ void PCLFiltration::cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc)
   cb.setMax(_lidar3d_cropbox_max);
   cb.setInputCloud(inout_pc);
   cb.filter(*inout_pc);
+}
+
+//}
+
+/* downsample() //{ */
+
+template <typename PC>
+void PCLFiltration::downsample(boost::shared_ptr<PC>& inout_pc_ptr, const size_t scale_row, const size_t scale_col, const size_t row_offset)
+{
+  using pt_t = typename PC::PointType;
+
+  const auto [ring_exists, ring_offset] = getFieldOffset<pt_t>("ring");
+  const uint8_t scale_row_uint8         = static_cast<const uint8_t>(scale_row);
+
+  const size_t height_before = inout_pc_ptr->height;
+  const size_t width_before  = inout_pc_ptr->width;
+  const size_t height_after  = height_before / scale_row;
+  const size_t width_after   = width_before  / scale_col;
+
+  
+  boost::shared_ptr<PC> pc_out = boost::make_shared<PC>(width_after, height_after);
+  
+  size_t r = 0;
+
+  for (size_t j = row_offset; j < height_before; j+=scale_row)
+  {
+
+    size_t c = 0;
+    for (size_t i = 0; i < width_before; i+=scale_col)
+    {
+      pt_t& point = inout_pc_ptr->at(i, j);
+
+      if (ring_exists) {
+        const uint8_t ring = getFieldValue<uint8_t>(point, ring_offset);
+        pcl::setFieldValue<pt_t, uint8_t>(point, ring_offset, ring / scale_row_uint8);
+      }
+
+      pc_out->at(c++, r) = point;
+
+    }
+
+    r++;
+  }
+
+  pc_out->header   = inout_pc_ptr->header;
+  pc_out->height   = height_after;
+  pc_out->width    = width_after;
+  pc_out->is_dense = inout_pc_ptr->is_dense;
+
+  inout_pc_ptr = pc_out;
+
 }
 
 //}
