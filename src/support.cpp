@@ -3,19 +3,6 @@
 namespace mrs_pcl_tools
 {
 
-/*//{ applyVoxelGridFilter() */
-void applyVoxelGridFilter(const PC_NORM::Ptr &cloud_in, PC_NORM::Ptr &cloud_out, const float &leaf_size) {
-  pcl::VoxelGrid<pt_NORM> grid;
-  grid.setLeafSize(leaf_size, leaf_size, leaf_size);
-  grid.setInputCloud(cloud_in);
-  grid.filter(*cloud_out);
-}
-
-void applyVoxelGridFilter(PC_NORM::Ptr &cloud, const float &leaf_size) {
-  applyVoxelGridFilter(cloud, cloud, leaf_size);
-}
-/*//}*/
-
 /*//{ loadPcXYZ() */
 std::optional<PC::Ptr> loadPcXYZ(const std::string &pcd_file) {
 
@@ -83,7 +70,7 @@ bool hasNormals(const std::vector<sensor_msgs::PointField> &fields) {
   // Check header for normals (normal_x, normal_y, normal_z, curvature)
   unsigned int normal_fields   = 0;
   bool         curvature_field = false;
-  for (auto field : fields) {
+  for (const auto &field : fields) {
     if (field.name.rfind("normal", 0) == 0) {
       normal_fields++;
     } else if (field.name == "curvature") {
@@ -109,7 +96,7 @@ bool hasNormals(const std::string &pcd_file) {
 
   // pcl::PCLPointField to sensor_msgs::PointField
   std::vector<sensor_msgs::PointField> fields;
-  for (auto pc_field : pc.fields) {
+  for (const auto &pc_field : pc.fields) {
     sensor_msgs::PointField field;
     field.name = pc_field.name;
     fields.push_back(field);
@@ -125,7 +112,7 @@ bool hasNormals(const sensor_msgs::PointCloud2::ConstPtr &cloud) {
 
 /*//{ hasField() */
 bool hasField(const std::string &field, const sensor_msgs::PointCloud2::ConstPtr &msg) {
-  for (auto f : msg->fields) {
+  for (const auto &f : msg->fields) {
     if (f.name == field) {
       return true;
     }
@@ -135,32 +122,28 @@ bool hasField(const std::string &field, const sensor_msgs::PointCloud2::ConstPtr
 /*//}*/
 
 /*//{ publishCloud() */
-void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &cloud) {
+template <typename T>
+void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> &cloud) {
   if (pub.getNumSubscribers() > 0) {
-    sensor_msgs::PointCloud2::Ptr cloud_msg = boost::make_shared<sensor_msgs::PointCloud2>();
-    pcl::toROSMsg(*cloud, *cloud_msg);
-    publishCloudMsg(pub, cloud_msg);
-  }
-}
-/*//}*/
-
-/*//{ publishCloud() */
-void publishCloud(const ros::Publisher &pub, const PC::Ptr &cloud) {
-  if (pub.getNumSubscribers() > 0) {
-    sensor_msgs::PointCloud2::Ptr cloud_msg = boost::make_shared<sensor_msgs::PointCloud2>();
-    pcl::toROSMsg(*cloud, *cloud_msg);
-    publishCloudMsg(pub, cloud_msg);
+    try {
+      pub.publish(cloud);
+    }
+    catch (...) {
+      ROS_ERROR("[mrs_pcl_tools::publishCloud]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+    }
   }
 }
 /*//}*/
 
 /*//{ publishCloudMsg() */
-void publishCloudMsg(const ros::Publisher &pub, const sensor_msgs::PointCloud2::Ptr &cloud_msg) {
-  try {
-    pub.publish(cloud_msg);
-  }
-  catch (...) {
-    ROS_ERROR("[PCLSupportLibrary]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+void publishCloudMsg(const ros::Publisher &pub, const sensor_msgs::PointCloud2::ConstPtr &cloud_msg) {
+  if (pub.getNumSubscribers() > 0) {
+    try {
+      pub.publish(cloud_msg);
+    }
+    catch (...) {
+      ROS_ERROR("[mrs_pcl_tools::publishCloudMsg]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+    }
   }
 }
 /*//}*/
@@ -212,7 +195,7 @@ std::shared_ptr<octomap::OcTree> PcToOctree(const PC::ConstPtr &cloud, const flo
   }
 
   std::shared_ptr<octomap::OcTree> tree = std::make_shared<octomap::OcTree>(resolution);
-  for (auto p : cloud->points) {
+  for (const auto &p : cloud->points) {
     tree->updateNode(octomap::point3d(p.x, p.y, p.z), true);
   }
   tree->updateInnerOccupancy();

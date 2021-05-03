@@ -71,8 +71,8 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
   PC_NORM::Ptr pc_src_filt  = boost::make_shared<PC_NORM>();
   {
     std::scoped_lock lock(_mutex_registration);
-    applyVoxelGridFilter(_pc_map, pc_targ_filt, _clouds_voxel_leaf);
-    applyVoxelGridFilter(_pc_offline, pc_src_filt, _clouds_voxel_leaf);
+    pc_targ_filt = filters::applyVoxelGridFilter(_pc_map, _clouds_voxel_leaf);
+    pc_src_filt  = filters::applyVoxelGridFilter(_pc_offline, _clouds_voxel_leaf);
 
     // for debugging: apply random translation on the slam pc
     applyRandomTransformation(pc_src_filt);
@@ -86,8 +86,8 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
   pc_src_filt->header.frame_id  = _frame_map;
   pc_targ_filt->header.stamp    = stamp;
   pc_targ_filt->header.frame_id = _frame_map;
-  publishCloud(_pub_cloud_source, pc_src_filt);
-  publishCloud(_pub_cloud_target, pc_targ_filt);
+  publishCloud(_pub_cloud_source, *pc_src_filt);
+  publishCloud(_pub_cloud_target, *pc_targ_filt);
 
   // Register given pc to map cloud
   std::tie(res.success, res.message, std::ignore) = registerCloudToCloud(pc_src_filt, pc_targ_filt);
@@ -141,9 +141,9 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   // Voxelize both clouds
   {
     std::scoped_lock lock(_mutex_registration);
-    applyVoxelGridFilter(_pc_map, pc_targ_filt, _clouds_voxel_leaf);
+    pc_targ_filt = filters::applyVoxelGridFilter(_pc_map, _clouds_voxel_leaf);
   }
-  applyVoxelGridFilter(pc_src, pc_src_filt, _clouds_voxel_leaf);
+  pc_src_filt = filters::applyVoxelGridFilter(pc_src, _clouds_voxel_leaf);
 
   // Match centroids and move pc_src min-z to pc_targ min-z
   const Eigen::Matrix4f T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
@@ -153,8 +153,8 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   pc_src_filt->header.frame_id  = _frame_map;
   pc_targ_filt->header.stamp    = pc_src->header.stamp;
   pc_targ_filt->header.frame_id = _frame_map;
-  publishCloud(_pub_cloud_source, pc_src_filt);
-  publishCloud(_pub_cloud_target, pc_targ_filt);
+  publishCloud(_pub_cloud_source, *pc_src_filt);
+  publishCloud(_pub_cloud_target, *pc_targ_filt);
 
   // Register given pc to map cloud
   Eigen::Matrix4f T;
@@ -240,7 +240,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     // Publish initially aligned cloud
     pc_aligned->header.stamp    = pc_src->header.stamp;
     pc_aligned->header.frame_id = _frame_map;
-    publishCloud(_pub_cloud_aligned, pc_aligned);
+    publishCloud(_pub_cloud_aligned, *pc_aligned);
 
     /*//{ Perform fine tuning registration */
     Eigen::Matrix4f T_fine              = Eigen::Matrix4f::Identity();
@@ -293,7 +293,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
         // Publish aligned cloud
         pc_aligned->header.stamp    = pc_src->header.stamp;
         pc_aligned->header.frame_id = _frame_map;
-        publishCloud(_pub_cloud_aligned, pc_aligned);
+        publishCloud(_pub_cloud_aligned, *pc_aligned);
 
       } else {
         ROS_ERROR("[PCL2MapRegistration] Registration (fine tuning) did not converge -- try to change registration (fine tuning) parameters.");
@@ -622,7 +622,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
     // Publish aligned cloud
     pc_aligned_best->header.stamp    = pc_src->header.stamp;
     pc_aligned_best->header.frame_id = _frame_map;
-    publishCloud(_pub_cloud_aligned, pc_aligned_best);
+    publishCloud(_pub_cloud_aligned, *pc_aligned_best);
 
   } else {
     ROS_ERROR("[PCL2MapRegistration] Registration (SICPN) did not converge -- try to change registration (SICPN) parameters.");

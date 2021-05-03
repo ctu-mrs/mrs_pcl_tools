@@ -334,11 +334,11 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectory(const std::vector<st
 
     // Publish clouds
     if (sample_count++ % 10 == 0) {
-      mrs_pcl_tools::publishCloud(_pub_pc_source_global, pc_source);
-      mrs_pcl_tools::publishCloud(_pub_pc_target_global, pc_target);
+      _pub_pc_source_global.publish(pc_source);
+      _pub_pc_target_global.publish(pc_target);
     }
-    mrs_pcl_tools::publishCloud(_pub_pc_source_local, pc_source_local);
-    mrs_pcl_tools::publishCloud(_pub_pc_target_local, pc_target_local);
+    _pub_pc_source_local.publish(pc_source_local);
+    _pub_pc_target_local.publish(pc_target_local);
 
     // Find mutual transformations
     const auto ret = registerClouds(pc_source_local, pc_target_local, T_prev);
@@ -358,7 +358,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectory(const std::vector<st
       drift_data.push_back(dato);
 
       // Publish aligned cloud
-      mrs_pcl_tools::publishCloud(_pub_pc_aligned_local, pc_aligned_local);
+      _pub_pc_aligned_local.publish(pc_aligned_local);
 
       // Publish nav_msgs::Path msgs
       geometry_msgs::PoseStamped pose_msg_transformed;

@@ -27,7 +27,7 @@ void PCLFiltration::onInit() {
   ros::Time::waitForValid();
 
   // Set PCL verbosity level to errors and higher
-  pcl::console::setVerbosityLevel(pcl::console::L_ERROR);
+  /* pcl::console::setVerbosityLevel(pcl::console::L_ERROR); */
 
   // Get parameters from config file
   mrs_lib::ParamLoader param_loader(nh, "PCLFiltration");
@@ -92,21 +92,13 @@ void PCLFiltration::onInit() {
   _lidar3d_filter_intensity_range_mm = _lidar3d_filter_intensity_range_sq * 1000;
   _lidar3d_filter_intensity_range_sq *= _lidar3d_filter_intensity_range_sq;
 
-  /* Depth camera */
-  param_loader.loadParam("depth/republish", _depth_republish, true);
-  param_loader.loadParam("depth/pcl2_over_max_range", _depth_pcl2_over_max_range, false);
-  param_loader.loadParam("depth/min_range", _depth_min_range_sq, 0.0f);
-  param_loader.loadParam("depth/max_range", _depth_max_range_sq, 8.0f);
-  param_loader.loadParam("depth/voxel_resolution", _depth_voxel_resolution, 0.0f);
-  param_loader.loadParam("depth/minimum_grid_resolution", _depth_minimum_grid_resolution, 0.03f);
-  param_loader.loadParam("depth/use_bilateral", _depth_use_bilateral, false);
-  param_loader.loadParam("depth/bilateral_sigma_S", _depth_bilateral_sigma_S, 5.0f);
-  param_loader.loadParam("depth/bilateral_sigma_R", _depth_bilateral_sigma_R, 5e-3f);
-  param_loader.loadParam("depth/radius_outlier_filter/radius", _depth_radius_outlier_filter_radius, 0.0f);
-  param_loader.loadParam("depth/radius_outlier_filter/neighbors", _depth_radius_outlier_filter_neighbors, 0);
-  _depth_min_range_sq *= _depth_min_range_sq;
-  _depth_max_range_sq *= _depth_max_range_sq;
-  _depth_use_radius_outlier_filter = _depth_radius_outlier_filter_radius > 0.0f && _depth_radius_outlier_filter_neighbors > 0;
+  /* Depth cameras */
+  const std::vector<std::string> depth_camera_names = param_loader.loadParam2("depth/camera_names", std::vector<std::string>());
+  for (const auto& name : depth_camera_names) {
+    std::shared_ptr<SensorDepthCamera> cam = std::make_shared<SensorDepthCamera>();
+    cam->initialize(nh, param_loader, uav_name, name);
+    _sensors_depth_cameras.push_back(cam);
+  }
 
   /* RPLidar */
   param_loader.loadParam("rplidar/republish", _rplidar_republish, false);
@@ -130,12 +122,6 @@ void PCLFiltration::onInit() {
     _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 10);
     if (_filter_removeBelowGround.used())
       _pub_lidar3d_below_ground = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_below_ground_out", 10);
-  }
-
-  if (_depth_republish) {
-    _sub_depth                = nh.subscribe("depth_in", 1, &PCLFiltration::depthCallback, this, ros::TransportHints().tcpNoDelay());
-    _pub_depth                = nh.advertise<sensor_msgs::PointCloud2>("depth_out", 10);
-    _pub_depth_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("depth_over_max_range_out", 10);
   }
 
   if (_rplidar_republish) {
@@ -250,82 +236,18 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
 
   _pub_lidar3d.publish(pc_ptr);
 
-  if (_lidar3d_dynamic_row_selection_enabled)
-  {
+  if (_lidar3d_dynamic_row_selection_enabled) {
     _lidar3d_dynamic_row_selection_offset++;
     _lidar3d_dynamic_row_selection_offset %= _lidar3d_row_step;
   }
 
   const size_t height_after = pc_ptr->height;
-  const size_t width_after = pc_ptr->width;
+  const size_t width_after  = pc_ptr->width;
   const size_t points_after = pc_ptr->size();
   NODELET_INFO_THROTTLE(
-      5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
+      5.0,
+      "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
       t.toc(), points_before, points_after, width_before, height_before, width_after, height_after);
-}
-//}
-
-/* depthCallback() //{ */
-void PCLFiltration::depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
-  if (is_initialized && _depth_republish) {
-    NODELET_INFO_ONCE("[PCLFiltration] Received first depth camera message.");
-    TicToc t;
-
-    unsigned int points_before = msg->height * msg->width;
-
-    std::pair<PC::Ptr, PC::Ptr> clouds = removeCloseAndFarPointCloudXYZ(msg, _depth_pcl2_over_max_range, _depth_min_range_sq, _depth_max_range_sq);
-
-    PC::Ptr pcl = clouds.first;
-
-    // Voxel grid sampling
-    if (_depth_voxel_resolution > 0.0f) {
-      /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied voxel sampling filter (res: %0.2f m).", _depth_voxel_resolution); */
-      pcl::VoxelGrid<pt_XYZ> vg;
-      vg.setInputCloud(pcl);
-      vg.setLeafSize(_depth_voxel_resolution, _depth_voxel_resolution, _depth_voxel_resolution);
-      vg.filter(*pcl);
-    }
-
-    // Radius outlier filter
-    if (_depth_use_radius_outlier_filter) {
-      pcl::RadiusOutlierRemoval<pt_XYZ> outrem;
-      outrem.setInputCloud(pcl);
-      outrem.setRadiusSearch(_depth_radius_outlier_filter_radius);
-      outrem.setMinNeighborsInRadius(_depth_radius_outlier_filter_neighbors);
-      outrem.setKeepOrganized(true);
-      outrem.filter(*pcl);
-    }
-
-    // Bilateral filter
-    if (_depth_use_bilateral) {
-      /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied fast bilateral OMP filter (sigma S: %0.2f, sigma R: %0.2f).", _depth_bilateral_sigma_S, */
-      /*                       _depth_bilateral_sigma_R); */
-      pcl::FastBilateralFilterOMP<pt_XYZ> fbf;
-      fbf.setInputCloud(pcl);
-      fbf.setSigmaS(_depth_bilateral_sigma_S);
-      fbf.setSigmaR(_depth_bilateral_sigma_R);
-      fbf.applyFilter(*pcl);
-    }
-
-    // Grid minimum
-    if (_depth_minimum_grid_resolution > 0.0f) {
-      /* NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] \t - Applied minimum grid filter (res: %0.2f m).", _depth_minimum_grid_resolution); */
-      pcl::GridMinimum<pt_XYZ> gmf(_depth_minimum_grid_resolution);
-      gmf.setInputCloud(pcl);
-      gmf.filter(*pcl);
-    }
-
-    // Publish data
-    publishCloud(_pub_depth, *pcl);
-
-    // Publish data over max range
-    if (_depth_pcl2_over_max_range) {
-      publishCloud(_pub_depth_over_max_range, *clouds.second);
-    }
-
-    NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Processed depth camera data (run time: %0.1f ms; points before: %d, after: %ld).", t.toc(), points_before,
-                          pcl->points.size());
-  }
 }
 //}
 
@@ -646,16 +568,13 @@ void PCLFiltration::invalidatePoint(pt_t &point)
 }
 /*//}*/
 
-/*//{ publishCloud() */
-template <typename T>
-void PCLFiltration::publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud) {
-  if (pub.getNumSubscribers() > 0) {
-    try {
-      pub.publish(cloud);
-    }
-    catch (...) {
-      NODELET_ERROR("[PCLFiltration]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
-    }
+/*//{ invalidatePointsAtIndices() */
+template <typename PC>
+void PCLFiltration::invalidatePointsAtIndices(const pcl::IndicesConstPtr &indices, typename boost::shared_ptr<PC> &cloud)
+{
+  for (auto it = indices->begin(); it != indices->end(); it++)
+  {
+    invalidatePoint(cloud->at(*it));
   }
 }
 /*//}*/

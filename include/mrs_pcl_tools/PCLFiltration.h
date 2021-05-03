@@ -17,14 +17,15 @@
 
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/Range.h>
-#include <sensor_msgs/Range.h>
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/CameraInfo.h>
+#include <sensor_msgs/image_encodings.h>
 #include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/Transform.h>
 #include <visualization_msgs/MarkerArray.h>
 
 #include <boost/smart_ptr/make_shared_array.hpp>
 #include <limits>
-
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
@@ -104,6 +105,111 @@ namespace mrs_pcl_tools
   
   //}
 
+/* class SensorDepthCamera //{ */
+
+/*//{ DepthTraits */
+
+// Encapsulate differences between processing float and uint16_t depths in RGBD data
+template <typename T>
+struct DepthTraits
+{};
+
+template <>
+struct DepthTraits<uint16_t>
+{
+  static inline bool valid(uint16_t depth) {
+    return depth != 0;
+  }
+  static inline float toMeters(uint16_t depth) {
+    return depth * 0.001f;
+  }  // originally mm
+  static inline uint16_t fromMeters(float depth) {
+    return (depth * 1000.0f) + 0.5f;
+  }
+};
+
+template <>
+struct DepthTraits<float>
+{
+  static inline bool valid(float depth) {
+    return std::isfinite(depth);
+  }
+  static inline float toMeters(float depth) {
+    return depth;
+  }
+  static inline float fromMeters(float depth) {
+    return depth;
+  }
+};
+
+/*//}*/
+
+class SensorDepthCamera {
+public:
+  void initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::string& prefix, const std::string& name);
+
+private:
+  template <typename T>
+  void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& cloud_out, PC::Ptr& cloud_over_max_range_out, const bool return_removed);
+
+  void imagePointToCloudPoint(const int x, const int y, const float depth, pt_XYZ& point);
+
+  void process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs::Image>& sh);
+  void process_camera_info_msg(mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo>& sh);
+
+private:
+  bool            initialized = false;
+  ros::NodeHandle _nh;
+  ros::Publisher  pub_points;
+  ros::Publisher  pub_points_over_max_range;
+
+  mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
+  mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
+
+private:
+  std::string depth_in, depth_camera_info_in, points_out, points_over_max_range_out;
+  std::string sensor_name;
+
+  bool has_camera_info = false;
+  bool publish_over_max_range;
+
+  unsigned int image_width;
+  unsigned int image_height;
+
+  float artificial_depth_of_removed_points;
+  float image_center_x;
+  float image_center_y;
+  float focal_length;
+  float focal_length_inverse;
+
+  // Filters parameters
+private:
+  int downsample_step_col;
+  int downsample_step_row;
+
+  bool  range_clip_use;
+  float range_clip_min;
+  float range_clip_max;
+
+  bool  voxel_grid_use;
+  float voxel_grid_resolution;
+
+  bool  radius_outlier_use;
+  float radius_outlier_radius;
+  int   radius_outlier_neighbors;
+
+  bool  minimum_grid_use;
+  float minimum_grid_resolution;
+
+  bool  bilateral_use;
+  float bilateral_sigma_S;
+  float bilateral_sigma_R;
+};
+
+#include "impl/sensors.hpp"
+
+//}
+
 /* class PCLFiltration //{ */
 class PCLFiltration : public nodelet::Nodelet {
 
@@ -166,19 +272,7 @@ private:
 
 
   /* Depth camera */
-  void  depthCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
-  bool  _depth_republish;
-  bool  _depth_pcl2_over_max_range;
-  bool  _depth_use_bilateral;
-  bool  _depth_use_radius_outlier_filter;
-  float _depth_min_range_sq;
-  float _depth_max_range_sq;
-  float _depth_minimum_grid_resolution;
-  float _depth_bilateral_sigma_S;
-  float _depth_bilateral_sigma_R;
-  float _depth_voxel_resolution;
-  float _depth_radius_outlier_filter_radius;
-  int   _depth_radius_outlier_filter_neighbors;
+  std::vector<std::shared_ptr<SensorDepthCamera>> _sensors_depth_cameras;
 
   /* RPLidar */
   void  rplidarCallback(const sensor_msgs::LaserScan::ConstPtr msg);
@@ -191,10 +285,6 @@ private:
 
   template <typename PC>
   void cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc_ptr);
-  void removeCloseAndFarPointCloudOS(std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_var, std::variant<PC_OS::Ptr, PC_I::Ptr> &cloud_over_max_range_var,
-                                      unsigned int &valid_points, const sensor_msgs::PointCloud2::ConstPtr &msg, const bool &ret_cloud_over_max_range,
-                                      const uint32_t &min_range_mm, const uint32_t &max_range_mm, const bool &filter_intensity,
-                                      const uint32_t &filter_intensity_range_mm, const int &filter_intensity_thrd);
 
   template <typename PC>
   typename boost::shared_ptr<PC> removeCloseAndFar(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
@@ -211,8 +301,8 @@ private:
   template <typename pt_t>
   void invalidatePoint(pt_t &point);
 
-  template <typename T>
-  void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> cloud);
+  template <typename PC>
+  void invalidatePointsAtIndices(const pcl::IndicesConstPtr &indices, typename boost::shared_ptr<PC> &cloud);
 
   visualization_msgs::MarkerArray plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::Header& header);
 };
