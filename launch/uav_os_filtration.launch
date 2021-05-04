@@ -6,7 +6,6 @@
   <arg name="rplidar_republish" default="false" />
 
   <arg name="lidar3d/topic_in" default="os_cloud_nodelet/points" />
-  <arg name="lidar3d/publish_cloud_over_max_range" default="false" />
   <arg name="lidar3d/range_clip/use" default="true" />
   <arg name="lidar3d/range_clip/min" default="0.45" />
   <arg name="lidar3d/range_clip/max" default="20.0" />
@@ -32,7 +31,6 @@
       <param name="uav_name" type="string" value="$(arg UAV_NAME)" />
 
       <param name="lidar3d/republish" type="bool" value="$(arg lidar3d/republish)" />
-      <param name="lidar3d/pcl2_over_max_range" type="bool" value="$(arg lidar3d/publish_cloud_over_max_range)" />
       <param name="lidar3d/range_clip/use" type="bool" value="$(arg lidar3d/range_clip/use)" />
       <param name="lidar3d/range_clip/min" type="double" value="$(arg lidar3d/range_clip/min)" />
       <param name="lidar3d/range_clip/max" type="double" value="$(arg lidar3d/range_clip/max)" />
