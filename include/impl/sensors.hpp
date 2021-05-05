@@ -89,11 +89,14 @@ void SensorDepthCamera::convertDepthToCloud(const sensor_msgs::Image::ConstPtr& 
       const float depth     = DepthTraits<T>::toMeters(depth_raw);
 
       // Convert to point cloud points and optionally clip range
-      if (valid && (!range_clip_use || depth > range_clip_min && depth <= range_clip_max)) {
+      const bool in_range = depth > range_clip_min && depth <= range_clip_max;
+      const bool to_be_clipped = range_clip_use && !in_range;
+      const bool to_be_removed = !valid || to_be_clipped;
+      if (!to_be_removed) {
 
         imagePointToCloudPoint(u, v, depth, cloud_out->points.at(points_cloud++));
 
-      } else if (return_removed && (!valid || (range_clip_use && depth <= range_clip_min || depth > range_clip_max))) {
+      } else if (return_removed && to_be_removed) {
 
         imagePointToCloudPoint(u, v, artificial_depth_of_removed_points, cloud_over_max_range_out->points.at(points_cloud_over_max_range++));
       }
