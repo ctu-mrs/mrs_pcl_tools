@@ -32,7 +32,7 @@ PCL_VERSION_MAJOR=1.10
 PCL_VERSION_FULL=$PCL_VERSION_MAJOR.1
 
 # IMPORTANT: These variables should match the settings of your catkin workspace
-PROFILE="Release" # RelWithDebInfo, Release, Debug
+PROFILE="RelWithDebInfo" # RelWithDebInfo, Release, Debug
 BUILD_WITH_MARCH_NATIVE=true
 CMAKE_STANDARD=17
 
@@ -41,7 +41,7 @@ INSTALL_DIR=/usr
 
 # Build with march native?
 if $BUILD_WITH_MARCH_NATIVE; then
-  CMAKE_MARCH_NATIVE="-march=native -msse4.2 -mfpmath=sse"
+  CMAKE_MARCH_NATIVE="-march=native"
 else
   CMAKE_MARCH_NATIVE=""
 fi
@@ -56,8 +56,8 @@ BUILD_FLAGS_GENERAL=(
               -DCMAKE_BUILD_TYPE=$PROFILE
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 
               -DCMAKE_CXX_FLAGS="-std=c++$CMAKE_STANDARD $CMAKE_MARCH_NATIVE" 
-              -DCMAKE_CXX_FLAGS="$CMAKE_MARCH_NATIVE" 
               -DCMAKE_C_FLAGS="$CMAKE_MARCH_NATIVE"
+              -DEIGEN_MAX_ALIGN_BYTES=0
             )
 
 # Profile-dependent flags
@@ -98,7 +98,7 @@ echo "Building PCL with cmake flags: ${BUILD_FLAGS_GENERAL[@]} ${BUILD_FLAGS_PRO
 echo "This process OFTEN FAILS due to an internal compiler error. In such case, RUN AGAIN the script: $SCRIPT_PATH/install_pcl.sh"
 # echo "Building will start in 5s"
 # sleep 5
-make -j$[$(nproc) - 1]
+make -j$[$(nproc)/2]
 sudo make install
 
 # link shared libraries to path looked up by pcl_ros and pcl_conversions (this will also override libpcl-* binaries from debian repository)
