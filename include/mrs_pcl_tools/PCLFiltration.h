@@ -79,6 +79,8 @@ private:
   void              lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
   bool              _lidar3d_pcl2_over_max_range;
   bool              _lidar3d_filter_intensity_en;
+  double            _lidar3d_vfov;
+  int               _lidar3d_row_samples;
   float             _lidar3d_min_range_sq;
   float             _lidar3d_max_range_sq;
   float             _lidar3d_filter_intensity_range_sq;
@@ -103,21 +105,25 @@ private:
   int    _lidar3d_over_max_range_filter_sor_global_neighbors;
   double _lidar3d_over_max_range_filter_sor_global_stddev;
 
-  bool   _fog_detector_en;
+  bool _fog_detector_en;
+
+  int    _fog_detector_volumetric_test_segment_count;
+  double _fog_detector_volumetric_test_points_ratio_threshold;
+  double _fog_detector_volumetric_test_voxel_resolution;
+
   int    _fog_detector_mean_k;
   double _fog_detector_z_test_prob_thrd;
   double _fog_detector_mean_exp;
   double _fog_detector_stddev_exp;
 
   std::mutex _mutex_fog_detector_data;
-  bool       _fog_detector_lidar_flag = false;
-  bool       _fog_detector_depth_flag = false;
   ros::Time  _fog_detector_lidar_time_last;
   ros::Time  _fog_detector_depth_time_last;
   float      _fog_detector_lidar_data_mean;
   float      _fog_detector_lidar_data_stddev;
   float      _fog_detector_lidar_cndf;
   float      _fog_detector_depth_point_ratio;
+  float      _fog_detector_lidar_point_ratio;
 
   /* double         _fog_detector_mean_thrd; */
   /* double         _fog_detector_stddev_thrd; */
@@ -149,7 +155,9 @@ private:
   void copyCloudOS2XYZ(const PC_OS::Ptr &cloud_OS, PC::Ptr &cloud_xyz);
   void invalidatePointsAtIndices(const pcl::IndicesConstPtr &indices, PC_OS::Ptr &cloud);
 
-  void detectFogInLidarData(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp);
+  void detectFogInLidarDataStatisticsTest(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp);
+  void detectFogInLidarDataVolumetricTest(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp,
+                                          const int segment_count, const float points_ratio_thrd, const float cloud_resolution = 0.2f);
   bool detectFogInDepthData(const PC::Ptr &cloud, const std::shared_ptr<Camera> &camera, const float points_ratio, const int image_width,
                             const int image_height, const float cloud_resolution);
   void generateNNStatistics(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, float &mean, float &stddev, int &sample_size,

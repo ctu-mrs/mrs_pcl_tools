@@ -19,6 +19,8 @@ void PCLFiltration::onInit() {
   mrs_lib::ParamLoader param_loader(nh, "PCLFiltration");
 
   /* 3D LIDAR */
+  param_loader.loadParam("lidar3d/vfov", _lidar3d_vfov, M_PI_2);
+  param_loader.loadParam("lidar3d/row_samples", _lidar3d_row_samples, 1024);
   param_loader.loadParam("lidar3d/pcl2_over_max_range", _lidar3d_pcl2_over_max_range, false);
   param_loader.loadParam("lidar3d/min_range", _lidar3d_min_range_sq, 0.4f);
   param_loader.loadParam("lidar3d/max_range", _lidar3d_max_range_sq, 100.0f);
@@ -53,10 +55,15 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("lidar3d/over_max_range/filter/sor/stddev", _lidar3d_over_max_range_filter_sor_global_stddev, 1.0);
 
   param_loader.loadParam("lidar3d/filter/fog/enable", _fog_detector_en, false);
-  param_loader.loadParam("lidar3d/filter/fog/nn_k", _fog_detector_mean_k, 5);
-  param_loader.loadParam("lidar3d/filter/fog/subt_mean", _fog_detector_mean_exp, 0.0);
-  param_loader.loadParam("lidar3d/filter/fog/subt_stddev", _fog_detector_stddev_exp, 0.0);
-  param_loader.loadParam("lidar3d/filter/fog/z_test_prob_thrd", _fog_detector_z_test_prob_thrd, 0.7);
+
+  param_loader.loadParam("lidar3d/filter/fog/volumetric_test/segment_count", _fog_detector_volumetric_test_segment_count, 4);
+  param_loader.loadParam("lidar3d/filter/fog/volumetric_test/points_ratio_thrd", _fog_detector_volumetric_test_points_ratio_threshold, 0.0);
+  param_loader.loadParam("lidar3d/filter/fog/volumetric_test/voxel_resolution", _fog_detector_volumetric_test_voxel_resolution, 0.0);
+
+  param_loader.loadParam("lidar3d/filter/fog/statistical_test/nn_k", _fog_detector_mean_k, 5);
+  param_loader.loadParam("lidar3d/filter/fog/statistical_test/subt_mean", _fog_detector_mean_exp, 0.0);
+  param_loader.loadParam("lidar3d/filter/fog/statistical_test/subt_stddev", _fog_detector_stddev_exp, 0.0);
+  param_loader.loadParam("lidar3d/filter/fog/statistical_test/z_test_prob_thrd", _fog_detector_z_test_prob_thrd, 0.7);
   /* param_loader.loadParam("lidar3d/filter/fog/mean/thrd", _fog_detector_mean_thrd, std::numeric_limits<double>::max()); */
   /* param_loader.loadParam("lidar3d/filter/fog/stddev/thrd", _fog_detector_stddev_thrd, std::numeric_limits<double>::max()); */
 
@@ -253,10 +260,16 @@ void PCLFiltration::callbackReconfigure(Config &config, [[maybe_unused]] uint32_
   _lidar3d_filter_ror_neighbors = config.lidar3d_filter_ror_neighbors;
   _lidar3d_filter_ror_radius    = config.lidar3d_filter_ror_radius;
 
-  _fog_detector_en         = config.fog_detector_en;
-  _fog_detector_mean_k     = config.fog_detector_mean_k;
-  _fog_detector_mean_exp   = config.fog_detector_mean_exp;
-  _fog_detector_stddev_exp = config.fog_detector_stddev_exp;
+  _fog_detector_en = config.fog_detector_en;
+
+  _fog_detector_volumetric_test_segment_count          = config.fog_detector_volumetric_test_segment_count;
+  _fog_detector_volumetric_test_points_ratio_threshold = config.fog_detector_volumetric_test_points_ratio_threshold;
+  _fog_detector_volumetric_test_voxel_resolution       = config.fog_detector_volumetric_test_voxel_resolution;
+
+  _fog_detector_mean_k           = config.fog_detector_statistical_test_mean_k;
+  _fog_detector_mean_exp         = config.fog_detector_statistical_test_mean_exp;
+  _fog_detector_stddev_exp       = config.fog_detector_statistical_test_stddev_exp;
+  _fog_detector_z_test_prob_thrd = config.fog_detector_statistical_test_z_test_prob_thrd;
   /* _fog_detector_mean_thrd   = config.fog_detector_mean_thrd; */
   /* _fog_detector_stddev_thrd = config.fog_detector_stddev_thrd; */
 }
@@ -332,7 +345,11 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr &ms
   auto thr_sor_global_over_max_range = std::async(getInvalidIndicesSorFilter, _lidar3d_over_max_range_filter_sor_global_en, cloud_xyz_over_max_range,
                                                   _lidar3d_over_max_range_filter_sor_global_neighbors, _lidar3d_over_max_range_filter_sor_global_stddev);
 
-  std::thread thr_fog_detection(&PCLFiltration::detectFogInLidarData, this, cloud_xyz, indices_close, _lidar3d_filter_sor_local_range, msg->header.stamp);
+  /* std::thread thr_fog_detection(&PCLFiltration::detectFogInLidarDataStatisticsTest, this, cloud_xyz, indices_close, _lidar3d_filter_sor_local_range, */
+  /*                               msg->header.stamp); */
+  std::thread thr_fog_detection(&PCLFiltration::detectFogInLidarDataVolumetricTest, this, cloud_xyz, indices_close, _lidar3d_filter_sor_local_range,
+                                msg->header.stamp, _fog_detector_volumetric_test_segment_count, _fog_detector_volumetric_test_points_ratio_threshold,
+                                _fog_detector_volumetric_test_voxel_resolution);
 
   // Apply all filters
   invalidatePointsAtIndices(thr_sor_local_close.get(), cloud);
@@ -828,8 +845,9 @@ void PCLFiltration::invalidatePoint(pt_OS &point) {
 }
 /*//}*/
 
-/*//{ detectFogInLidarData() */
-void PCLFiltration::detectFogInLidarData(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range, const ros::Time stamp) {
+/*//{ detectFogInLidarDataStatisticsTest() */
+void PCLFiltration::detectFogInLidarDataStatisticsTest(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range,
+                                                       const ros::Time stamp) {
 
   if (!_fog_detector_en || indices->empty()) {
     return;
@@ -848,17 +866,80 @@ void PCLFiltration::detectFogInLidarData(const PC::Ptr &cloud, const boost::shar
   {
     std::scoped_lock lock(_mutex_fog_detector_data);
 
-    const double cndf        = zTableLookup(z);
-    _fog_detector_lidar_flag = cndf < _fog_detector_z_test_prob_thrd;
+    const double cndf   = zTableLookup(z);
+    const bool   in_fog = cndf < _fog_detector_z_test_prob_thrd;
 
     _fog_detector_lidar_data_mean   = data_mean;
     _fog_detector_lidar_data_stddev = data_stddev;
     _fog_detector_lidar_cndf        = cndf;
 
-    if (_fog_detector_lidar_flag) {
+    if (in_fog) {
       _fog_detector_lidar_time_last = stamp;
     }
   }
+}
+/*//}*/
+
+/*//{ detectFogInLidarDataVolumetricTest() */
+void PCLFiltration::detectFogInLidarDataVolumetricTest(const PC::Ptr &cloud, const boost::shared_ptr<std::vector<int>> &indices, const float range,
+                                                       const ros::Time stamp, const int segment_count, const float points_ratio_thrd,
+                                                       const float cloud_resolution) {
+
+  if (!_fog_detector_en || indices->empty() || cloud_resolution <= 0.0f || points_ratio_thrd < 0.0f)
+    return;
+
+  // Count max number of points in one segment
+  // V: full sphere volume, X: spherical sector volume -> lidar vfov volume = V - 2 * X = V - 2 * (2/3 * pi * r^3 * (1 - cos((pi - vfov) / 2))
+  const double segment_volume         = (4.0 / 3.0) * M_PI * std::pow(range, 3) * std::cos((M_PI - _lidar3d_vfov) / 2.0) / double(segment_count);
+  const int    max_points_per_segment = segment_volume / std::pow(cloud_resolution, 3);
+  if (max_points_per_segment == 0)
+    return;
+
+  const double         seg_width = 2.0 * M_PI / double(segment_count);
+  std::vector<PC::Ptr> segments(segment_count, boost::make_shared<PC>());
+
+  // Split given data to segments
+  for (const auto &i : *indices) {
+    const auto &point   = cloud->at(i);
+    double      azimuth = std::atan2(point.y, point.x);
+    if (azimuth < 0.0)
+      azimuth += 2 * M_PI;
+    const int segment = std::floor(azimuth / seg_width);
+
+    segments.at(segment)->push_back(point);
+  }
+
+  // Voxelize to given resolution and store the maximum volumetric ratio
+  float max_ratio = 0.0f;
+
+  pcl::VoxelGrid<PC::PointType> vg;
+  vg.setLeafSize(cloud_resolution, cloud_resolution, cloud_resolution);
+
+  for (auto &cloud : segments) {
+
+    if (cloud->size() > 1) {
+
+      vg.setInputCloud(cloud);
+      vg.filter(*cloud);
+
+      max_ratio = std::fmax(max_ratio, float(cloud->size()) / float(max_points_per_segment));
+    }
+  }
+
+  bool in_fog;
+  {
+    std::scoped_lock lock(_mutex_fog_detector_data);
+
+    // Apply simple thresholding (a lot of points within the lidar vfov segment means a fog probability is high)
+    in_fog                          = max_ratio > points_ratio_thrd;
+    _fog_detector_lidar_point_ratio = max_ratio;
+
+    if (in_fog)
+      _fog_detector_lidar_time_last = stamp;
+  }
+
+  NODELET_INFO_THROTTLE(1.0, "[PCLFiltration::detectFogInLidarDataVolumetricTest] in_fog: %s, segment_volume: %0.1f, max_ratio: %0.1f",
+                        in_fog ? "true" : "false", segment_volume, max_ratio);
 }
 /*//}*/
 
@@ -866,18 +947,17 @@ void PCLFiltration::detectFogInLidarData(const PC::Ptr &cloud, const boost::shar
 bool PCLFiltration::detectFogInDepthData(const PC::Ptr &cloud, const std::shared_ptr<Camera> &camera, const float points_ratio_thrd, const int image_width,
                                          const int image_height, const float cloud_resolution) {
 
-  if (!_fog_detector_en || cloud->empty() || cloud_resolution <= 0.0f || points_ratio_thrd < 0.0f) {
+  if (!_fog_detector_en || cloud->empty() || cloud_resolution <= 0.0f || points_ratio_thrd < 0.0f)
     return false;
-  }
 
   // Precompute ranges of all points (x-axis is original distance in the depth image)
   std::vector<float> depths(cloud->size());
   float              depth_max;
   for (int i = 0; i < cloud->size(); i++) {
-    const auto &point = cloud->at(i);
-    depths.at(i)      = point.x;
-    if (point.x > depth_max) {
-      depth_max = point.x;
+    const auto &depth = cloud->at(i).x;
+    depths.at(i)      = depth;
+    if (depth > depth_max) {
+      depth_max = depth;
     }
   }
 
@@ -910,22 +990,24 @@ bool PCLFiltration::detectFogInDepthData(const PC::Ptr &cloud, const std::shared
   // Compute the ratio of points in the pyramid
   const float true_points_ratio = float(true_point_count) / float(full_point_count);
 
+  bool in_fog;
+
   {
     std::scoped_lock lock(_mutex_fog_detector_data);
 
     // Apply simple thresholding (a lot of points within the pyramid means a fog probability is high)
-    _fog_detector_depth_flag = true_points_ratio > points_ratio_thrd;
+    in_fog = true_points_ratio > points_ratio_thrd;
 
-    if (_fog_detector_depth_flag) {
+    if (in_fog) {
       _fog_detector_depth_time_last   = ros::Time::now();
       _fog_detector_depth_point_ratio = true_points_ratio;
     }
   }
 
   NODELET_INFO_THROTTLE(1.0, "[PCLFiltration::detectFogInDepthData] in_fog: %s, R: %0.1f, volume: %0.1f, ratio: %0.1f (point count -> true: %d, full: %d)",
-                        _fog_detector_depth_flag ? "true" : "false", R, volume, true_points_ratio, true_point_count, full_point_count);
+                        in_fog ? "true" : "false", R, volume, true_points_ratio, true_point_count, full_point_count);
 
-  return _fog_detector_depth_flag;
+  return in_fog;
 }
 /*//}*/
 
@@ -1055,25 +1137,14 @@ void PCLFiltration::fogDetectionTimer(const ros::TimerEvent &event) {
     {
       std::scoped_lock lock(_mutex_fog_detector_data);
 
-      bool lidar_in_fog = _fog_detector_lidar_flag;
-      if (lidar_in_fog && (now - _fog_detector_lidar_time_last).toSec() > secs) {
-        _fog_detector_lidar_flag = false;
-        lidar_in_fog             = false;
-      }
-
-      bool depth_in_fog = _fog_detector_depth_flag;
-      if (depth_in_fog && (now - _fog_detector_depth_time_last).toSec() > secs) {
-        _fog_detector_depth_flag = false;
-        depth_in_fog             = false;
-      }
+      const bool lidar_in_fog = (now - _fog_detector_lidar_time_last).toSec() < secs;
+      const bool depth_in_fog = (now - _fog_detector_depth_time_last).toSec() < secs;
 
       msg->in_fog                = lidar_in_fog || depth_in_fog;
       msg->lidar_in_fog          = lidar_in_fog;
       msg->depth_in_fog          = depth_in_fog;
       msg->lidar_detection_range = _lidar3d_filter_sor_local_range;
-      msg->lidar_data_mean       = _fog_detector_lidar_data_mean;
-      msg->lidar_data_stddev     = _fog_detector_lidar_data_stddev;
-      msg->lidar_cndf            = _fog_detector_lidar_cndf;
+      msg->lidar_point_ratio     = _fog_detector_lidar_point_ratio;
       msg->depth_point_ratio     = _fog_detector_depth_point_ratio;
     }
 

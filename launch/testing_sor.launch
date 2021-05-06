@@ -123,15 +123,16 @@
       <param name="lidar3d/filter/ror/radius" type="double" value="1.0" />
 
       <param name="lidar3d/filter/fog/enable" type="bool" value="true" />
-      <param name="lidar3d/filter/fog/nn_k" type="int" value="3" />
-      <!-- Parameters of subt fog (measured in sphere with radius of 3 metre) -->
-      <param name="lidar3d/filter/fog/subt_mean" type="double" value="0.1" />
-      <param name="lidar3d/filter/fog/subt_stddev" type="double" value="0.1" />
-      <!-- <param name="lidar3d/filter/fog/subt_sample_size" type="int" value="4120" /> -->
-      <param name="lidar3d/filter/fog/z_test_prob_thrd" type="double" value="0.6" />
-      <!-- <param name="lidar3d/filter/fog/mean/thrd" type="double" value="0.03" /> -->
-      <!-- <param name="lidar3d/filter/fog/stddev/thrd" type="double" value="0.03" /> -->
 
+      <param name="lidar3d/filter/fog/volumetric_test/segment_count" type="int" value="8" />
+      <param name="lidar3d/filter/fog/volumetric_test/points_ratio_thrd" type="double" value="0.7" />
+      <param name="lidar3d/filter/fog/volumetric_test/voxel_resolution" type="double" value="0.2" />
+
+      <param name="lidar3d/filter/fog/statistical_test/nn_k" type="int" value="3" />
+      <param name="lidar3d/filter/fog/statistical_test/subt_mean" type="double" value="0.1" />
+      <param name="lidar3d/filter/fog/statistical_test/subt_stddev" type="double" value="0.1" />
+      <param name="lidar3d/filter/fog/statistical_test/z_test_prob_thrd" type="double" value="0.6" />
+      
       <param name="lidar3d/over_max_range/filter/sor/enable" type="bool" value="false" />
       <param name="lidar3d/over_max_range/filter/sor/neighbors" type="int" value="4" />
       <param name="lidar3d/over_max_range/filter/sor/stddev" type="double" value="1" />
