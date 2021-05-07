@@ -55,9 +55,8 @@ BUILD_FLAGS_GENERAL=(
               -DCMAKE_CXX_STANDARD=$CMAKE_STANDARD 
               -DCMAKE_BUILD_TYPE=$PROFILE
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 
-              -DCMAKE_CXX_FLAGS="-std=c++$CMAKE_STANDARD $CMAKE_MARCH_NATIVE" 
+              -DCMAKE_CXX_FLAGS="-std=c++$CMAKE_STANDARD $CMAKE_MARCH_NATIVE"
               -DCMAKE_C_FLAGS="$CMAKE_MARCH_NATIVE"
-              -DEIGEN_MAX_ALIGN_BYTES=0
             )
 
 # Profile-dependent flags
@@ -98,11 +97,11 @@ echo "Building PCL with cmake flags: ${BUILD_FLAGS_GENERAL[@]} ${BUILD_FLAGS_PRO
 echo "This process OFTEN FAILS due to an internal compiler error. In such case, RUN AGAIN the script: $SCRIPT_PATH/install_pcl.sh"
 # echo "Building will start in 5s"
 # sleep 5
-make -j$[$(nproc)/2]
+make -j$[$(nproc)-1]
 sudo make install
 
 # link shared libraries to path looked up by pcl_ros and pcl_conversions (this will also override libpcl-* binaries from debian repository)
-sudo ln -sf $INSTALL_DIR/lib/libpcl*.so /usr/lib/x86_64-linux-gnu/.
+sudo ln -sf $INSTALL_DIR/lib/libpcl*.so* /usr/lib/x86_64-linux-gnu/.
 
 # add flags to ~/.{shell}rc
 bashrc_flagged=`cat ~/.bashrc | grep "PCL_CROSS_COMPILATION" | wc -l`
