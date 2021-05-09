@@ -6,8 +6,15 @@
 #include <pcl/pcl_base.h>
 #include <pcl/point_traits.h>
 
+// point types
+#include <ouster_ros/point.h>
+
 namespace mrs_pcl_tools
 {
+  // let's move these here from the headers to enable including these headers from other packages which don't depend on Ouster
+  typedef ouster_ros::Point          pt_OS;
+  typedef pcl::PointCloud<pt_OS>     PC_OS;
+
   template <typename pc_t>
   inline bool isfinite(const pc_t& pc)
   {
