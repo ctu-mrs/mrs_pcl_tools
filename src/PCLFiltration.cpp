@@ -196,7 +196,9 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
 
   if (_lidar3d_downsample_use)
   {
-    downsample(pc_ptr, _lidar3d_row_step, _lidar3d_col_step, _lidar3d_dynamic_row_selection_offset);
+    // Try to keep the uppermost row (lower rows often see drone frame, so we want to prevent data loss)
+    const size_t row_offset = _lidar3d_dynamic_row_selection_enabled ? _lidar3d_dynamic_row_selection_offset : _lidar3d_row_step - 1;
+    downsample(pc_ptr, _lidar3d_row_step, _lidar3d_col_step, row_offset);
   }
 
   if (_filter_removeBelowGround.used())
