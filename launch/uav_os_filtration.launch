@@ -6,12 +6,13 @@
   <arg name="rplidar_republish" default="false" />
 
   <arg name="lidar3d/topic_in" default="os_cloud_nodelet/points" />
+  <arg name="lidar3d/keep_organized" default="true" />
   <arg name="lidar3d/range_clip/use" default="true" />
   <arg name="lidar3d/range_clip/min" default="0.45" />
   <arg name="lidar3d/range_clip/max" default="20.0" />
   <arg name="lidar3d/ground_removal/use" default="false" />
   <arg name="lidar3d/downsampling/dynamic_row_selection" default="false" />
-  <arg name="lidar3d/downsampling/row_step" default="1" doc="dynamic=false: will keep every n-th row; dynamic=true: number of iterations" />
+  <arg name="lidar3d/downsampling/row_step" default="1" doc="dynamic==false: will keep every n-th row; dynamic==true: number of iterations" />
   <arg name="lidar3d/downsampling/col_step" default="1" doc="will keep every n-th column" />
   <arg name="lidar3d/filter_intensity/use" default="false" />
   <arg name="lidar3d/filter_intensity/threshold" default="100" />
@@ -31,6 +32,7 @@
       <param name="uav_name" type="string" value="$(arg UAV_NAME)" />
 
       <param name="lidar3d/republish" type="bool" value="$(arg lidar3d/republish)" />
+      <param name="lidar3d/keep_organized" type="bool" value="$(arg lidar3d/keep_organized)" />
       <param name="lidar3d/range_clip/use" type="bool" value="$(arg lidar3d/range_clip/use)" />
       <param name="lidar3d/range_clip/min" type="double" value="$(arg lidar3d/range_clip/min)" />
       <param name="lidar3d/range_clip/max" type="double" value="$(arg lidar3d/range_clip/max)" />

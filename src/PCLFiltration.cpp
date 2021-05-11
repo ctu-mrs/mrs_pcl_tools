@@ -1,13 +1,13 @@
 #include "mrs_pcl_tools/PCLFiltration.h"
 #include <limits>
 #include <pcl/common/point_tests.h>
-#include <pcl/filters/extract_indices.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/pcl_base.h>
 #include <pcl/point_traits.h>
 
 namespace mrs_pcl_tools
 {
+
   template <typename pc_t>
   inline bool isfinite(const pc_t& pc)
   {
@@ -231,7 +231,6 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
     pc_ptr = boost::make_shared<PC>();
     pc_ptr->header = orig_pc->header;
     pc_ptr->resize(orig_pc->size());
-    pc_ptr->is_dense = true;
     size_t it = 0;
     for (const auto& pt : orig_pc->points)
     {
@@ -240,6 +239,7 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
     }
     pc_ptr->resize(it);
   }
+  pc_ptr->is_dense = !_lidar3d_keep_organized;
 
   _pub_lidar3d.publish(pc_ptr);
 
