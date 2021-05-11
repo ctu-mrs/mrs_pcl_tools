@@ -34,6 +34,9 @@
 // dynamic reconfigure
 #include <dynamic_reconfigure/server.h>
 
+// point types
+#include <ouster_ros/point.h>
+
 //}
 
 /*//{ typedefs */
@@ -42,9 +45,11 @@ typedef pcl::PointXYZ              pt_XYZ;
 typedef pcl::PointXYZI             pt_XYZI;
 typedef pcl::PointXYZRGB           pt_XYZRGB;
 typedef pcl::PointNormal           pt_NORM;
+typedef ouster_ros::Point          pt_OS;
 typedef pcl::PointCloud<pt_XYZ>    PC;
 typedef pcl::PointCloud<pt_XYZI>   PC_I;
 typedef pcl::PointCloud<pt_XYZRGB> PC_RGB;
 typedef pcl::PointCloud<pt_NORM>   PC_NORM;
+typedef pcl::PointCloud<pt_OS>     PC_OS;
 
 //}
