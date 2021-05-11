@@ -53,7 +53,7 @@ void SensorDepthCamera::initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl
   shopts.node_name  = "SensorDepthCamera::CameraInfo::" + sensor_name;
   shopts.threadsafe = true;
   sh_camera_info    = mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo>(shopts, depth_camera_info_in);
-  mrs_lib::construct_object(sh_camera_info, shopts, depth_camera_info_in, ros::Duration(1.0), &SensorDepthCamera::process_camera_info_msg, this);
+  mrs_lib::construct_object(sh_camera_info, shopts, depth_camera_info_in, ros::Duration(20.0), &SensorDepthCamera::process_camera_info_msg, this);
 
   initialized = true;
 }
