@@ -204,7 +204,7 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr)
   if (_filter_removeBelowGround.used())
   {
     const bool publish_removed = _pub_lidar3d_below_ground.getNumSubscribers() > 0;
-    const typename PC::Ptr pcl_below_ground = _filter_removeBelowGround.applyInPlace(pc_ptr);
+    const typename PC::Ptr pcl_below_ground = _filter_removeBelowGround.applyInPlace(pc_ptr, publish_removed);
     if (publish_removed)
       _pub_lidar3d_below_ground.publish(pcl_below_ground);
   }
