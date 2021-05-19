@@ -245,15 +245,19 @@ typename boost::shared_ptr<PC> RemoveBelowGroundFilter::applyInPlace(typename bo
   if (coeffs.block<3, 1>(0, 0).dot(ground_normal) < 0.0f)
     coeffs = -coeffs;
   // just some helper variables
-  const vec3_t fit_n = coeffs.block<3, 1>(0, 0);
-  const float fit_d = coeffs(3);
+  vec3_t fit_n = coeffs.block<3, 1>(0, 0);
+  float fit_d = coeffs(3);
 
   // check if the assumed ground point is an inlier of the fitted plane
   const float ground_pt_dist = std::abs(fit_n.dot(ground_point) + fit_d);
-  if (ground_pt_dist >  plane_offset)
+  const float max_ground_pt_dist = range_meas_used ? range_max_diff : range_max_diff_without_rangefinder;
+  if (ground_pt_dist > max_ground_pt_dist)
   {
-    ROS_ERROR_STREAM_THROTTLE(1.0, "[RemoveBelowGroundFilter]: The RANSAC-fitted ground-plane model [" << coeffs.transpose() << "] is too far from the measured ground (" << ground_pt_dist << "m > " << max_inlier_dist << "m)! Skipping ground removal.");
-    return removed_pc_ptr;
+    ROS_WARN_STREAM_THROTTLE(1.0, "[RemoveBelowGroundFilter]: The RANSAC-fitted ground-plane model [" << coeffs.transpose() << "] is too far from the measured ground (" << ground_pt_dist << "m > " << max_ground_pt_dist << "m)! Using ground-removal based on the fixed frame.");
+    const float plane_d = -ground_normal.dot(ground_point)-plane_offset;
+    coeffs << -ground_normal.x(), -ground_normal.y(), -ground_normal.z(), -plane_d;
+    fit_n = coeffs.block<3, 1>(0, 0);
+    fit_d = coeffs(3);
   }
 
   std_msgs::Header header;

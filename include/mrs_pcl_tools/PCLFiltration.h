@@ -46,6 +46,8 @@ namespace mrs_pcl_tools
       {
         keep_organized = pl.loadParamReusable<bool>("keep_organized", false);
         pl.loadParam("ground_removal/range/use", range_use, false);
+        pl.loadParam("ground_removal/range/max_difference", range_max_diff, 1.0);
+        pl.loadParam("ground_removal/range/max_difference_without_rangefinder", range_max_diff_without_rangefinder, 1.5);
         pl.loadParam("ground_removal/static_frame_id", static_frame_id);
         pl.loadParam("ground_removal/max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
         pl.loadParam("ground_removal/ransac/max_inlier_distance", max_inlier_dist, 3.0);
@@ -99,6 +101,8 @@ namespace mrs_pcl_tools
       double max_angle_diff       = 15.0/180.0*M_PI;  // 15 degrees
       double max_inlier_dist      = 3.0;              // metres
       double plane_offset         = 1.0;              // metres
+      double range_max_diff       = 1.0;              // metres
+      double range_max_diff_without_rangefinder = 1.5;// metres
   };
 
 #include <impl/remove_below_ground_filter.hpp>
