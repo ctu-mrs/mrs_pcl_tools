@@ -78,7 +78,7 @@ generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES PCLSupportLib PCLFiltration PCL2MapRegistration
-  CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs pcl_ros mrs_lib
+  CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs pcl_ros mrs_lib ouster_ros
   DEPENDS Eigen
 )
 
