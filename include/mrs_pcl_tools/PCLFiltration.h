@@ -292,7 +292,7 @@ private:
   void cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc_ptr);
 
   template <typename PC>
-  typename boost::shared_ptr<PC> removeCloseAndFar(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
+  typename boost::shared_ptr<PC> removeCloseAndFar(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed_close = false, const bool return_removed_far = false);
 
   template <typename PC>
   typename boost::shared_ptr<PC> removeLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
