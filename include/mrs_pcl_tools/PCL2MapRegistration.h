@@ -126,6 +126,8 @@ private:
   std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_sicpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map);
 
   void applyRandomTransformation(PC_NORM::Ptr cloud);
+
+  void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc);
 };
 //}
 

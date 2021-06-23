@@ -86,8 +86,8 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
   pc_src_filt->header.frame_id  = _frame_map;
   pc_targ_filt->header.stamp    = stamp;
   pc_targ_filt->header.frame_id = _frame_map;
-  publishCloud(_pub_cloud_source, *pc_src_filt);
-  publishCloud(_pub_cloud_target, *pc_targ_filt);
+  publishCloud(_pub_cloud_source, pc_src_filt);
+  publishCloud(_pub_cloud_target, pc_targ_filt);
 
   // Register given pc to map cloud
   std::tie(res.success, res.message, std::ignore) = registerCloudToCloud(pc_src_filt, pc_targ_filt);
@@ -153,8 +153,8 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   pc_src_filt->header.frame_id  = _frame_map;
   pc_targ_filt->header.stamp    = pc_src->header.stamp;
   pc_targ_filt->header.frame_id = _frame_map;
-  publishCloud(_pub_cloud_source, *pc_src_filt);
-  publishCloud(_pub_cloud_target, *pc_targ_filt);
+  publishCloud(_pub_cloud_source, pc_src_filt);
+  publishCloud(_pub_cloud_target, pc_targ_filt);
 
   // Register given pc to map cloud
   Eigen::Matrix4f T;
@@ -240,7 +240,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     // Publish initially aligned cloud
     pc_aligned->header.stamp    = pc_src->header.stamp;
     pc_aligned->header.frame_id = _frame_map;
-    publishCloud(_pub_cloud_aligned, *pc_aligned);
+    publishCloud(_pub_cloud_aligned, pc_aligned);
 
     /*//{ Perform fine tuning registration */
     Eigen::Matrix4f T_fine              = Eigen::Matrix4f::Identity();
@@ -293,7 +293,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
         // Publish aligned cloud
         pc_aligned->header.stamp    = pc_src->header.stamp;
         pc_aligned->header.frame_id = _frame_map;
-        publishCloud(_pub_cloud_aligned, *pc_aligned);
+        publishCloud(_pub_cloud_aligned, pc_aligned);
 
       } else {
         ROS_ERROR("[PCL2MapRegistration] Registration (fine tuning) did not converge -- try to change registration (fine tuning) parameters.");
@@ -622,7 +622,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
     // Publish aligned cloud
     pc_aligned_best->header.stamp    = pc_src->header.stamp;
     pc_aligned_best->header.frame_id = _frame_map;
-    publishCloud(_pub_cloud_aligned, *pc_aligned_best);
+    publishCloud(_pub_cloud_aligned, pc_aligned_best);
 
   } else {
     ROS_ERROR("[PCL2MapRegistration] Registration (SICPN) did not converge -- try to change registration (SICPN) parameters.");
@@ -759,6 +759,19 @@ void PCL2MapRegistration::applyRandomTransformation(PC_NORM::Ptr cloud) {
 
   // Transform cloud
   pcl::transformPointCloud(*cloud, *cloud, T);
+}
+/*//}*/
+
+/*//{ publishCloud() */
+void PCL2MapRegistration::publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &cloud) {
+  if (pub.getNumSubscribers() > 0) {
+    try {
+      pub.publish(cloud);
+    }
+    catch (...) {
+      ROS_ERROR("[PCL2MapRegistration::publishCloud]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+    }
+  }
 }
 /*//}*/
 
