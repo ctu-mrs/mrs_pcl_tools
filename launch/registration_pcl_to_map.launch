@@ -1,15 +1,18 @@
 <launch>
 
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
-  <arg name="map_frame" default="$(arg UAV_NAME)/church_origin" />
+  <arg name="map_frame" default="$(arg UAV_NAME)/global_origin" />
 
-  <arg name="target_pcd" default="$(find naki_gazebo_resources)/models/stara_voda/pcd/stara_voda.pcd" />
-  <arg name="source_pcd" default="$(find naki_gazebo_resources)/models/stara_voda/pcd/stara_voda_bottom_rot.pcd" />
+  <arg name="target_pcd" default="$(find naki_gazebo_resources)/models/olomouc_sv_moric/pcd/olomouc_sv_moric.pcd" />
+  <arg name="source_pcd" default="$(find naki_gazebo_resources)/models/olomouc_sv_moric/pcd/olomouc_start_D.pcd" />
   <arg name="topic_pointcloud2" default="octomap_point_cloud_centers" />
 
   <arg name="nodelet" default="standalone" />
   <arg name="nodelet_manager" default="" />
   <arg name="launch_prefix" default=""/>
+  
+  <arg name="default_config" default="$(find mrs_pcl_tools)/config/pcl2map_registration_default.yaml" />
+  <arg name="custom_config" default="" />
 
   <group ns="$(arg UAV_NAME)">
 
@@ -20,6 +23,9 @@
       <param name="source_pcd" type="string" value="$(arg source_pcd)" />
       <param name="map_frame" type="string" value="$(arg map_frame)" />
       <param name="topic_pointcloud2" type="string" value="$(arg topic_pointcloud2)" />
+
+      <rosparam file="$(arg default_config)" />
+      <rosparam if="$(eval not arg('custom_config') == '')" file="$(arg custom_config)" />
 
       <!-- Publishers -->
       <remap from="~cloud_source_out" to="registration/source" />

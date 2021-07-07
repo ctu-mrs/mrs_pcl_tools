@@ -34,7 +34,7 @@ public:
   virtual void onInit();
 
 private:
-  const ros::Duration _SUBSCRIBE_MSG_TIMEOUT = ros::Duration(2.0f);
+  const ros::Duration _SUBSCRIBE_MSG_TIMEOUT = ros::Duration(2.5f);
 
   ros::NodeHandle _nh;
   bool            _is_initialized       = false;
@@ -55,13 +55,13 @@ private:
   std::string _path_pcl;
   std::string _topic_pc2;
 
-  int   _registration_method_initial     = 4;
-  int   _registration_method_fine_tune   = 3;
-  bool  _use_init_guess                  = false;
-  float _clouds_voxel_leaf               = 0.3f;
-  float _normal_estimation_radius        = 0.25f;
-  float _cloud_correlation_z_crop_offset = 2.0f;
-  float _min_convergence_score           = 0.5f;
+  int   _registration_method_initial;
+  int   _registration_method_fine_tune;
+  bool  _use_init_guess;
+  float _clouds_voxel_leaf;
+  float _normal_estimation_radius;
+  float _cloud_correlation_z_crop_offset;
+  float _min_convergence_score;
 
   float _fpfh_search_rad           = 3.5;
   float _fpfh_similarity_threshold = 0.9;
@@ -83,22 +83,22 @@ private:
   int   _gicp_ransac_iter          = 30;
   bool  _gicp_use_recip_corr       = false;
 
-  float _icpn_max_corr_dist        = 4.0f;
-  float _icpn_ransac_outl_rej_thrd = 0.95f;
-  float _icpn_trans_eps            = 0.01f;
-  float _icpn_eucld_fitn_eps       = 0.01f;
-  int   _icpn_max_iter             = 1000;
-  int   _icpn_ransac_iter          = 300;
-  bool  _icpn_use_recip_corr       = false;
+  float _icpn_max_corr_dist;
+  float _icpn_ransac_outl_rej_thrd;
+  float _icpn_trans_eps;
+  float _icpn_eucld_fitn_eps;
+  int   _icpn_max_iter;
+  int   _icpn_ransac_iter;
+  bool  _icpn_use_recip_corr;
 
-  unsigned int _sicpn_number_of_samples    = 8;
-  float        _sicpn_max_corr_dist        = 7.0f;
-  float        _sicpn_ransac_outl_rej_thrd = 0.8f;
-  float        _sicpn_trans_eps            = 0.1;
-  float        _sicpn_eucld_fitn_eps       = 0.1;
-  int          _sicpn_max_iter             = 500;
-  int          _sicpn_ransac_iter          = 150;
-  bool         _sicpn_use_recip_corr       = false;
+  int   _sicpn_number_of_samples;
+  float _sicpn_max_corr_dist;
+  float _sicpn_ransac_outl_rej_thrd;
+  float _sicpn_trans_eps;
+  float _sicpn_eucld_fitn_eps;
+  int   _sicpn_max_iter;
+  int   _sicpn_ransac_iter;
+  bool  _sicpn_use_recip_corr;
 
   Eigen::Matrix4f _initial_guess = Eigen::Matrix4f::Identity();
 

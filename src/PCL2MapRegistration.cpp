@@ -17,6 +17,34 @@ void PCL2MapRegistration::onInit() {
   param_loader.loadParam<std::string>("map_frame", _frame_map, "global_origin");
   param_loader.loadParam<std::string>("topic_pointcloud2", _topic_pc2, "");
 
+  // General parameters
+  param_loader.loadParam("method/initial", _registration_method_initial, 4);
+  param_loader.loadParam("method/fine_tune", _registration_method_fine_tune, 3);
+  param_loader.loadParam("use_init_guess", _use_init_guess, false);
+  param_loader.loadParam("clouds_voxel_leaf", _clouds_voxel_leaf, 0.3f);
+  param_loader.loadParam("normal_estimation_radius", _normal_estimation_radius, 0.25f);
+  param_loader.loadParam("cloud_correlation_z_crop_offset", _cloud_correlation_z_crop_offset, 2.0f);
+  param_loader.loadParam("min_convergence_score", _min_convergence_score, 0.5f);
+
+  // Parameters: ICPN
+  param_loader.loadParam("icpn/max_corr_dist", _icpn_max_corr_dist);
+  param_loader.loadParam("icpn/ransac_outl_rej_thrd", _icpn_ransac_outl_rej_thrd);
+  param_loader.loadParam("icpn/trans_ep", _icpn_trans_eps);
+  param_loader.loadParam("icpn/eucld_fitn_eps", _icpn_eucld_fitn_eps);
+  param_loader.loadParam("icpn/max_iter", _icpn_max_iter);
+  param_loader.loadParam("icpn/ransac_iter", _icpn_ransac_iter);
+  param_loader.loadParam("icpn/use_recip_corr", _icpn_use_recip_corr);
+
+  // Parameters: SICPN
+  param_loader.loadParam("sicpn/number_of_samples", _sicpn_number_of_samples);
+  param_loader.loadParam("sicpn/max_corr_dist", _sicpn_max_corr_dist);
+  param_loader.loadParam("sicpn/ransac_outl_rej_thrd", _sicpn_ransac_outl_rej_thrd);
+  param_loader.loadParam("sicpn/trans_ep", _sicpn_trans_eps);
+  param_loader.loadParam("sicpn/eucld_fitn_eps", _sicpn_eucld_fitn_eps);
+  param_loader.loadParam("sicpn/max_iter", _sicpn_max_iter);
+  param_loader.loadParam("sicpn/ransac_iter", _sicpn_ransac_iter);
+  param_loader.loadParam("sicpn/use_recip_corr", _sicpn_use_recip_corr);
+
   if (!param_loader.loadedSuccessfully()) {
     NODELET_ERROR("[PCL2MapRegistration]: Some compulsory parameters were not loaded successfully, ending the node");
     ros::shutdown();

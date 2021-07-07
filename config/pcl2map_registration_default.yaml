@@ -1,0 +1,28 @@
+method: # [FPFH, NDT, GICP, ICPN, SICPN]
+  initial: 4
+  fine_tune: 3
+
+use_init_guess: false
+clouds_voxel_leaf: 0.3
+normal_estimation_radius: 0.25
+cloud_correlation_z_crop_offset: 2.0
+min_convergence_score: 0.5
+
+icpn:
+  max_corr_dist: 4.0
+  ransac_outl_rej_thrd: 0.95
+  trans_ep: 0.01
+  eucld_fitn_eps: 0.01
+  max_iter: 1000
+  ransac_iter: 300
+  use_recip_corr: false
+
+sicpn:
+  number_of_samples: 8
+  max_corr_dist: 7.0
+  ransac_outl_rej_thrd: 0.8
+  trans_ep: 0.01
+  eucld_fitn_eps: 0.01
+  max_iter: 1000
+  ransac_iter: 300
+  use_recip_corr: false
