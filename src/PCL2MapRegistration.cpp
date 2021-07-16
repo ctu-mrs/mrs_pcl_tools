@@ -79,7 +79,8 @@ void PCL2MapRegistration::onInit() {
 //}
 
 /* callbackSrvRegisterOffline() //{*/
-bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res) {
+bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterPointCloudOffline::Request & req,
+                                                     mrs_pcl_tools::SrvRegisterPointCloudOffline::Response &res) {
   if (!_is_initialized) {
     res.success = false;
     res.message = "Registration unitialized.";
@@ -103,9 +104,25 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
     pc_src_filt  = filters::applyVoxelGridFilter(_pc_offline, _clouds_voxel_leaf);
 
     // for debugging: apply random translation on the slam pc
-    applyRandomTransformation(pc_src_filt);
+    if (req.apply_random_transform)
+      applyRandomTransformation(pc_src_filt);
   }
-  correlateCloudToCloud(pc_src_filt, pc_targ_filt);
+
+  // Correlate two clouds
+  Eigen::Matrix4f T_corr;
+  if (req.init_guess_use) {
+
+    const Eigen::Vector3f &init_guess_translation = Eigen::Vector3f(req.init_guess_translation.x, req.init_guess_translation.y, req.init_guess_translation.z);
+    T_corr                                        = translationYawToMatrix(init_guess_translation, req.init_guess_yaw);
+
+    // Correlate: transform source to target
+    pcl::transformPointCloud(*pc_src_filt, *pc_src_filt, T_corr);
+
+  } else {
+
+    // Match centroids and move pc_src min-z to pc_targ min-z
+    T_corr = correlateCloudToCloudByCentroid(pc_src_filt, pc_targ_filt);
+  }
 
   // Publish input data
   std::uint64_t stamp;
@@ -118,7 +135,26 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline([[maybe_unused]] std_srvs::
   publishCloud(_pub_cloud_target, pc_targ_filt);
 
   // Register given pc to map cloud
-  std::tie(res.success, res.message, std::ignore) = registerCloudToCloud(pc_src_filt, pc_targ_filt);
+  Eigen::Matrix4f T;
+  std::tie(res.success, res.message, T) = registerCloudToCloud(pc_src_filt, pc_targ_filt);
+
+  // Include initial correlation matrix
+  T = T * T_corr;
+
+  // Save result as static TF pc_src.frame -> pc_targ.frame
+  if (res.success) {
+    geometry_msgs::TransformStamped tf_msg;
+
+    // Prepare header
+    pcl_conversions::fromPCL(stamp, tf_msg.header.stamp);
+    tf_msg.header.frame_id = "frame_of_offline_pcd";
+    tf_msg.child_frame_id  = _frame_map;
+
+    // Fill transform
+    tf_msg.transform = matrixToTfTransform(T.inverse());
+
+    res.transform = tf_msg;
+  }
 
   return res.success;
 }
@@ -173,8 +209,23 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   }
   pc_src_filt = filters::applyVoxelGridFilter(pc_src, _clouds_voxel_leaf);
 
-  // Match centroids and move pc_src min-z to pc_targ min-z
-  const Eigen::Matrix4f T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
+  // TODO: SOR and ROR filter
+
+  // Correlate two clouds
+  Eigen::Matrix4f T_corr;
+  if (req.init_guess_use) {
+
+    const Eigen::Vector3f &init_guess_translation = Eigen::Vector3f(req.init_guess_translation.x, req.init_guess_translation.y, req.init_guess_translation.z);
+    T_corr                                        = translationYawToMatrix(init_guess_translation, req.init_guess_yaw);
+
+    // Correlate: transform source to target
+    pcl::transformPointCloud(*pc_src_filt, *pc_src_filt, T_corr);
+
+  } else {
+
+    // Match centroids and move pc_src min-z to pc_targ min-z
+    T_corr = correlateCloudToCloudByCentroid(pc_src_filt, pc_targ_filt);
+  }
 
   // Publish input data
   pc_src_filt->header.stamp     = pc_src->header.stamp;
@@ -202,12 +253,7 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
     tf_msg.child_frame_id  = _frame_map;
 
     // Fill transform
-    const Eigen::Matrix4f T_inv    = T.inverse();
-    tf_msg.transform.translation.x = T_inv(0, 3);
-    tf_msg.transform.translation.y = T_inv(1, 3);
-    tf_msg.transform.translation.z = T_inv(2, 3);
-    mrs_lib::AttitudeConverter R(T_inv.block<3, 3>(0, 0).cast<double>());
-    tf_msg.transform.rotation = R;
+    tf_msg.transform = matrixToTfTransform(T.inverse());
 
     res.transform = tf_msg;
   }
@@ -662,15 +708,15 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 }
 /*//}*/
 
-/*//{ correlateCloudToCloud() */
-Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ) {
+/*//{ correlateCloudToCloudByCentroid() */
+Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloudByCentroid(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ) {
 
   // Compute centroids of both clouds
   Eigen::Vector4f centroid_src;
   Eigen::Vector4f centroid_targ;
   pcl::compute3DCentroid(*pc_src, centroid_src);
   pcl::compute3DCentroid(*pc_targ, centroid_targ);
-  Eigen::Vector4f centroid_diff = centroid_targ - centroid_src;
+  const Eigen::Vector4f centroid_diff = centroid_targ - centroid_src;
 
   // Compute min/max Z axis points
   pt_NORM pt_min_src;
@@ -787,6 +833,40 @@ void PCL2MapRegistration::applyRandomTransformation(PC_NORM::Ptr cloud) {
 
   // Transform cloud
   pcl::transformPointCloud(*cloud, *cloud, T);
+}
+/*//}*/
+
+/*//{ translationYawToMatrix() */
+const Eigen::Matrix4f PCL2MapRegistration::translationYawToMatrix(const Eigen::Vector3f &translation, const float yaw) {
+
+  // Initialize
+  Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
+
+  // Fill in translation
+  T(0, 3) = translation.x();
+  T(1, 3) = translation.y();
+  T(2, 3) = translation.z();
+
+  // Fill in rotation
+  const Eigen::AngleAxisf rot_ax  = Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitZ());
+  const Eigen::Matrix3d   rot_mat = mrs_lib::AttitudeConverter(rot_ax);
+  T.block<3, 3>(0, 0)             = rot_mat.cast<float>();
+
+  return T;
+}
+/*//}*/
+
+/*//{ matrixToTfTransform() */
+const geometry_msgs::Transform PCL2MapRegistration::matrixToTfTransform(const Eigen::Matrix4f &mat) {
+
+  geometry_msgs::Transform tf_msg;
+
+  tf_msg.translation.x = mat(0, 3);
+  tf_msg.translation.y = mat(1, 3);
+  tf_msg.translation.z = mat(2, 3);
+  tf_msg.rotation      = mrs_lib::AttitudeConverter(mat.block<3, 3>(0, 0).cast<double>());
+
+  return tf_msg;
 }
 /*//}*/
 

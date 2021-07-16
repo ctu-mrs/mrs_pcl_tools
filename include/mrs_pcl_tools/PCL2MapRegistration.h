@@ -19,6 +19,7 @@
 
 #include "mrs_pcl_tools/pcl2map_registration_dynparamConfig.h"
 #include "mrs_pcl_tools/SrvRegisterPointCloudByName.h"
+#include "mrs_pcl_tools/SrvRegisterPointCloudOffline.h"
 
 typedef pcl::FPFHSignature33       feat_FPFH;
 typedef pcl::PointCloud<feat_FPFH> PC_FPFH;
@@ -112,10 +113,10 @@ private:
 
   PC_NORM::Ptr                loadPcWithNormals(const std::string &pcd_file);
   std::optional<PC_NORM::Ptr> subscribeSinglePointCloudMsg(const std::string &topic);
-  Eigen::Matrix4f             correlateCloudToCloud(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
+  Eigen::Matrix4f             correlateCloudToCloudByCentroid(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
 
   std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
-  bool                                           callbackSrvRegisterOffline([[maybe_unused]] std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res);
+  bool callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterPointCloudOffline::Request &req, mrs_pcl_tools::SrvRegisterPointCloudOffline::Response &res);
   bool callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegisterPointCloudByName::Request &req, mrs_pcl_tools::SrvRegisterPointCloudByName::Response &res);
   void callbackReconfigure(Config &config, [[maybe_unused]] uint32_t level);
 
@@ -126,6 +127,9 @@ private:
   std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_sicpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map);
 
   void applyRandomTransformation(PC_NORM::Ptr cloud);
+
+  const Eigen::Matrix4f          translationYawToMatrix(const Eigen::Vector3f &translation, const float yaw);
+  const geometry_msgs::Transform matrixToTfTransform(const Eigen::Matrix4f &mat);
 
   void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc);
 };

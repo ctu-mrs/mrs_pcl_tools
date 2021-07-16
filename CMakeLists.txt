@@ -41,6 +41,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 add_service_files(DIRECTORY srv/registration FILES
   SrvRegisterPointCloudByName.srv
+  SrvRegisterPointCloudOffline.srv
 )
 
 find_package(PCL REQUIRED COMPONENTS)
