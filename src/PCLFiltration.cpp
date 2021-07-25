@@ -910,7 +910,8 @@ void PCLFiltration::detectFogInLidarDataVolumetricTest(const PC::Ptr &cloud, con
   }
 
   // Voxelize to given resolution and store the maximum volumetric ratio
-  float max_ratio = 0.0f;
+  float max_ratio             = 0.0f;
+  int   max_points_in_segment = 0;
 
   pcl::VoxelGrid<PC::PointType> vg;
   vg.setLeafSize(cloud_resolution, cloud_resolution, cloud_resolution);
@@ -922,7 +923,12 @@ void PCLFiltration::detectFogInLidarDataVolumetricTest(const PC::Ptr &cloud, con
       vg.setInputCloud(cloud);
       vg.filter(*cloud);
 
-      max_ratio = std::fmax(max_ratio, float(cloud->size()) / float(max_points_per_segment));
+      const int   cloud_size    = cloud->size();
+      const float segment_ratio = float(cloud_size) / float(max_points_per_segment);
+      if (segment_ratio > max_ratio) {
+        max_ratio             = segment_ratio;
+        max_points_in_segment = cloud_size;
+      }
     }
   }
 
@@ -938,8 +944,9 @@ void PCLFiltration::detectFogInLidarDataVolumetricTest(const PC::Ptr &cloud, con
       _fog_detector_lidar_time_last = stamp;
   }
 
-  NODELET_INFO_THROTTLE(1.0, "[PCLFiltration::detectFogInLidarDataVolumetricTest] in_fog: %s, segment_volume: %0.2f, max_ratio: %0.2f",
-                        in_fog ? "true" : "false", segment_volume, max_ratio);
+  NODELET_INFO_THROTTLE(
+      1.0, "[PCLFiltration::detectFogInLidarDataVolumetricTest] in_fog: %s, segment_volume: %0.2f, max_ratio: %0.2f (point count -> true: %d, full: %d)",
+      in_fog ? "true" : "false", segment_volume, max_ratio, max_points_in_segment, max_points_per_segment);
 }
 /*//}*/
 
@@ -1128,8 +1135,9 @@ void PCLFiltration::fogDetectionTimer(const ros::TimerEvent &event) {
 
   if (_pub_fog_detection.getNumSubscribers() > 0) {
 
-    const ros::Time now  = ros::Time::now();
-    const double    secs = 1.0;
+    const ros::Time now        = ros::Time::now();
+    const double    secs_lidar = 0.5;
+    const double    secs_depth = 1.5;
 
     darpa_mrs_msgs::FogDetection::Ptr msg = boost::make_shared<darpa_mrs_msgs::FogDetection>();
     msg->stamp                            = now;
@@ -1137,8 +1145,8 @@ void PCLFiltration::fogDetectionTimer(const ros::TimerEvent &event) {
     {
       std::scoped_lock lock(_mutex_fog_detector_data);
 
-      const bool lidar_in_fog = (now - _fog_detector_lidar_time_last).toSec() < secs;
-      const bool depth_in_fog = (now - _fog_detector_depth_time_last).toSec() < secs;
+      const bool lidar_in_fog = (now - _fog_detector_lidar_time_last).toSec() < secs_lidar;
+      const bool depth_in_fog = (now - _fog_detector_depth_time_last).toSec() < secs_depth;
 
       msg->in_fog                = lidar_in_fog || depth_in_fog;
       msg->lidar_in_fog          = lidar_in_fog;
