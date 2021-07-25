@@ -938,7 +938,7 @@ void PCLFiltration::detectFogInLidarDataVolumetricTest(const PC::Ptr &cloud, con
       _fog_detector_lidar_time_last = stamp;
   }
 
-  NODELET_INFO_THROTTLE(1.0, "[PCLFiltration::detectFogInLidarDataVolumetricTest] in_fog: %s, segment_volume: %0.1f, max_ratio: %0.1f",
+  NODELET_INFO_THROTTLE(1.0, "[PCLFiltration::detectFogInLidarDataVolumetricTest] in_fog: %s, segment_volume: %0.2f, max_ratio: %0.2f",
                         in_fog ? "true" : "false", segment_volume, max_ratio);
 }
 /*//}*/
