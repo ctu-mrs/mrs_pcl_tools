@@ -3,8 +3,8 @@
 /* includes //{ */
 #include "support.h"
 
-#include <pcl-1.8/pcl/PointIndices.h>
-/* #include <pcl/PointIndices.h> */
+/* #include <pcl-1.8/pcl/PointIndices.h> */
+#include <pcl/PointIndices.h>
 #include <variant>
 #include <future>
 #include <thread>
