@@ -40,7 +40,7 @@ std::optional<PC_NORM::Ptr> loadPcNormals(const std::string &pcd_file) {
 /*//}*/
 
 /*//{ savePCD() */
-void savePCD(const std::string &pcd_file, sensor_msgs::PointCloud2::ConstPtr &cloud_msg, const bool &binary) {
+void savePCD(const std::string &pcd_file, const sensor_msgs::PointCloud2::Ptr &cloud_msg, const bool &binary) {
   ROS_INFO("[PCLSupportLibrary] Saving PCD file (%s): %s", (binary) ? "binary" : "ascii", pcd_file.c_str());
   pcl::PCLPointCloud2 cloud;
   pcl_conversions::toPCL(*cloud_msg, cloud);

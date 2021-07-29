@@ -24,7 +24,7 @@ namespace mrs_pcl_tools
 std::optional<PC::Ptr>      loadPcXYZ(const std::string &pcd_file);
 std::optional<PC_NORM::Ptr> loadPcNormals(const std::string &pcd_file);
 
-void savePCD(const std::string &pcd_file, sensor_msgs::PointCloud2::ConstPtr &cloud, const bool &binary = true);
+void savePCD(const std::string &pcd_file, const sensor_msgs::PointCloud2::Ptr &cloud, const bool &binary = true);
 
 PC_NORM::Ptr estimateNormals(const PC::Ptr &cloud, const float &normal_est_radius);
 
@@ -78,14 +78,14 @@ typename boost::shared_ptr<PC_t> applyRadiusOutlierFilter(typename boost::shared
   /* } */
 
   /* if (!finite_indices->empty()) { */
-    pcl::RadiusOutlierRemoval<typename PC_t::PointType> outrem;
-    outrem.setInputCloud(cloud);
-    /* outrem.setIndices(finite_indices); */
-    outrem.setRadiusSearch(radius);
-    outrem.setMinNeighborsInRadius(neighbors);
-    outrem.setKeepOrganized(true);
+  pcl::RadiusOutlierRemoval<typename PC_t::PointType> outrem;
+  outrem.setInputCloud(cloud);
+  /* outrem.setIndices(finite_indices); */
+  outrem.setRadiusSearch(radius);
+  outrem.setMinNeighborsInRadius(neighbors);
+  outrem.setKeepOrganized(true);
 
-    outrem.filter(*cloud_out);
+  outrem.filter(*cloud_out);
   /* } */
 
   return cloud_out;
