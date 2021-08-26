@@ -149,7 +149,8 @@ public:
 
 private:
   template <typename T>
-  void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& cloud_out, PC::Ptr& cloud_over_max_range_out, const bool return_removed);
+  void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& cloud_out, PC::Ptr& cloud_over_max_range_out,
+                           const bool return_removed_close = false, const bool return_removed_far = false, const bool replace_nans = false);
 
   void imagePointToCloudPoint(const int x, const int y, const float depth, pt_XYZ& point);
 
@@ -175,7 +176,7 @@ private:
   unsigned int image_width;
   unsigned int image_height;
 
-  float artificial_depth_of_removed_points;
+  float replace_nan_depth;
   float image_center_x;
   float image_center_y;
   float focal_length;

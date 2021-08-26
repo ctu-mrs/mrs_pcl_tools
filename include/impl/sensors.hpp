@@ -14,8 +14,8 @@ void SensorDepthCamera::initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl
 
   pl.loadParam("depth/" + sensor_name + "/filter/range_clip/min", range_clip_min, 0.0f);
   pl.loadParam("depth/" + sensor_name + "/filter/range_clip/max", range_clip_max, std::numeric_limits<float>::max());
-  range_clip_use                     = range_clip_max > 0.0f && range_clip_max > range_clip_min;
-  artificial_depth_of_removed_points = range_clip_use ? 10.0f * range_clip_max : 1000.0f;
+  range_clip_use    = range_clip_max > 0.0f && range_clip_max > range_clip_min;
+  replace_nan_depth = range_clip_use ? 10.0f * range_clip_max : 1000.0f;
 
   pl.loadParam("depth/" + sensor_name + "/filter/voxel_grid/resolution", voxel_grid_resolution, 0.0f);
   voxel_grid_use = voxel_grid_resolution > 0.0f;
@@ -63,60 +63,66 @@ void SensorDepthCamera::initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl
 // Depth conversion inspired by:
 // https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
 template <typename T>
-void SensorDepthCamera::convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& cloud_out, PC::Ptr& cloud_over_max_range_out,
-                                            const bool return_removed) {
+void SensorDepthCamera::convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& out_pc, PC::Ptr& removed_pc,
+                                            const bool return_removed_close, const bool return_removed_far, const bool replace_nans) {
 
   // TODO: keep ordered
 
   const unsigned int max_points_count = (image_height / downsample_step_row) * (image_width / downsample_step_col);
 
-  cloud_out = boost::make_shared<PC>();
-  cloud_out->resize(max_points_count);
-  if (return_removed)
-    cloud_over_max_range_out = boost::make_shared<PC>();
-  cloud_over_max_range_out->resize(max_points_count);
+  out_pc = boost::make_shared<PC>();
+  out_pc->resize(max_points_count);
+  if (return_removed_close || return_removed_far)
+    removed_pc = boost::make_shared<PC>();
+  removed_pc->resize(max_points_count);
 
   const T*  depth_row = reinterpret_cast<const T*>(&depth_msg->data[0]);
   const int row_step  = downsample_step_row * depth_msg->step / sizeof(T);
 
-  int points_cloud                = 0;
-  int points_cloud_over_max_range = 0;
+  size_t converted_it = 0;
+  size_t removed_it   = 0;
 
   for (int v = 0; v < (int)depth_msg->height; v += downsample_step_row, depth_row += row_step) {
     for (int u = 0; u < (int)depth_msg->width; u += downsample_step_col) {
-      const auto  depth_raw = depth_row[u];
-      const bool  valid     = DepthTraits<T>::valid(depth_raw);
-      const float depth     = DepthTraits<T>::toMeters(depth_raw);
+      const auto depth_raw = depth_row[u];
+      const bool valid     = DepthTraits<T>::valid(depth_raw);
+
+      if (!valid) {
+        if (replace_nans)
+          imagePointToCloudPoint(u, v, replace_nan_depth, removed_pc->points.at(removed_it++));
+        continue;
+      }
+
+      const float depth         = DepthTraits<T>::toMeters(depth_raw);
+      const bool  invalid_close = depth < range_clip_min;
+      const bool  invalid_far   = depth > range_clip_max;
 
       // Convert to point cloud points and optionally clip range
-      const bool in_range = depth > range_clip_min && depth <= range_clip_max;
-      const bool to_be_clipped = range_clip_use && !in_range;
-      const bool to_be_removed = !valid || to_be_clipped;
-      if (!to_be_removed) {
+      if (!range_clip_use || (!invalid_close && !invalid_far)) {
 
-        imagePointToCloudPoint(u, v, depth, cloud_out->points.at(points_cloud++));
+        imagePointToCloudPoint(u, v, depth, out_pc->points.at(converted_it++));
 
-      } else if (return_removed && to_be_removed) {
+      } else if (range_clip_use && ((return_removed_close && invalid_close) || (return_removed_far && invalid_far))) {
 
-        imagePointToCloudPoint(u, v, artificial_depth_of_removed_points, cloud_over_max_range_out->points.at(points_cloud_over_max_range++));
+        imagePointToCloudPoint(u, v, depth, removed_pc->points.at(removed_it++));
       }
     }
   }
 
   // Fill headers
-  cloud_out->width    = points_cloud;
-  cloud_out->height   = points_cloud > 0 ? 1 : 0;
-  cloud_out->is_dense = true;
-  pcl_conversions::toPCL(depth_msg->header, cloud_out->header);
-  cloud_out->points.resize(points_cloud);
+  out_pc->width    = converted_it;
+  out_pc->height   = converted_it > 0 ? 1 : 0;
+  out_pc->is_dense = true;
+  pcl_conversions::toPCL(depth_msg->header, out_pc->header);
+  out_pc->points.resize(converted_it);
 
-  // Publish depth msg data over range_clip_max
-  if (return_removed) {
-    cloud_over_max_range_out->width    = points_cloud_over_max_range;
-    cloud_over_max_range_out->height   = points_cloud_over_max_range > 0 ? 1 : 0;
-    cloud_over_max_range_out->is_dense = true;
-    cloud_over_max_range_out->header   = cloud_out->header;
-    cloud_over_max_range_out->points.resize(points_cloud_over_max_range);
+  // Publish removed depth msg data
+  if (return_removed_close || return_removed_far) {
+    removed_pc->width    = removed_it;
+    removed_pc->height   = removed_it > 0 ? 1 : 0;
+    removed_pc->is_dense = true;
+    removed_pc->header   = out_pc->header;
+    removed_pc->points.resize(removed_it);
   }
 }
 /*//}*/
@@ -142,9 +148,9 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
   const auto& depth_msg = sh.getMsg();
 
   if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1 || depth_msg->encoding == sensor_msgs::image_encodings::MONO16) {
-    convertDepthToCloud<uint16_t>(depth_msg, cloud, cloud_over_max_range, publish_over_max_range);
+    convertDepthToCloud<uint16_t>(depth_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false);
   } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-    convertDepthToCloud<float>(depth_msg, cloud, cloud_over_max_range, publish_over_max_range);
+    convertDepthToCloud<float>(depth_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false);
   } else {
     ROS_ERROR_THROTTLE(5.0, "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
     return;
