@@ -3,25 +3,33 @@
 /* includes //{ */
 #include "support.h"
 
-#include <eigen3/Eigen/src/Geometry/Quaternion.h>
-#include <variant>
+
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/voxel_grid.h>
+
+#include <pcl/ModelCoefficients.h>
+#include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/sample_consensus/ransac.h>
 #include <pcl/sample_consensus/sac_model_perpendicular_plane.h>
+
 #include <pcl_conversions/pcl_conversions.h>
 
 #include <mrs_lib/transformer.h>
 #include <mrs_lib/subscribe_handler.h>
+
+#include <darpa_mrs_msgs/LandingSpot.h>
 
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/Range.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/image_encodings.h>
+
+#include <geometry_msgs/Point.h>
 #include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/Transform.h>
+
 #include <visualization_msgs/MarkerArray.h>
 
 #include <boost/smart_ptr/make_shared_array.hpp>
@@ -157,17 +165,22 @@ private:
   void process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs::Image>& sh);
   void process_camera_info_msg(mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo>& sh);
 
+  std::tuple<bool, float, geometry_msgs::Point, PC_RGB::Ptr> detectLandingPosition(const PC::Ptr& cloud, const bool ret_dbg_pcl);
+
 private:
   bool            initialized = false;
   ros::NodeHandle _nh;
   ros::Publisher  pub_points;
   ros::Publisher  pub_points_over_max_range;
+  ros::Publisher  pub_landing_spot_detection;
+  ros::Publisher  pub_landing_spot_dbg_pcl;
 
   mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
 
 private:
   std::string depth_in, depth_camera_info_in, points_out, points_over_max_range_out;
+  std::string landing_spot_detection_out, landing_spot_detection_dbg_out;
   std::string sensor_name;
 
   bool has_camera_info = false;
@@ -204,6 +217,15 @@ private:
   bool  bilateral_use;
   float bilateral_sigma_S;
   float bilateral_sigma_R;
+
+private:
+  // Landing spot detection parameters
+  bool  landing_spot_detection_use;
+  float landing_spot_detection_square_size;
+  float landing_spot_detection_z_normal_threshold;
+  float landing_spot_detection_ransac_distance_threshold;
+  int   landing_spot_detection_frame_step;
+  int   landing_spot_detection_frame = 0;
 };
 
 #include "impl/sensors.hpp"

@@ -26,6 +26,7 @@
   <depend>ouster_ros</depend>
   <depend>octomap_ros</depend>
   <depend>octomap_msgs</depend>
+  <depend>darpa_mrs_msgs</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
