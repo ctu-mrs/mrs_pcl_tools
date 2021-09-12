@@ -54,12 +54,12 @@ depth:
         sigma_R: 0.005
     landing_spot_detection:
       use: true
-      frame_step: 1 # run on every n-th data frame
+      frame_step: 15 # run on every n-th data frame
       square:
-        size: 1.5 # square-like landing spot size in meters
-        max_ratio: 0.9 # if square tooks over this thrd, we're too close to decide and we ignore the data
+        size: 1.0 # square-like landing spot size in meters
+        max_ratio: 0.95 # if square tooks over this thrd, we're too close to decide and we ignore the data
       plane_detection:
         normal_z_threshold: 0.7 # threshold of z-axis normal for plane to be classified as a landing spot
-        ransac_distance_threshold: 0.1
-        min_inliers_ratio: 0.9
+        ransac_distance_threshold: 0.1 # lower value will filter out "noisy" planes
+        min_inliers_ratio: 0.8
       world_frame: "subt"
