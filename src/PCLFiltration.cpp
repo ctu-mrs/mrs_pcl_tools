@@ -124,7 +124,7 @@ void PCLFiltration::onInit() {
   const std::vector<std::string> depth_camera_names = param_loader.loadParam2("depth/camera_names", std::vector<std::string>());
   for (const auto& name : depth_camera_names) {
     std::shared_ptr<SensorDepthCamera> cam = std::make_shared<SensorDepthCamera>();
-    cam->initialize(nh, param_loader, uav_name, name);
+    cam->initialize(nh, param_loader, _transformer, uav_name, name);
     _sensors_depth_cameras.push_back(cam);
   }
 

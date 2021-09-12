@@ -18,8 +18,8 @@
   <arg name="lidar3d/filter_intensity/threshold" default="100" />
   <arg name="lidar3d/filter_intensity/range" default="10.0" />
 
-  <arg name="depth/custom_config" default="" />
-  <!-- <arg name="depth/custom_config" default="$(find mrs_pcl_tools)/config/two_realsenses.yaml" /> -->
+  <!-- <arg name="depth/custom_config" default="" /> -->
+  <arg name="depth/custom_config" default="$(find mrs_pcl_tools)/config/two_realsenses.yaml" />
 
   <arg name="nodelet" default="standalone" />
   <arg name="nodelet_manager" default="" />
