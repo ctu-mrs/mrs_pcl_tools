@@ -1,6 +1,7 @@
 <launch>
   <!-- Filtration parameters -->
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
+  <arg name="node_name" default="pcl_filtration" />
 
   <arg name="lidar3d/republish" default="true" />
   <arg name="rplidar_republish" default="false" />
@@ -26,7 +27,7 @@
   <arg name="launch_prefix" default=""/>
 
   <group ns="$(arg UAV_NAME)">
-    <node pkg="nodelet" type="nodelet" name="pcl_filtration" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" respawn="true" >
+    <node pkg="nodelet" type="nodelet" name="$(arg node_name)" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" respawn="true" >
 
       <!-- Parameters -->
       <param name="uav_name" type="string" value="$(arg UAV_NAME)" />
