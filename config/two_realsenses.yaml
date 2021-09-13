@@ -3,8 +3,8 @@ depth:
 
   up_rgbd:
     topic:
-      depth_in: "up_rgbd/rs_d435/depth/image_rect_raw"
-      depth_camera_info_in: "up_rgbd/rs_d435/depth/camera_info"
+      depth_in: "up_rgbd/depth/image_rect_raw"
+      depth_camera_info_in: "up_rgbd/depth/camera_info"
       points_out: "up_rgbd/points_processed"
       points_over_max_range_out: "up_rgbd/points_over_max_range" # used if non-empty and range_clip used
     filter:
@@ -28,8 +28,8 @@ depth:
 
   down_rgbd:
     topic:
-      depth_in: "down_rgbd/rs_d435/depth/image_rect_raw"
-      depth_camera_info_in: "down_rgbd/rs_d435/depth/camera_info"
+      depth_in: "down_rgbd/depth/image_rect_raw"
+      depth_camera_info_in: "down_rgbd/depth/camera_info"
       points_out: "down_rgbd/points_processed"
       points_over_max_range_out: "down_rgbd/points_over_max_range" # used if non-empty and range_clip used
       landing_spot_detection_out: "down_rgbd/landing_spot_detection"
