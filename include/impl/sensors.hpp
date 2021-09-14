@@ -307,8 +307,6 @@ std::tuple<bool, float, geometry_msgs::Point, PC_RGB::Ptr> SensorDepthCamera::de
   filter.setInputCloud(cloud);
   filter.filter(*square);
 
-  // TODO: add check that the width of the square is the true width, not smaller one
-
   if (ret_dbg_pcl) {
 
     pc_dbg         = boost::make_shared<PC_RGB>();
@@ -322,6 +320,18 @@ std::tuple<bool, float, geometry_msgs::Point, PC_RGB::Ptr> SensorDepthCamera::de
 
   if (square->size() < 4) {
     ROS_INFO_COND(ret_dbg_pcl, "[LandingSpotDetection] Square points cloud is empty. Not safe to land here.");
+    return std::make_tuple(false, -1.0f, geometry_msgs::Point(), pc_dbg);
+  }
+
+  // Make sure the width of the square is the true width, not a smaller one
+  pcl::PointXYZ pt_min, pt_max;
+  pcl::getMinMax3D(*square, pt_min, pt_max);
+  const float height          = (pt_min.y - pt_max.y);  // In optical frame
+  const float width           = (pt_max.x - pt_min.x);  // In optical frame
+  const float min_square_size = 0.9f * landing_spot_detection_square_size;
+  if (width < min_square_size || height < min_square_size) {
+    ROS_INFO("[LandingSpotDetection] Square with expected size (%.1f) is too small (width: %.1f, height: %.1f). Not safe to land here.",
+             landing_spot_detection_square_size, width, height);
     return std::make_tuple(false, -1.0f, geometry_msgs::Point(), pc_dbg);
   }
 
