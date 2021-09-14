@@ -326,7 +326,7 @@ std::tuple<bool, float, geometry_msgs::Point, PC_RGB::Ptr> SensorDepthCamera::de
   // Make sure the width of the square is the true width, not a smaller one
   pcl::PointXYZ pt_min, pt_max;
   pcl::getMinMax3D(*square, pt_min, pt_max);
-  const float height          = (pt_min.y - pt_max.y);  // In optical frame
+  const float height          = (pt_max.y - pt_min.y);  // In optical frame
   const float width           = (pt_max.x - pt_min.x);  // In optical frame
   const float min_square_size = 0.9f * landing_spot_detection_square_size;
   if (width < min_square_size || height < min_square_size) {
