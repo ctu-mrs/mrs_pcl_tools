@@ -232,6 +232,7 @@ private:
   // Landing spot detection parameters
   bool  landing_spot_detection_use;
   float landing_spot_detection_square_size;
+  float landing_spot_detection_square_size_min_ratio;
   float landing_spot_detection_square_max_ratio;
   float landing_spot_detection_z_normal_threshold;
   float landing_spot_detection_ransac_distance_threshold;
