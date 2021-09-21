@@ -240,6 +240,9 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr) {
     const bool publish_removed_far = _pub_lidar3d_over_max_range.getNumSubscribers() > 0;
 
     if (_lidar3d_filter_intensity_use) {
+
+      ROS_INFO_ONCE("[PCLFiltration] Filtering input cloud by range and intensity.");
+
       const bool             publish_removed_intensity = false;  // if anyone actually needs to publish the removed points, then implement the publisher etc.
       const typename PC::Ptr pcl_over_max_range =
           removeCloseAndFarAndLowIntensity(pc_ptr, low_intensity_point_count, false, publish_removed_far, publish_removed_intensity);
@@ -247,6 +250,9 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr) {
         _pub_lidar3d_over_max_range.publish(pcl_over_max_range);
       }
     } else {
+
+      ROS_INFO_ONCE("[PCLFiltration] Filtering input cloud by range.");
+
       const typename PC::Ptr pcl_over_max_range = removeCloseAndFar(pc_ptr, false, publish_removed_far);
       if (publish_removed_far) {
         _pub_lidar3d_over_max_range.publish(pcl_over_max_range);
@@ -254,6 +260,8 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr) {
     }
 
   } else if (_lidar3d_filter_intensity_use) {
+
+    ROS_INFO_ONCE("[PCLFiltration] Filtering input cloud by intensity.");
 
     const bool publish_removed = false;  // if anyone actually needs to publish the removed points, then implement the publisher etc.
     removeLowIntensity(pc_ptr, low_intensity_point_count, publish_removed);
@@ -435,11 +443,12 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
         removed_pc->at(removed_it++) = point;
       }
 
-      if (invalid_intensity) {
-        removed_point_count_intensity_close++;
-      }
 
       invalidatePoint(point);
+    }
+
+    if (invalid_intensity && !invalid_range_close && !invalid_range_far) {
+      removed_point_count_intensity_close++;
     }
   }
   removed_pc->resize(removed_it);

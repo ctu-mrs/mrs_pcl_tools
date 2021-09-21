@@ -7,20 +7,21 @@
   <arg name="rplidar_republish" default="false" />
 
   <arg name="lidar3d/topic_in" default="os_cloud_nodelet/points" />
-  <arg name="lidar3d/keep_organized" default="true" />
+  <arg name="lidar3d/keep_organized" default="false" />
   <arg name="lidar3d/range_clip/use" default="true" />
-  <arg name="lidar3d/range_clip/min" default="0.45" />
-  <arg name="lidar3d/range_clip/max" default="20.0" />
+  <arg name="lidar3d/range_clip/min" default="0.5" />
+  <arg name="lidar3d/range_clip/max" default="50.0" />
   <arg name="lidar3d/ground_removal/use" default="false" />
   <arg name="lidar3d/downsampling/dynamic_row_selection" default="false" />
-  <arg name="lidar3d/downsampling/row_step" default="1" doc="dynamic==false: will keep every n-th row; dynamic==true: number of iterations" />
-  <arg name="lidar3d/downsampling/col_step" default="1" doc="will keep every n-th column" />
-  <arg name="lidar3d/filter_intensity/use" default="false" />
-  <arg name="lidar3d/filter_intensity/dust_point_count" default="25" />
-  <arg name="lidar3d/filter_intensity/threshold" default="100" />
-  <arg name="lidar3d/filter_intensity/range" default="10.0" />
+  <arg name="lidar3d/downsampling/row_step" default="2" doc="dynamic==false: will keep every n-th row; dynamic==true: number of iterations" />
+  <arg name="lidar3d/downsampling/col_step" default="2" doc="will keep every n-th column" />
+  <arg name="lidar3d/filter_intensity/use" default="true" />
+  <arg name="lidar3d/filter_intensity/dust_point_count" default="500" />
+  <arg name="lidar3d/filter_intensity/threshold" default="15" />
+  <arg name="lidar3d/filter_intensity/range" default="4.0" />
 
-  <arg name="depth/custom_config" default="" />
+  <!-- <arg name="depth/custom_config" default="" /> -->
+  <arg name="depth/custom_config" default="$(find mission_controller)/custom_configs/mrs_pcl_tools/subt_x500.yaml" />
   <!-- <arg name="depth/custom_config" default="$(find mrs_pcl_tools)/config/two_realsenses.yaml" /> -->
 
   <arg name="nodelet" default="standalone" />
@@ -48,7 +49,7 @@
       <param name="lidar3d/downsampling/row_step" type="int" value="$(arg lidar3d/downsampling/row_step)" />
       <param name="lidar3d/downsampling/col_step" type="int" value="$(arg lidar3d/downsampling/col_step)" />
       <param name="lidar3d/filter/intensity/use" type="bool" value="$(arg lidar3d/filter_intensity/use)" />
-      <param name="lidar3d/filter_intensity/dust_point_count" type="int" value="$(arg lidar3d/filter_intensity/dust_point_count)" />
+      <param name="lidar3d/filter/intensity/point_count" type="int" value="$(arg lidar3d/filter_intensity/dust_point_count)" />
       <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d/filter_intensity/threshold)" />
       <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d/filter_intensity/range)" />
 
