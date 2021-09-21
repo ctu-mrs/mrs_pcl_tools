@@ -48,7 +48,7 @@
       <param name="lidar3d/downsampling/row_step" type="int" value="$(arg lidar3d/downsampling/row_step)" />
       <param name="lidar3d/downsampling/col_step" type="int" value="$(arg lidar3d/downsampling/col_step)" />
       <param name="lidar3d/filter/intensity/use" type="bool" value="$(arg lidar3d/filter_intensity/use)" />
-      <param name="lidar3d/filter_intensity/dust_point_count" type="bool" value="$(arg lidar3d/filter_intensity/dust_point_count)" />
+      <param name="lidar3d/filter_intensity/dust_point_count" type="int" value="$(arg lidar3d/filter_intensity/dust_point_count)" />
       <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d/filter_intensity/threshold)" />
       <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d/filter_intensity/range)" />
 
