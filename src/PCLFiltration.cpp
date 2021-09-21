@@ -435,6 +435,10 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
         removed_pc->at(removed_it++) = point;
       }
 
+      if (invalid_intensity) {
+        removed_point_count_intensity_close++;
+      }
+
       invalidatePoint(point);
     }
   }
@@ -491,8 +495,10 @@ typename boost::shared_ptr<PC> PCLFiltration::removeLowIntensity(typename boost:
       }
 
       if (invalid) {
-        if (return_removed)
+        removed_point_count_intensity_close++;
+        if (return_removed) {
           removed_pc->at(removed_it++) = point;
+        }
         invalidatePoint(point);
       }
     }
