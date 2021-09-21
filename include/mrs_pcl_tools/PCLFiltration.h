@@ -20,6 +20,8 @@
 
 #include <darpa_mrs_msgs/LandingSpot.h>
 
+#include <mrs_msgs/BoolStamped.h>
+
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/Range.h>
 #include <sensor_msgs/Image.h>
@@ -153,8 +155,8 @@ struct DepthTraits<float>
 
 class SensorDepthCamera {
 public:
-  void initialize(const ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer>& transformer,
-                  const std::string& prefix, const std::string& name);
+  void initialize(const ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer>& transformer, const std::string& prefix,
+                  const std::string& name);
 
 private:
   template <typename T>
@@ -261,6 +263,7 @@ private:
   ros::Publisher _pub_lidar3d;
   ros::Publisher _pub_lidar3d_over_max_range;
   ros::Publisher _pub_lidar3d_below_ground;
+  ros::Publisher _pub_lidar3d_low_intensity_point_count;
   ros::Publisher _pub_fitted_plane;
   ros::Publisher _pub_ground_point;
   ros::Publisher _pub_depth;
@@ -297,6 +300,7 @@ private:
   float    _lidar3d_filter_intensity_range_sq;
   uint32_t _lidar3d_filter_intensity_range_mm;
   int      _lidar3d_filter_intensity_threshold;
+  int      _lidar3d_filter_intensity_point_count_thrd;
   int      _lidar3d_row_step;
   int      _lidar3d_col_step;
 
@@ -327,11 +331,12 @@ private:
                                                    const bool return_removed_far = false);
 
   template <typename PC>
-  typename boost::shared_ptr<PC> removeLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
+  typename boost::shared_ptr<PC> removeLowIntensity(typename boost::shared_ptr<PC>& inout_pc, int &removed_point_count_intensity_close, const bool return_removed = false);
 
   template <typename PC>
-  typename boost::shared_ptr<PC> removeCloseAndFarAndLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool clip_return_removed_close = false,
-                                                                  const bool clip_return_removed_far = false, const bool intensity_return_removed = false);
+  typename boost::shared_ptr<PC> removeCloseAndFarAndLowIntensity(typename boost::shared_ptr<PC>& inout_pc, int &removed_point_count_intensity_close,
+                                                                  const bool clip_return_removed_close = false, const bool clip_return_removed_far = false,
+                                                                  const bool intensity_return_removed = false);
 
   template <typename PC>
   void downsample(boost::shared_ptr<PC>& inout_pc_ptr, const size_t scale_row, const size_t scale_col, const size_t row_offset = 0);

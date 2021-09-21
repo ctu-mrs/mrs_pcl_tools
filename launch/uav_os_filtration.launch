@@ -16,6 +16,7 @@
   <arg name="lidar3d/downsampling/row_step" default="1" doc="dynamic==false: will keep every n-th row; dynamic==true: number of iterations" />
   <arg name="lidar3d/downsampling/col_step" default="1" doc="will keep every n-th column" />
   <arg name="lidar3d/filter_intensity/use" default="false" />
+  <arg name="lidar3d/filter_intensity/dust_point_count" default="25" />
   <arg name="lidar3d/filter_intensity/threshold" default="100" />
   <arg name="lidar3d/filter_intensity/range" default="10.0" />
 
@@ -47,6 +48,7 @@
       <param name="lidar3d/downsampling/row_step" type="int" value="$(arg lidar3d/downsampling/row_step)" />
       <param name="lidar3d/downsampling/col_step" type="int" value="$(arg lidar3d/downsampling/col_step)" />
       <param name="lidar3d/filter/intensity/use" type="bool" value="$(arg lidar3d/filter_intensity/use)" />
+      <param name="lidar3d/filter_intensity/dust_point_count" type="bool" value="$(arg lidar3d/filter_intensity/dust_point_count)" />
       <param name="lidar3d/filter/intensity/threshold" type="int" value="$(arg lidar3d/filter_intensity/threshold)" />
       <param name="lidar3d/filter/intensity/range" type="double" value="$(arg lidar3d/filter_intensity/range)" />
 
@@ -64,6 +66,7 @@
       <!-- Publishers -->
       <remap from="~lidar3d_out" to="$(arg lidar3d/topic_in)_processed" />
       <remap from="~lidar3d_over_max_range_out" to="$(arg lidar3d/topic_in)_over_max_range" />
+      <remap from="~lidar3d_low_intensity_point_count_overreached" to="dust_detection/detected" />
       <remap from="~rplidar_out" to="rplidar/scan_processed" />
 
     </node>
