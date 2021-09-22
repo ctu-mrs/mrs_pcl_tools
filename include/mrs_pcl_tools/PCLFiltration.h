@@ -263,7 +263,7 @@ private:
   ros::Publisher _pub_lidar3d;
   ros::Publisher _pub_lidar3d_over_max_range;
   ros::Publisher _pub_lidar3d_below_ground;
-  ros::Publisher _pub_lidar3d_low_intensity_point_count;
+  ros::Publisher _pub_lidar3d_dust_detection;
   ros::Publisher _pub_fitted_plane;
   ros::Publisher _pub_ground_point;
   ros::Publisher _pub_depth;
@@ -300,9 +300,13 @@ private:
   float    _lidar3d_filter_intensity_range_sq;
   uint32_t _lidar3d_filter_intensity_range_mm;
   int      _lidar3d_filter_intensity_threshold;
-  int      _lidar3d_filter_intensity_point_count_thrd;
   int      _lidar3d_row_step;
   int      _lidar3d_col_step;
+
+  bool     _lidar3d_dust_detection_use;
+  uint32_t _lidar3d_filter_intensity_dust_detection_range_mm;
+  float    _lidar3d_filter_intensity_dust_detection_range_sq;
+  int      _lidar3d_filter_intensity_dust_detection_max_point_count;
 
   bool         _lidar3d_cropbox_use;
   std::string  _lidar3d_cropbox_frame_id;
@@ -331,10 +335,11 @@ private:
                                                    const bool return_removed_far = false);
 
   template <typename PC>
-  typename boost::shared_ptr<PC> removeLowIntensity(typename boost::shared_ptr<PC>& inout_pc, int &removed_point_count_intensity_close, const bool return_removed = false);
+  typename boost::shared_ptr<PC> removeLowIntensity(typename boost::shared_ptr<PC>& inout_pc, int& removed_point_count_intensity_close,
+                                                    const bool return_removed = false);
 
   template <typename PC>
-  typename boost::shared_ptr<PC> removeCloseAndFarAndLowIntensity(typename boost::shared_ptr<PC>& inout_pc, int &removed_point_count_intensity_close,
+  typename boost::shared_ptr<PC> removeCloseAndFarAndLowIntensity(typename boost::shared_ptr<PC>& inout_pc, int& removed_point_count_intensity_close,
                                                                   const bool clip_return_removed_close = false, const bool clip_return_removed_far = false,
                                                                   const bool intensity_return_removed = false);
 

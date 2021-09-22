@@ -115,11 +115,15 @@ void PCLFiltration::onInit() {
   param_loader.loadParam("lidar3d/cropbox/use", _lidar3d_cropbox_use, cbox_use_default);
 
   param_loader.loadParam("lidar3d/filter/intensity/use", _lidar3d_filter_intensity_use, false);
-  param_loader.loadParam("lidar3d/filter/intensity/point_count", _lidar3d_filter_intensity_point_count_thrd, -1);
   param_loader.loadParam("lidar3d/filter/intensity/threshold", _lidar3d_filter_intensity_threshold, std::numeric_limits<int>::max());
   param_loader.loadParam("lidar3d/filter/intensity/range", _lidar3d_filter_intensity_range_sq, std::numeric_limits<float>::max());
   _lidar3d_filter_intensity_range_mm = _lidar3d_filter_intensity_range_sq * 1000;
   _lidar3d_filter_intensity_range_sq *= _lidar3d_filter_intensity_range_sq;
+
+  param_loader.loadParam("lidar3d/filter/intensity/dust_detection/range", _lidar3d_filter_intensity_dust_detection_range_sq, 0.0f);
+  param_loader.loadParam("lidar3d/filter/intensity/dust_detection/max_point_count", _lidar3d_filter_intensity_dust_detection_max_point_count, -1);
+  _lidar3d_filter_intensity_dust_detection_range_mm = _lidar3d_filter_intensity_dust_detection_range_sq * 1000;
+  _lidar3d_filter_intensity_dust_detection_range_sq *= _lidar3d_filter_intensity_dust_detection_range_sq;
 
   /* Depth cameras */
   const std::vector<std::string> depth_camera_names = param_loader.loadParam2("depth/camera_names", std::vector<std::string>());
@@ -151,8 +155,11 @@ void PCLFiltration::onInit() {
     if (_filter_removeBelowGround.used()) {
       _pub_lidar3d_below_ground = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_below_ground_out", 1);
     }
-    if (_lidar3d_filter_intensity_point_count_thrd > 0) {
-      _pub_lidar3d_low_intensity_point_count = nh.advertise<mrs_msgs::BoolStamped>("lidar3d_low_intensity_point_count_overreached", 1);
+
+    _lidar3d_dust_detection_use = _lidar3d_filter_intensity_use && _lidar3d_filter_intensity_dust_detection_range_sq > 0.0f &&
+                                  _lidar3d_filter_intensity_dust_detection_max_point_count > 0;
+    if (_lidar3d_dust_detection_use) {
+      _pub_lidar3d_dust_detection = nh.advertise<mrs_msgs::BoolStamped>("lidar3d_dust_detection", 1);
     }
   }
 
@@ -179,10 +186,9 @@ void PCLFiltration::callbackReconfigure(Config& config, [[maybe_unused]] uint32_
   }
   NODELET_INFO("[PCLFiltration] Reconfigure callback.");
 
-  _lidar3d_filter_intensity_use              = config.lidar3d_filter_intensity_use;
-  _lidar3d_filter_intensity_point_count_thrd = config.lidar3d_filter_low_intensity_point_count;
-  _lidar3d_filter_intensity_threshold        = config.lidar3d_filter_intensity_threshold;
-  _lidar3d_filter_intensity_range_sq         = std::pow(config.lidar3d_filter_intensity_range, 2);
+  _lidar3d_filter_intensity_use       = config.lidar3d_filter_intensity_use;
+  _lidar3d_filter_intensity_threshold = config.lidar3d_filter_intensity_threshold;
+  _lidar3d_filter_intensity_range_sq  = std::pow(config.lidar3d_filter_intensity_range, 2);
 }
 //}
 
@@ -293,16 +299,16 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr) {
     ROS_ERROR("exception caught during publishing on topic: %s", _pub_lidar3d.getTopic().c_str());
   }
 
-  if (_lidar3d_filter_intensity_use && _lidar3d_filter_intensity_point_count_thrd > 0 && _pub_lidar3d_low_intensity_point_count.getNumSubscribers() > 0) {
+  if (_lidar3d_dust_detection_use && _pub_lidar3d_dust_detection.getNumSubscribers() > 0) {
     const mrs_msgs::BoolStamped::Ptr bool_msg = boost::make_shared<mrs_msgs::BoolStamped>();
     pcl_conversions::fromPCL(pc_ptr->header.stamp, bool_msg->stamp);
-    bool_msg->data = low_intensity_point_count > _lidar3d_filter_intensity_point_count_thrd;
+    bool_msg->data = low_intensity_point_count > _lidar3d_filter_intensity_dust_detection_max_point_count;
 
     try {
-      _pub_lidar3d_low_intensity_point_count.publish(bool_msg);
+      _pub_lidar3d_dust_detection.publish(bool_msg);
     }
     catch (...) {
-      ROS_ERROR("exception caught during publishing on topic: %s", _pub_lidar3d_low_intensity_point_count.getTopic().c_str());
+      ROS_ERROR("exception caught during publishing on topic: %s", _pub_lidar3d_dust_detection.getTopic().c_str());
     }
   }
 
@@ -413,25 +419,28 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
     // Get the intensity
     const auto intensity = getFieldValue<float>(point, intensity_offset);
 
-    bool invalid_range_close = false;
-    bool invalid_range_far   = false;
-    bool invalid_intensity   = false;
+    bool invalid_range_close              = false;
+    bool invalid_range_far                = false;
+    bool invalid_intensity                = false;
+    bool invalid_intensity_dust_detection = false;
 
     // if the range field is available, use it
     if (range_exists)  // nevermind this condition inside a loop - the branch predictor will optimize this out easily
     {
-      const auto range    = getFieldValue<uint32_t>(point, range_offset);
-      invalid_range_close = range < _lidar3d_rangeclip_min_mm;
-      invalid_range_far   = range > _lidar3d_rangeclip_max_mm;
-      invalid_intensity   = intensity < _lidar3d_filter_intensity_threshold && range < _lidar3d_filter_intensity_range_mm;
+      const auto range                 = getFieldValue<uint32_t>(point, range_offset);
+      invalid_range_close              = range < _lidar3d_rangeclip_min_mm;
+      invalid_range_far                = range > _lidar3d_rangeclip_max_mm;
+      invalid_intensity                = intensity < _lidar3d_filter_intensity_threshold && range < _lidar3d_filter_intensity_range_mm;
+      invalid_intensity_dust_detection = invalid_intensity && range < _lidar3d_filter_intensity_dust_detection_range_mm;
     }
     // otherwise, just calculate the range as the norm
     else {
-      const vec3_t pt       = point.getArray3fMap();
-      const float  range_sq = pt.squaredNorm();
-      invalid_range_close   = range_sq < _lidar3d_rangeclip_min_sq;
-      invalid_range_far     = range_sq > _lidar3d_rangeclip_max_sq;
-      invalid_intensity     = intensity < _lidar3d_filter_intensity_threshold && range_sq < _lidar3d_filter_intensity_range_sq;
+      const vec3_t pt                  = point.getArray3fMap();
+      const float  range_sq            = pt.squaredNorm();
+      invalid_range_close              = range_sq < _lidar3d_rangeclip_min_sq;
+      invalid_range_far                = range_sq > _lidar3d_rangeclip_max_sq;
+      invalid_intensity                = intensity < _lidar3d_filter_intensity_threshold && range_sq < _lidar3d_filter_intensity_range_sq;
+      invalid_intensity_dust_detection = invalid_intensity && range_sq < _lidar3d_filter_intensity_dust_detection_range_sq;
     }
 
     // check the invalidation condition
@@ -447,7 +456,7 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
       invalidatePoint(point);
     }
 
-    if (invalid_intensity && !invalid_range_close && !invalid_range_far) {
+    if (invalid_intensity_dust_detection && !invalid_range_close && !invalid_range_far) {
       removed_point_count_intensity_close++;
     }
   }
@@ -488,27 +497,34 @@ typename boost::shared_ptr<PC> PCLFiltration::removeLowIntensity(typename boost:
     const auto intensity = getFieldValue<float>(point, intensity_offset);
     // check the removal condition
     if (intensity < _lidar3d_filter_intensity_threshold) {
-      bool invalid = false;
+
+      bool invalid                          = false;
+      bool invalid_intensity_dust_detection = false;
 
       // if the range field is available, use it
       if (range_exists) {
         // Get the range (in millimeters)
-        const auto range = getFieldValue<uint32_t>(point, range_offset);
-        invalid          = range < _lidar3d_filter_intensity_range_mm;
+        const auto range                 = getFieldValue<uint32_t>(point, range_offset);
+        invalid                          = range < _lidar3d_filter_intensity_range_mm;
+        invalid_intensity_dust_detection = invalid && range < _lidar3d_filter_intensity_dust_detection_range_mm;
       }
       // otherwise, just calculate the range as the norm
       else {
-        const vec3_t pt       = point.getArray3fMap();
-        const float  range_sq = pt.squaredNorm();
-        invalid               = range_sq < _lidar3d_filter_intensity_range_sq;
+        const vec3_t pt                  = point.getArray3fMap();
+        const float  range_sq            = pt.squaredNorm();
+        invalid                          = range_sq < _lidar3d_filter_intensity_range_sq;
+        invalid_intensity_dust_detection = invalid && range_sq < _lidar3d_filter_intensity_dust_detection_range_sq;
       }
 
       if (invalid) {
-        removed_point_count_intensity_close++;
         if (return_removed) {
           removed_pc->at(removed_it++) = point;
         }
         invalidatePoint(point);
+      }
+
+      if (invalid_intensity_dust_detection) {
+        removed_point_count_intensity_close++;
       }
     }
   }
