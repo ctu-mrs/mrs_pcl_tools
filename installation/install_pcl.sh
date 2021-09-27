@@ -106,9 +106,11 @@ then
   zshrc_flagged=`cat ~/.zshrc | grep "PCL_CROSS_COMPILATION" | wc -l`
   if [ "$bashrc_flagged" -lt "1" ]; then
     echo 'export PCL_CROSS_COMPILATION="true"' >> ~/.bashrc
+    source ~/.bashrc
   fi
   if [ "$zshrc_flagged" -lt "1" ]; then
     echo 'export PCL_CROSS_COMPILATION="true"' >> ~/.zshrc
+    source ~/.zshrc
   fi
 
 fi
