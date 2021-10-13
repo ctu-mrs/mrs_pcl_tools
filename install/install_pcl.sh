@@ -95,21 +95,23 @@ then
   ################# INSTALLATION #################
 
   # Remove precompiled PCL-ROS dependencies
-  sudo apt-get install ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions
-  # sudo apt-get remove ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions libpcl-* # cross-compilation of pcl_ros and pcl_conversions
+  # sudo apt-get -y install ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions
+  sudo apt-get remove ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions libpcl-* # cross-compilation of pcl_ros and pcl_conversions
 
   # checkout PCL_VERSION (ideally stable)
-  cd $GIT_PATH
-  [ ! -d "pcl" ] && git clone https://github.com/PointCloudLibrary/pcl.git # clone if was not cloned before
-  cd $GIT_PATH/pcl && git checkout pcl-$PCL_VERSION_FULL
+  # cd $GIT_PATH
+  # [ ! -d "pcl" ] && git clone https://github.com/PointCloudLibrary/pcl.git # clone if was not cloned before
+  # cd $GIT_PATH/pcl && git checkout pcl-$PCL_VERSION_FULL
+  cd ..
+  gitman install -f
+  cd lib/pcl
 
   # create the build folder
   # [ -d "build" ] && rm -rf build # delete if exists
-  cd $GIT_PATH/pcl
   [ ! -d "build" ] && mkdir build # create if does not exists
 
   # install
-  cd $GIT_PATH/pcl/build
+  cd build
   cmake "${BUILD_FLAGS_GENERAL[@]}" "${BUILD_FLAGS_PROFILE[@]}" ../
   echo "Building PCL with cmake flags: ${BUILD_FLAGS_GENERAL[@]} ${BUILD_FLAGS_PROFILE[@]}"
   echo "This process OFTEN FAILS due to an internal compiler error. In such case, RUN AGAIN the script: $SCRIPT_PATH/install_pcl.sh"
