@@ -13,7 +13,7 @@ The installation process has been tested on Ubuntu 20.04 and ROS Noetic (PCL ver
 **Before installation**:
 
 - make sure your machine has at least 28GB of RAM+SWAP memory (32GB is recommended, manual to increase SWAP memory is e.g., [here](https://askubuntu.com/a/1177939))
-- change the PCL build flags/profile if needed in [`mrs_pcl_tools/install/install_pcl.sh`](https://mrs.felk.cvut.cz/gitlab/uav/perception/mrs_pcl_tools/blob/master/install/install_pcl.sh) (default profile: `Release`, profiles match `mrs_workspace`)
+- change the PCL build flags/profile if needed in [`mrs_pcl_tools/install/install_pcl.sh`](https://mrs.felk.cvut.cz/gitlab/uav/perception/mrs_pcl_tools/blob/master/install/install_pcl.sh) (default profile: `RelWithDebInfo`, profiles match `mrs_workspace`)
 
 **Run installation** (can take up to 1 hour, compiler may fail internally so restart if that happens):
 

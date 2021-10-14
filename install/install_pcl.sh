@@ -14,6 +14,13 @@ set -e
 trap 'last_command=$current_command; current_command=$BASH_COMMAND' DEBUG
 trap 'echo "$0: \"${last_command}\" command failed with exit code $?"' ERR
 
+### MAKE CHANGES HERE ###
+# IMPORTANT: These variables should match the settings of your catkin workspace
+PROFILE="RelWithDebInfo" # RelWithDebInfo, Release, Debug
+BUILD_WITH_MARCH_NATIVE=true
+CMAKE_STANDARD=17
+#########################
+
 distro=`lsb_release -r | awk '{ print $2 }'`
 [ "$distro" = "18.04" ] && ROS_DISTRO="melodic"
 [ "$distro" = "20.04" ] && ROS_DISTRO="noetic"
@@ -48,11 +55,6 @@ then
   # Releases can be found at: https://github.com/PointCloudLibrary/pcl/releases
   PCL_VERSION_MAJOR=1.10
   PCL_VERSION_FULL=$PCL_VERSION_MAJOR.1
-
-  # IMPORTANT: These variables should match the settings of your catkin workspace
-  PROFILE="RelWithDebInfo" # RelWithDebInfo, Release, Debug
-  BUILD_WITH_MARCH_NATIVE=true
-  CMAKE_STANDARD=17
 
   # The install directory should match to where pcl-ros looks to
   INSTALL_DIR=/usr
