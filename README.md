@@ -3,7 +3,7 @@
 Package grouping smaller nodes for processing, filtering, and general online/offline work with pointclouds.
 
 ## Dependencies
-[ouster driver](https://mrs.felk.cvut.cz/gitlab/uav/drivers/ouster) for Ouster point type
+[ouster driver](https://github.com/ctu-mrs/ouster) for Ouster point type
 
 ## PCL cross-compilation
 Point Cloud Library (PCL) is available in Debian repositories, however this package has disabled hardware-specific optimizations.
