@@ -29,7 +29,7 @@ unattended=0
 for param in "$@"
 do
   echo $param
-  if [ $param="--unattended" ]; then
+  if [[ $param == "--unattended" ]]; then
     echo "installing in unattended mode"
     unattended=1
     subinstall_params="--unattended"
@@ -67,14 +67,14 @@ then
   fi
 
   # Defaults taken from mrs_workspace building flags
-  BUILD_FLAGS_GENERAL=( 
+  BUILD_FLAGS_GENERAL=(
                 -DPCL_VERSION=$PCL_VERSION_MAJOR
                 -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR
                 -DBUILD_apps=ON
                 -DBUILD_examples=ON
-                -DCMAKE_CXX_STANDARD=$CMAKE_STANDARD 
+                -DCMAKE_CXX_STANDARD=$CMAKE_STANDARD
                 -DCMAKE_BUILD_TYPE=$PROFILE
-                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
                 -DCMAKE_CXX_FLAGS="-std=c++$CMAKE_STANDARD $CMAKE_MARCH_NATIVE"
                 -DCMAKE_C_FLAGS="$CMAKE_MARCH_NATIVE"
               )
@@ -97,8 +97,8 @@ then
   ################# INSTALLATION #################
 
   # Remove precompiled PCL-ROS dependencies
-  # sudo apt-get -y install ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions
-  sudo apt-get remove ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions libpcl-* # cross-compilation of pcl_ros and pcl_conversions
+  sudo apt-get -y install ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions
+  # sudo apt-get remove ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions libpcl-* # cross-compilation of pcl_ros and pcl_conversions
 
   # checkout PCL_VERSION (ideally stable)
   # cd $GIT_PATH
