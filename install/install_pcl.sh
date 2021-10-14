@@ -40,7 +40,7 @@ default=n
 resp=$default
 if [[ "$unattended" == "1" ]]
 then
-  resp=y
+  resp=n
 else
   [[ -t 0 ]] && { read -t 10 -n 2 -p $'\e[1;32mBuild PCL? [y/n] (default: '"$default"$')\e[0m\n' resp || resp=$default ; }
 fi
