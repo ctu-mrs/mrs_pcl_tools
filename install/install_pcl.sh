@@ -95,8 +95,8 @@ then
   ################# INSTALLATION #################
 
   # Remove precompiled PCL-ROS dependencies
-  # sudo apt-get -y install ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions
-  sudo apt-get remove ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions libpcl-* # cross-compilation of pcl_ros and pcl_conversions
+  sudo apt-get -y install ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions
+  # sudo apt-get -y remove ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pcl-conversions libpcl-* # cross-compilation of pcl_ros and pcl_conversions
 
   # checkout PCL_VERSION (ideally stable)
   # cd $GIT_PATH
