@@ -14,6 +14,13 @@ set -e
 trap 'last_command=$current_command; current_command=$BASH_COMMAND' DEBUG
 trap 'echo "$0: \"${last_command}\" command failed with exit code $?"' ERR
 
+### MAKE CHANGES HERE ###
+# IMPORTANT: These variables should match the settings of your catkin workspace
+PROFILE="RelWithDebInfo" # RelWithDebInfo, Release, Debug
+BUILD_WITH_MARCH_NATIVE=true
+CMAKE_STANDARD=17
+#########################
+
 distro=`lsb_release -r | awk '{ print $2 }'`
 [ "$distro" = "18.04" ] && ROS_DISTRO="melodic"
 [ "$distro" = "20.04" ] && ROS_DISTRO="noetic"
@@ -22,7 +29,7 @@ unattended=0
 for param in "$@"
 do
   echo $param
-  if [ $param="--unattended" ]; then
+  if [[ $param == "--unattended" ]]; then
     echo "installing in unattended mode"
     unattended=1
     subinstall_params="--unattended"
@@ -33,7 +40,7 @@ default=n
 resp=$default
 if [[ "$unattended" == "1" ]]
 then
-  resp=y
+  resp=n
 else
   [[ -t 0 ]] && { read -t 10 -n 2 -p $'\e[1;32mBuild PCL? [y/n] (default: '"$default"$')\e[0m\n' resp || resp=$default ; }
 fi
@@ -49,11 +56,6 @@ then
   PCL_VERSION_MAJOR=1.10
   PCL_VERSION_FULL=$PCL_VERSION_MAJOR.1
 
-  # IMPORTANT: These variables should match the settings of your catkin workspace
-  PROFILE="RelWithDebInfo" # RelWithDebInfo, Release, Debug
-  BUILD_WITH_MARCH_NATIVE=true
-  CMAKE_STANDARD=17
-
   # The install directory should match to where pcl-ros looks to
   INSTALL_DIR=/usr
 
@@ -65,14 +67,14 @@ then
   fi
 
   # Defaults taken from mrs_workspace building flags
-  BUILD_FLAGS_GENERAL=( 
+  BUILD_FLAGS_GENERAL=(
                 -DPCL_VERSION=$PCL_VERSION_MAJOR
                 -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR
                 -DBUILD_apps=ON
                 -DBUILD_examples=ON
-                -DCMAKE_CXX_STANDARD=$CMAKE_STANDARD 
+                -DCMAKE_CXX_STANDARD=$CMAKE_STANDARD
                 -DCMAKE_BUILD_TYPE=$PROFILE
-                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
                 -DCMAKE_CXX_FLAGS="-std=c++$CMAKE_STANDARD $CMAKE_MARCH_NATIVE"
                 -DCMAKE_C_FLAGS="$CMAKE_MARCH_NATIVE"
               )
