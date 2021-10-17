@@ -1,0 +1,47 @@
+<launch>
+
+  <arg name="UAV_NAME" default="$(env UAV_NAME)" />
+
+  <arg name="standalone" default="false" />
+  <arg name="debug" default="false" />
+  <arg name="custom_config" default="" />
+  <arg name="name_suffix" default="temp" />
+  <arg name="topic_3d_lidar_in" default="" />
+
+  <arg     if="$(arg debug)" name="launch_prefix" value="debug_roslaunch" />
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+
+  <!-- Standalone -->
+  <arg if="$(eval arg('standalone') or arg('debug'))" name="nodelet" value="standalone" />
+  <arg if="$(eval arg('standalone') or arg('debug'))" name="nodelet_manager" value="" />
+
+  <!-- Nodeleted -->
+  <arg name="nodelet_manager_name" default="$(arg UAV_NAME)_pcl_nodelet_manager" />
+  <arg if="$(eval not arg('standalone') and not arg('debug'))" name="nodelet" value="load" />
+  <arg if="$(eval not arg('standalone') and not arg('debug'))" name="nodelet_manager" value="$(arg nodelet_manager_name)" />
+
+  <group ns="$(arg UAV_NAME)">
+
+    <node pkg="nodelet" type="nodelet" name="pcl_filter$(arg name_suffix)" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" respawn="true">
+
+      <!-- Parameters -->
+      <param name="uav_name" type="string" value="$(arg UAV_NAME)" />
+
+      <rosparam file="$(find mrs_pcl_tools)/config/pcl_filter.yaml" />
+      <rosparam if="$(eval not arg('custom_config') == '')" file="$(arg custom_config)" command="load" />
+
+        <!-- Subscribers -->
+      <remap from="~lidar3d_in" to="$(arg topic_3d_lidar_in)" />
+      <remap from="~rplidar_in" to="rplidar/scan_raw" />
+      <remap from="~rangefinder_in" to="mavros/distance_sensor/garmin" />
+
+        <!-- Publishers -->
+      <remap from="~lidar3d_out" to="~points_processed" />
+      <remap from="~lidar3d_over_max_range_out" to="~points_over_max_range" />
+      <remap from="~rplidar_out" to="~scan_processed" />
+
+    </node>
+
+  </group>
+
+</launch>

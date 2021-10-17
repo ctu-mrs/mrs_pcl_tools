@@ -1,0 +1,36 @@
+test: true
+
+lidar3d:
+
+  republish: true
+  keep_organized: true
+
+  range_clip:
+    use: true
+    min: 0.7
+    max: 40.0
+
+  ground_removal:
+    use: false
+    range:
+      use: true
+    static_frame_id: gps_origin
+    max_precrop_height: 2.0
+    ransac:
+      max_inlier_distance: 0.5
+    offset: 1.0
+
+  downsampling:
+    dynamic_row_selection: false
+    row_step: 1
+    col_step: 1
+
+  filter:
+    intensity:
+      use: false
+      threshold: false
+      range: false
+
+rplidar:
+  republish: false
+  voxel_resolution: 0.05
