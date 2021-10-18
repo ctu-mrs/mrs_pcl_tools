@@ -216,7 +216,7 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
     // Publish if found
     if (landing_feasible) {
 
-      const darpa_mrs_msgs::LandingSpot::Ptr ls_msg = boost::make_shared<darpa_mrs_msgs::LandingSpot>();
+      const mrs_pcl_tools::LandingSpot::Ptr ls_msg = boost::make_shared<mrs_pcl_tools::LandingSpot>();
 
       ls_msg->safe_landing_spot.header.frame_id = frame_world;
       ls_msg->safe_landing_spot.header.stamp    = depth_msg->header.stamp;
@@ -277,7 +277,7 @@ void SensorDepthCamera::process_camera_info_msg(mrs_lib::SubscribeHandler<sensor
     if (publish_over_max_range)
       pub_points_over_max_range = _nh.advertise<sensor_msgs::PointCloud2>(points_over_max_range_out, 1);
     if (landing_spot_detection_use) {
-      pub_landing_spot_detection = _nh.advertise<darpa_mrs_msgs::LandingSpot>(landing_spot_detection_out, 1);
+      pub_landing_spot_detection = _nh.advertise<mrs_pcl_tools::LandingSpot>(landing_spot_detection_out, 1);
       pub_landing_spot_dbg_pcl   = _nh.advertise<sensor_msgs::PointCloud2>(landing_spot_detection_dbg_out, 1);
     }
 

@@ -18,7 +18,7 @@
 #include <mrs_lib/transformer.h>
 #include <mrs_lib/subscribe_handler.h>
 
-#include <darpa_mrs_msgs/LandingSpot.h>
+#include <mrs_pcl_tools/LandingSpot.h>
 
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/Range.h>

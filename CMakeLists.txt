@@ -37,7 +37,10 @@ find_package(catkin REQUIRED COMPONENTS
     ouster_ros
     octomap_ros
     octomap_msgs
-    darpa_mrs_msgs
+)
+
+add_message_files(DIRECTORY msg FILES
+  LandingSpot.msg
 )
 
 add_service_files(DIRECTORY srv/registration FILES
@@ -71,7 +74,7 @@ generate_dynamic_reconfigure_options(
   cfg/pcl_filtration_dynparam.cfg
   cfg/pcl2map_registration_dynparam.cfg
 )
-generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs darpa_mrs_msgs)
+generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 
 ###################################
 ## catkin specific configuration ##
