@@ -153,7 +153,8 @@ struct DepthTraits<float>
 
 class SensorDepthCamera {
 public:
-  void initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::string& prefix, const std::string& name);
+  void initialize(const ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer>& transformer,
+                  const std::string& prefix, const std::string& name);
 
 private:
   template <typename T>
@@ -164,6 +165,10 @@ private:
 
   void process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs::Image>& sh);
   void process_camera_info_msg(mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo>& sh);
+
+  pt_XYZRGB colorPointXYZ(const pt_XYZ& point, const uint8_t& ch_r, const uint8_t& ch_g, const uint8_t& ch_b);
+  pt_XYZRGB colorPointXYZ(const Eigen::Vector4f& point, const uint8_t& ch_r, const uint8_t& ch_g, const uint8_t& ch_b);
+  pt_XYZRGB colorPointXYZ(const float& x, const float& y, const float& z, const uint8_t& ch_r, const uint8_t& ch_g, const uint8_t& ch_b);
 
   std::tuple<bool, float, geometry_msgs::Point, PC_RGB::Ptr> detectLandingPosition(const PC::Ptr& cloud, const bool ret_dbg_pcl);
 
@@ -177,6 +182,8 @@ private:
 
   mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
+
+  std::shared_ptr<mrs_lib::Transformer> _transformer;
 
 private:
   std::string depth_in, depth_camera_info_in, points_out, points_over_max_range_out;
@@ -219,11 +226,16 @@ private:
   float bilateral_sigma_R;
 
 private:
+  std::string                                   frame_world;
+  std::unique_ptr<pcl::SACSegmentation<pt_XYZ>> _seg_plane_ptr;
+
   // Landing spot detection parameters
   bool  landing_spot_detection_use;
   float landing_spot_detection_square_size;
+  float landing_spot_detection_square_max_ratio;
   float landing_spot_detection_z_normal_threshold;
   float landing_spot_detection_ransac_distance_threshold;
+  float landing_spot_detection_min_inliers_ratio;
   int   landing_spot_detection_frame_step;
   int   landing_spot_detection_frame = 0;
 };
