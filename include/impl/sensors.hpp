@@ -217,9 +217,10 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
 
       const darpa_mrs_msgs::LandingSpot::Ptr ls_msg = boost::make_shared<darpa_mrs_msgs::LandingSpot>();
 
-      ls_msg->stamp             = depth_msg->header.stamp;
-      ls_msg->safe_landing_spot = spot_pos_in_world;
-      ls_msg->normal_z          = plane_normal_z;
+      ls_msg->safe_landing_spot.header.frame_id = frame_world;
+      ls_msg->safe_landing_spot.header.stamp    = depth_msg->header.stamp;
+      ls_msg->safe_landing_spot.point           = spot_pos_in_world;
+      ls_msg->normal_z                          = plane_normal_z;
 
       try {
         pub_landing_spot_detection.publish(ls_msg);
@@ -306,6 +307,8 @@ std::tuple<bool, float, geometry_msgs::Point, PC_RGB::Ptr> SensorDepthCamera::de
   filter.setInputCloud(cloud);
   filter.filter(*square);
 
+  // TODO: add check that the width of the square is the true width, not smaller one
+
   if (ret_dbg_pcl) {
 
     pc_dbg         = boost::make_shared<PC_RGB>();
@@ -367,14 +370,8 @@ std::tuple<bool, float, geometry_msgs::Point, PC_RGB::Ptr> SensorDepthCamera::de
     return std::make_tuple(false, n_z, geometry_msgs::Point(), pc_dbg);
   }
 
-  uint8_t ch_green;
-  uint8_t ch_red;
-  if (ret_dbg_pcl) {
-    ch_green = uint8_t(255.0f * n_z);
-    ch_red   = 255 - ch_green;
-
+  if (ret_dbg_pcl)
     pc_dbg->resize(square->size() + inliers.indices.size());
-  }
 
   // Store centroid of inlier points + fill inliers with green color
   Eigen::Vector4f centroid_in_sensor = Eigen::Vector4f::Zero();
@@ -385,7 +382,7 @@ std::tuple<bool, float, geometry_msgs::Point, PC_RGB::Ptr> SensorDepthCamera::de
     centroid_in_sensor.z() += p.z;
 
     if (ret_dbg_pcl)
-      pc_dbg->at(pc_dbg_it++) = colorPointXYZ(p, ch_red, ch_green, 0);
+      pc_dbg->at(pc_dbg_it++) = colorPointXYZ(p, 0, 255, 0);
   }
 
   centroid_in_sensor /= float(inliers.indices.size());
