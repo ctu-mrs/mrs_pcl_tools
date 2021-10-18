@@ -1,5 +1,3 @@
-test: true
-
 lidar3d:
 
   republish: true
@@ -28,8 +26,8 @@ lidar3d:
   filter:
     intensity:
       use: false
-      threshold: false
-      range: false
+      threshold: 35
+      range: 5.0
 
 rplidar:
   republish: false

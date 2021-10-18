@@ -5,7 +5,7 @@
   <arg name="standalone" default="false" />
   <arg name="debug" default="false" />
   <arg name="custom_config" default="" />
-  <arg name="name_suffix" default="temp" />
+  <arg name="name_suffix" default="" />
   <arg name="topic_3d_lidar_in" default="" />
 
   <arg     if="$(arg debug)" name="launch_prefix" value="debug_roslaunch" />
