@@ -57,6 +57,7 @@ depth:
       frame_step: 15 # run on every n-th data frame
       square:
         size: 1.0 # square-like landing spot size in meters
+        min_size_ratio: 0.9 # if square dimensions have at least this ratio of expected size (param size above)
         max_ratio: 0.95 # if square tooks over this thrd, we're too close to decide and we ignore the data
       plane_detection:
         normal_z_threshold: 0.7 # threshold of z-axis normal for plane to be classified as a landing spot

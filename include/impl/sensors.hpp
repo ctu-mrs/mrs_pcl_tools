@@ -50,6 +50,7 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, mrs_lib::ParamLoad
     pl.loadParam("depth/" + sensor_name + "/landing_spot_detection/world_frame", frame_world);
 
     pl.loadParam("depth/" + sensor_name + "/landing_spot_detection/square/size", landing_spot_detection_square_size);
+    pl.loadParam("depth/" + sensor_name + "/landing_spot_detection/square/min_size_ratio", landing_spot_detection_square_size_min_ratio);
     pl.loadParam("depth/" + sensor_name + "/landing_spot_detection/square/max_ratio", landing_spot_detection_square_max_ratio);
     pl.loadParam("depth/" + sensor_name + "/landing_spot_detection/plane_detection/normal_z_threshold", landing_spot_detection_z_normal_threshold);
     pl.loadParam("depth/" + sensor_name + "/landing_spot_detection/plane_detection/ransac_distance_threshold",
@@ -328,7 +329,7 @@ std::tuple<bool, float, geometry_msgs::Point, PC_RGB::Ptr> SensorDepthCamera::de
   pcl::getMinMax3D(*square, pt_min, pt_max);
   const float height          = (pt_max.y - pt_min.y);  // In optical frame
   const float width           = (pt_max.x - pt_min.x);  // In optical frame
-  const float min_square_size = 0.9f * landing_spot_detection_square_size;
+  const float min_square_size = landing_spot_detection_square_size_min_ratio * landing_spot_detection_square_size;
   if (width < min_square_size || height < min_square_size) {
     ROS_INFO("[LandingSpotDetection] Square with expected size (%.1f) is too small (width: %.1f, height: %.1f). Not safe to land here.",
              landing_spot_detection_square_size, width, height);
