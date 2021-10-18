@@ -272,9 +272,9 @@ void SensorDepthCamera::process_camera_info_msg(mrs_lib::SubscribeHandler<sensor
     focal_length_inverse = 1.0 / focal_length;
 
     // Advertise publishers
-    pub_points = _nh.advertise<sensor_msgs::PointCloud2>(points_out, 10);
+    pub_points = _nh.advertise<sensor_msgs::PointCloud2>(points_out, 1);
     if (publish_over_max_range)
-      pub_points_over_max_range = _nh.advertise<sensor_msgs::PointCloud2>(points_over_max_range_out, 10);
+      pub_points_over_max_range = _nh.advertise<sensor_msgs::PointCloud2>(points_over_max_range_out, 1);
     if (landing_spot_detection_use) {
       pub_landing_spot_detection = _nh.advertise<darpa_mrs_msgs::LandingSpot>(landing_spot_detection_out, 1);
       pub_landing_spot_dbg_pcl   = _nh.advertise<sensor_msgs::PointCloud2>(landing_spot_detection_dbg_out, 1);
