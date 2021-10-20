@@ -13,22 +13,26 @@
 
 /*//{ printHelp() */
 void printHelp() {
-  ROS_ERROR(
-      "Syntax is: `rosrun mrs_pcl_tools estimate_cloud_to_cloud_drift source.pcd target.pcd trajectory_in.txt trajectory_out.txt [options (see below)]`");
-  ROS_ERROR(
-      "Ground truth trajectory will be estimated from given drifting trajectory using two PCD maps. 1) source cloud (i.e., SLAM map output) and 2) target "
-      "cloud (i.e., reference 3D scan). The registration parameters are hard-coded.");
-  ROS_ERROR("IMPORTANT: Method expects source/target clouds to be pre-registered and the input trajectory to be in the frame of the source point cloud.");
+  ROS_ERROR("Ground truth trajectory will be estimated from robot-estimated trajectory and two PCD maps:");
+  ROS_ERROR("  1) source cloud (i.e., SLAM map output) and");
+  ROS_ERROR("  2) target cloud (i.e., reference 3D scan).");
+  ROS_ERROR("Method expects source/target clouds to be pre-registered and the input trajectory to be in the frame of the source point cloud.");
+  ROS_ERROR("The registration parameters are hard-coded.");
+  ROS_ERROR("Usage:");
+  ROS_ERROR("   rosrun mrs_pcl_tools estimate_cloud_to_cloud_drift source.pcd target.pcd trajectory_in.txt trajectory_out.txt [...]");
+
   ROS_ERROR("Arguments:");
-  ROS_ERROR(" source.pcd:         source point cloud (with drift)");
-  ROS_ERROR(" target.pcd:         target point cloud (ground truth)");
-  ROS_ERROR(" trajectory_in.txt:  trajectory of the robot (expected format: time x y z [qx qy qz qw]");
-  ROS_ERROR(" trajectory_out.txt: corrected trajectory of the robot");
-  ROS_ERROR(" --traj-step-dist:   sampling of trajectory by distance, used if greater than 0.0 (optional, default: 0.0 m)");
-  ROS_ERROR(" --traj-step-time:   sampling of trajectory by time, used if greater than 0.0 (optional, default: 0.0 s)");
+  ROS_ERROR(" source.pcd:          source point cloud (with drift)");
+  ROS_ERROR(" target.pcd:          target point cloud (ground truth)");
+  ROS_ERROR(" trajectory_in.txt:   estimated trajectory of the robot (expected format: (time, x, y, z [, qx, qy, qz, qw]))");
+  ROS_ERROR(" trajectory_out.txt:  corrected (real) trajectory of the robot");
+
+  ROS_ERROR("Optional arguments:");
+  ROS_ERROR(" --traj-step-dist:    sampling of trajectory by distance, used if greater than 0.0 (default: 0.0 m)");
+  ROS_ERROR(" --traj-step-time:    sampling of trajectory by time, used if greater than 0.0 (default: 0.0 s)");
   ROS_ERROR(
-      " --crop-dist:        crop distance of global->local clouds conversion before their local registration (optional, default: [xy: 10.0 m, z: 3 * xy])");
-  ROS_ERROR(" --start-time:       start time offset of the trajectory (optional, default: 0.0 s)");
+      " --crop-dist:         crop distance of global->local clouds conversion before their local registration (default: [xy: 10.0 m, z: 3 * xy])");
+  ROS_ERROR(" --start-time:        start time offset of the trajectory (default: 0.0 s)");
 }
 /*//}*/
 

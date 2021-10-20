@@ -166,3 +166,8 @@ add_executable(estimate_cloud_to_cloud_drift src/executables/EstimateCloudToClou
 target_link_libraries(estimate_cloud_to_cloud_drift
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
 )
+
+add_executable(estimate_lidar_slam_drift src/executables/EstimateLidarSlamDrift.cpp)
+target_link_libraries(estimate_lidar_slam_drift
+  PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+)
