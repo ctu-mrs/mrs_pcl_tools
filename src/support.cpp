@@ -253,14 +253,14 @@ PC_RGB::Ptr colorizeCloud(const PC::Ptr &cloud_xyz) {
 visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const std::shared_ptr<octomap::OcTree> &octree, const std::string &frame_id) {
   visualization_msgs::MarkerArray::Ptr msg = boost::make_shared<visualization_msgs::MarkerArray>();
 
-  const int    tree_depth = octree->getTreeDepth();
-  double       min_x;
-  double       min_y;
-  double       min_z;
-  double       max_x;
-  double       max_y;
-  double       max_z;
-  const double visualization_color_factor = 1.0;
+  const unsigned int tree_depth = octree->getTreeDepth();
+  double             min_x;
+  double             min_y;
+  double             min_z;
+  double             max_x;
+  double             max_y;
+  double             max_z;
+  const double       visualization_color_factor = 1.0;
 
   msg->markers.resize(tree_depth + 1);
   octree->getMetricMin(min_x, min_y, min_z);

@@ -9,9 +9,11 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 #include <message_filters/subscriber.h>
+#include <octomap_msgs/Octomap.h>
 
 const std::string TYPE_SENSOR_MSGS_PC2   = "sensor_msgs/PointCloud2";
 const std::string TYPE_VIS_MSGS_MARK_ARR = "visualization_msgs/MarkerArray";
+const std::string TYPE_OCTOMAP           = "octomap_msgs/Octomap";
 
 // Default parameters
 bool        use_only_last_message  = true;
@@ -30,30 +32,21 @@ struct DATA
   geometry_msgs::TransformStamped transform;
 };
 
-/* /1* Inherits from message_filters::SimpleFilter<M> to use protected signalMessage function *1/ */
-/* template <class M> */
-/* class BagSubscriber : public message_filters::SimpleFilter<M> { */
-/* public: */
-/*   void newMessage(const boost::shared_ptr<M const>& msg) { */
-/*     message_filters::SimpleFilter<M>::signalMessage(msg); */
-/*   } */
-/* }; */
-
 void printHelp() {
   ROS_ERROR("Syntax is: rosrun mrs_pcl_tools rosbag_cloud_to_pcd rosbag.bag topic output.pcd [...]");
   ROS_ERROR("Optional parameters:");
   ROS_ERROR("--use_all_messages; switches between all messages and the last one only (default)");
   ROS_ERROR("--transform_to_frame string; used if non-empty, needs data on /tf and /tf_static (default: \"\")");
   ROS_ERROR("--voxel_resolution float; used if >0 (default: 0.0)");
-  ROS_ERROR("Supported topic types are: [%s, %s]", TYPE_SENSOR_MSGS_PC2.c_str(), TYPE_VIS_MSGS_MARK_ARR.c_str());
+  ROS_ERROR("Supported topic types are: [%s, %s, %s]", TYPE_SENSOR_MSGS_PC2.c_str(), TYPE_VIS_MSGS_MARK_ARR.c_str(), TYPE_OCTOMAP.c_str());
 }
 
 /*//{ vis_msg_to_cloud_msg() */
-sensor_msgs::PointCloud2::Ptr vis_msg_to_cloud_msg(visualization_msgs::MarkerArray::ConstPtr vis_msg) {
+sensor_msgs::PointCloud2::Ptr vis_msg_to_cloud_msg(const visualization_msgs::MarkerArray::ConstPtr& vis_msg) {
   sensor_msgs::PointCloud2::Ptr cloud_msg = boost::make_shared<sensor_msgs::PointCloud2>();
 
   const PC_RGB::Ptr cloud = boost::make_shared<PC_RGB>();
-  for (auto marker : vis_msg->markers) {
+  for (const auto& marker : vis_msg->markers) {
     for (unsigned int i = 0; i < marker.points.size(); i++) {
       uint8_t r = 255.0f * marker.colors[i].r;
       uint8_t g = 255.0f * marker.colors[i].g;
@@ -74,6 +67,27 @@ sensor_msgs::PointCloud2::Ptr vis_msg_to_cloud_msg(visualization_msgs::MarkerArr
   pcl::toROSMsg(*cloud, *cloud_msg);
   cloud_msg->header = vis_msg->markers.at(0).header;
   return cloud_msg;
+}
+/*//}*/
+
+/*//{ octomap_msg_to_cloud_msg() */
+sensor_msgs::PointCloud2::Ptr octomap_msg_to_cloud_msg(const octomap_msgs::Octomap::ConstPtr& octomap_msg) {
+
+  octomap::AbstractOcTree* tree_ptr;
+  if (octomap_msg->binary) {
+    tree_ptr = octomap_msgs::binaryMsgToMap(*octomap_msg);
+  } else {
+    tree_ptr = octomap_msgs::fullMsgToMap(*octomap_msg);
+  }
+
+  if (!tree_ptr) {
+    return nullptr;
+  }
+
+  const std::shared_ptr<octomap::OcTree> octree  = std::shared_ptr<octomap::OcTree>(dynamic_cast<octomap::OcTree*>(tree_ptr));
+  const auto&                            vis_msg = mrs_pcl_tools::visualization::getVisualizationMsg(octree, octomap_msg->header.frame_id);
+
+  return vis_msg_to_cloud_msg(vis_msg);
 }
 /*//}*/
 
@@ -117,6 +131,7 @@ std::tuple<int, std::string, std::string, std::string> loadParams(int argc, char
     } else {
 
       ROS_ERROR("Unknown option (%s). Check help.", option.c_str());
+      return std::make_tuple(-1, std::string(), std::string(), std::string());
     }
 
     i += i_inc;
@@ -179,6 +194,7 @@ sensor_msgs::PointCloud2::Ptr processData(const std::vector<DATA>& data) {
 int main(int argc, char** argv) {
 
   ros::init(argc, argv, "RosbagCloudToPCD");
+  ros::NodeHandle nh = ros::NodeHandle("~");
 
   const auto& [ret, rosbag_filename, cloud_topic, pcd_filename] = loadParams(argc, argv);
   if (ret < 0) {
@@ -241,6 +257,16 @@ int main(int argc, char** argv) {
       if (ma) {
         data.cloud     = vis_msg_to_cloud_msg(ma);
         data_are_valid = true;
+      }
+    } else if (msg.getDataType() == TYPE_OCTOMAP) {
+      const octomap_msgs::Octomap::ConstPtr ma = msg.instantiate<octomap_msgs::Octomap>();
+
+      if (ma) {
+        const auto cloud = octomap_msg_to_cloud_msg(ma);
+        if (cloud) {
+          data.cloud     = cloud;
+          data_are_valid = true;
+        }
       }
     }
 
