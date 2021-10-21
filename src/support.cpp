@@ -184,36 +184,9 @@ Eigen::Matrix4f getRotationMatrixAroundPoint(const Eigen::Matrix3f &rotation, co
 }
 /*//}*/
 
-/*//{ PcToOctree() */
-std::shared_ptr<octomap::OcTree> PcToOctree(const PC::ConstPtr &cloud, const float &resolution) {
-  if (cloud->points.size() == 0) {
-    ROS_WARN("[%s]: Cannot create octree from 0 points.", ros::this_node::getName().c_str());
-    return nullptr;
-  } else if (!std::isfinite(resolution) || resolution <= 0.0f) {
-    ROS_ERROR("[%s]: Undefined resolution in mrs_pcl_tools::PcToOctree().", ros::this_node::getName().c_str());
-    return nullptr;
-  }
-
-  std::shared_ptr<octomap::OcTree> tree = std::make_shared<octomap::OcTree>(resolution);
-  for (const auto &p : cloud->points) {
-    tree->updateNode(octomap::point3d(p.x, p.y, p.z), true);
-  }
-  tree->updateInnerOccupancy();
-  return tree;
-}
-/*//}*/
-
-/*//{ overload PcToOctree() */
-std::shared_ptr<octomap::OcTree> PcToOctree(const sensor_msgs::PointCloud2::ConstPtr &cloud, const float &resolution) {
-  PC::Ptr pc = boost::make_shared<PC>();
-  pcl::fromROSMsg(*cloud, *pc);
-
-  return PcToOctree(pc, resolution);
-}
-/*//}*/
-
 namespace visualization
 {
+
 /*//{ colorizeCloud() */
 PC_RGB::Ptr colorizeCloud(const PC::Ptr &cloud_xyz) {
   pt_XYZ min_xyz;
@@ -248,69 +221,6 @@ PC_RGB::Ptr colorizeCloud(const PC::Ptr &cloud_xyz) {
   return cloud_rgb;
 }
 /*//}*/
-
-/* //{ getVisualizationMsg() */
-visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const std::shared_ptr<octomap::OcTree> &octree, const std::string &frame_id) {
-  visualization_msgs::MarkerArray::Ptr msg = boost::make_shared<visualization_msgs::MarkerArray>();
-
-  const unsigned int tree_depth = octree->getTreeDepth();
-  double             min_x;
-  double             min_y;
-  double             min_z;
-  double             max_x;
-  double             max_y;
-  double             max_z;
-  const double       visualization_color_factor = 1.0;
-
-  msg->markers.resize(tree_depth + 1);
-  octree->getMetricMin(min_x, min_y, min_z);
-  octree->getMetricMax(max_x, max_y, max_z);
-
-  for (octomap::OcTree::iterator it = octree->begin(tree_depth), end = octree->end(); it != end; ++it) {
-    if (octree->isNodeOccupied(*it)) {
-      const unsigned int idx = it.getDepth();
-
-      geometry_msgs::Point cube_center;
-      cube_center.x = it.getX();
-      cube_center.y = it.getY();
-      cube_center.z = it.getZ();
-
-      double height = (1.0 - std::min(std::max((cube_center.z - min_z) / (max_z - min_z), 0.0), 1.0)) * visualization_color_factor;
-      msg->markers[idx].colors.push_back(heightToRGBA(height));
-      msg->markers[idx].points.push_back(cube_center);
-    }
-  }
-
-  const ros::Time ros_time = ros::Time::now();
-  for (unsigned i = 0; i < msg->markers.size(); ++i) {
-    const double size               = octree->getNodeSize(i);
-    msg->markers[i].header.frame_id = frame_id;
-    msg->markers[i].header.stamp    = ros_time;
-    msg->markers[i].ns              = "marker";
-    msg->markers[i].id              = i;
-    msg->markers[i].type            = visualization_msgs::Marker::CUBE_LIST;
-    msg->markers[i].scale.x         = size;
-    msg->markers[i].scale.y         = size;
-    msg->markers[i].scale.z         = size;
-    if (msg->markers[i].points.size() > 0) {
-      msg->markers[i].action = visualization_msgs::Marker::ADD;
-    } else {
-      msg->markers[i].action = visualization_msgs::Marker::DELETE;
-    }
-  }
-
-  return msg;
-}
-//}/*
-
-/* //{ overload getVisualizationMsg() */
-visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const sensor_msgs::PointCloud2::Ptr &cloud, const float &resolution, const std::string &frame_id) {
-  return getVisualizationMsg(PcToOctree(cloud, resolution), frame_id);
-}
-visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const PC::Ptr &cloud, const float &resolution, const std::string &frame_id) {
-  return getVisualizationMsg(PcToOctree(cloud, resolution), frame_id);
-}
-//}/*
 
 /*//{ heightToRGBA() */
 std_msgs::ColorRGBA heightToRGBA(double &h, const double &a) {

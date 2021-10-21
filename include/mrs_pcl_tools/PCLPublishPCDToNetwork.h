@@ -17,7 +17,7 @@ private:
   bool _is_initialized = false;
 
   ros::Publisher _pub_cloud;
-  ros::Publisher _pub_cloud_vis;
+  /* ros::Publisher _pub_cloud_vis; */
 
   ros::Timer _timer_publish;
 
