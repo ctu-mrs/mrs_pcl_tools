@@ -137,6 +137,20 @@ void printHelp() {
 }
 /*//}*/
 
+/*//{ eigenMatrixToPoseMsg() */
+geometry_msgs::Pose eigenMatrixToPoseMsg(const Eigen::Matrix4f &mat) {
+  geometry_msgs::Pose msg;
+  msg.position.x = mat(0, 3);
+  msg.position.y = mat(1, 3);
+  msg.position.z = mat(2, 3);
+
+  const mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(mat.block<3, 3>(0, 0).cast<double>());
+  msg.orientation                       = atti;
+
+  return msg;
+}
+/*//}*/
+
 /*//{ loadStaticTransformFromFile() */
 std::optional<geometry_msgs::Transform> loadStaticTransformFromFile(const std::string &filepath) {
 
@@ -150,7 +164,10 @@ std::optional<geometry_msgs::Transform> loadStaticTransformFromFile(const std::s
 
     unsigned int l = 0;
 
-    while (std::getline(infile, line)) {
+    Eigen::Matrix4d mat;
+    unsigned int    row = 0;
+
+    while (std::getline(infile, line) && row < 4) {
 
       if (line.rfind("#", 0) == 0) {
         continue;
@@ -160,30 +177,38 @@ std::optional<geometry_msgs::Transform> loadStaticTransformFromFile(const std::s
       std::vector<double> line_numbers;
       std::copy(std::istream_iterator<double>(iss), std::istream_iterator<double>(), std::back_inserter(line_numbers));
 
-      if (line_numbers.size() != 7) {
-        ROS_WARN("[Loading matrix] Skipping line %d (size: %ld) as it does not contain data in the expected format (x, y, z, qx, qy, qz, qw).", l,
-                 line_numbers.size());
+      if (line_numbers.size() != 4) {
+        ROS_WARN("[Loading matrix] Skipping line %d (size: %ld) as it does not contain data in the expected format of matrix row.", l, line_numbers.size());
       } else {
 
-        geometry_msgs::Transform T;
+        mat(row, 0) = line_numbers[0];
+        mat(row, 1) = line_numbers[1];
+        mat(row, 2) = line_numbers[2];
+        mat(row, 3) = line_numbers[3];
 
-        T.translation.x = line_numbers[0];
-        T.translation.y = line_numbers[1];
-        T.translation.z = line_numbers[2];
-
-        T.rotation.x = line_numbers[3];
-        T.rotation.y = line_numbers[4];
-        T.rotation.z = line_numbers[5];
-        T.rotation.w = line_numbers[6];
-
-        return T;
+        row++;
       }
 
       l++;
     }
 
+    if (row != 4) {
+      ROS_ERROR("[Loading matrix] Did not find 4 rows in the file.");
+    } else {
+      geometry_msgs::Transform   T;
+      const geometry_msgs::Pose &pose = eigenMatrixToPoseMsg(mat.cast<float>());
+      T.translation.x                 = pose.position.x;
+      T.translation.y                 = pose.position.y;
+      T.translation.z                 = pose.position.z;
+      T.rotation.x                    = pose.orientation.x;
+      T.rotation.y                    = pose.orientation.y;
+      T.rotation.z                    = pose.orientation.z;
+      T.rotation.w                    = pose.orientation.w;
+      return T;
+    }
+
   } else {
-    ROS_ERROR("File path (%s) does not exist.", filepath.c_str());
+    ROS_ERROR("[Loading matrix] File path (%s) does not exist.", filepath.c_str());
   }
 
   return std::nullopt;
@@ -254,20 +279,6 @@ ros::Time rosbag_start_time;
 
 
 /* -------------------- Functions -------------------- */
-
-/*//{ eigenMatrixToPoseMsg() */
-geometry_msgs::Pose eigenMatrixToPoseMsg(const Eigen::Matrix4f &mat) {
-  geometry_msgs::Pose msg;
-  msg.position.x = mat(0, 3);
-  msg.position.y = mat(1, 3);
-  msg.position.z = mat(2, 3);
-
-  const mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(mat.block<3, 3>(0, 0).cast<double>());
-  msg.orientation                       = atti;
-
-  return msg;
-}
-/*//}*/
 
 /*//{ saveTrajectory() */
 void saveTrajectory(const std::string &filepath, const std::vector<TRAJECTORY_POINT> &data) {
