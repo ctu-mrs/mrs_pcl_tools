@@ -33,10 +33,10 @@ void PCLPublishPCDToNetwork::onInit() {
   pcl::toROSMsg(*cloud_rgb, *_cloud);
   _cloud->header.frame_id = _frame_id;
 
-  _cloud_vis = mrs_pcl_tools::visualization::getVisualizationMsg(_cloud, _resolution, _frame_id);
+  /* _cloud_vis = mrs_pcl_tools::visualization::getVisualizationMsg(_cloud, _resolution, _frame_id); */
 
   _pub_cloud     = nh.advertise<sensor_msgs::PointCloud2>("cloud_out", 1);
-  _pub_cloud_vis = nh.advertise<visualization_msgs::MarkerArray>("cloud_vis_out", 1);
+  /* _pub_cloud_vis = nh.advertise<visualization_msgs::MarkerArray>("cloud_vis_out", 1); */
 
   _is_initialized = true;
 
@@ -51,17 +51,17 @@ void PCLPublishPCDToNetwork::publishCloud([[maybe_unused]] const ros::TimerEvent
     _cloud->header.stamp = now;
     _pub_cloud.publish(_cloud);
   }
-  if (_pub_cloud_vis.getNumSubscribers() > 0) {
-    for (unsigned int i = 0; i < _cloud_vis->markers.size(); i++) {
-      _cloud_vis->markers[i].header.stamp = now;
-      /* for (unsigned int j = 0; j < _cloud_vis->markers[i].points.size(); j++) { */
-      /* ROS_INFO("scale: %0.2f, %0.2f, %0.2f, rgba: %0.2f, %0.2f, %0.2f, %0.2f", _cloud_vis->markers[i].scale.x, _cloud_vis->markers[i].scale.y, */
-      /*          _cloud_vis->markers[i].scale.z, _cloud_vis->markers[i].colors[j].r, _cloud_vis->markers[i].colors[j].g, _cloud_vis->markers[i].colors[j].b,
-       * _cloud_vis->markers[i].colors[j].a); */
-      /* } */
-    }
-    _pub_cloud_vis.publish(_cloud_vis);
-  }
+  /* if (_pub_cloud_vis.getNumSubscribers() > 0) { */
+  /*   for (unsigned int i = 0; i < _cloud_vis->markers.size(); i++) { */
+  /*     _cloud_vis->markers[i].header.stamp = now; */
+  /*     /1* for (unsigned int j = 0; j < _cloud_vis->markers[i].points.size(); j++) { *1/ */
+  /*     /1* ROS_INFO("scale: %0.2f, %0.2f, %0.2f, rgba: %0.2f, %0.2f, %0.2f, %0.2f", _cloud_vis->markers[i].scale.x, _cloud_vis->markers[i].scale.y, *1/ */
+  /*     /1*          _cloud_vis->markers[i].scale.z, _cloud_vis->markers[i].colors[j].r, _cloud_vis->markers[i].colors[j].g, _cloud_vis->markers[i].colors[j].b, */
+  /*      * _cloud_vis->markers[i].colors[j].a); *1/ */
+  /*     /1* } *1/ */
+  /*   } */
+  /*   _pub_cloud_vis.publish(_cloud_vis); */
+  /* } */
 }
 /*//}*/
 

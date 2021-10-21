@@ -35,8 +35,6 @@ find_package(catkin REQUIRED COMPONENTS
     mrs_lib
     dynamic_reconfigure
     ouster_ros
-    octomap_ros
-    octomap_msgs
 )
 
 add_message_files(DIRECTORY msg FILES
@@ -157,11 +155,6 @@ target_link_libraries(
 target_include_directories(PCLPublishPCDToNetwork SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
 # ### EXECUTABLES
-add_executable(rosbag_cloud_to_pcd src/executables/RosbagCloudToPCD.cpp)
-target_link_libraries(rosbag_cloud_to_pcd
-  PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
-)
-
 add_executable(estimate_cloud_to_cloud_drift src/executables/EstimateCloudToCloudDrift.cpp)
 target_link_libraries(estimate_cloud_to_cloud_drift
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}

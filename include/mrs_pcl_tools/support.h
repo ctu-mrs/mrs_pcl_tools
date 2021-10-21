@@ -12,9 +12,6 @@
 #include <pcl/filters/grid_minimum.h>
 #include <pcl/filters/radius_outlier_removal.h>
 
-#include <octomap_msgs/conversions.h>
-#include <octomap_msgs/Octomap.h>
-
 #include <ros/message_traits.h>
 #include <visualization_msgs/MarkerArray.h>
 
@@ -131,11 +128,8 @@ typename boost::shared_ptr<PC_t> applyBilateralFilter(typename boost::shared_ptr
 
 namespace visualization
 {
-PC_RGB::Ptr                          colorizeCloud(const PC::Ptr &cloud);
-visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const sensor_msgs::PointCloud2::Ptr &cloud, const float &resolution, const std::string &frame_id);
-visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const PC::Ptr &cloud, const float &resolution, const std::string &frame_id);
-visualization_msgs::MarkerArray::Ptr getVisualizationMsg(const std::shared_ptr<octomap::OcTree> &octree, const std::string &frame_id);
-std_msgs::ColorRGBA                  heightToRGBA(double &height, const double &alpha = 1.0);
+PC_RGB::Ptr         colorizeCloud(const PC::Ptr &cloud);
+std_msgs::ColorRGBA heightToRGBA(double &height, const double &alpha = 1.0);
 }  // namespace visualization
 
 }  // namespace mrs_pcl_tools
