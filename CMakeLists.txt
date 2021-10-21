@@ -35,6 +35,7 @@ find_package(catkin REQUIRED COMPONENTS
     mrs_lib
     dynamic_reconfigure
     ouster_ros
+    eigen_conversions
 )
 
 add_message_files(DIRECTORY msg FILES
@@ -81,7 +82,7 @@ generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES PCLSupportLib PCLFiltration PCL2MapRegistration
-  CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs pcl_ros mrs_lib ouster_ros
+  CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs pcl_ros mrs_lib ouster_ros eigen_conversions
   DEPENDS Eigen
 )
 

@@ -1,8 +1,19 @@
 #include <mrs_pcl_tools/support.h>
 
+#include <pcl/common/io.h>
+#include <pcl/common/transforms.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/registration/icp.h>
+#include <pcl_conversions/pcl_conversions.h>
 #include <nav_msgs/Path.h>
+
+#include <rosbag/bag.h>
+#include <rosbag/view.h>
+
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+
+#include <eigen_conversions/eigen_msg.h>
 
 #include <tuple>
 #include <optional>
@@ -16,16 +27,16 @@ struct ARGUMENTS
 {
   bool initialized = false;
 
-  std::string     path_rosbag;
-  std::string     topic_cloud;
-  std::string     mapping_origin;
-  std::string     pcd_target;
-  std::string     txt_trajectory_out;
-  float           traj_step_dist   = 0.0f;
-  float           traj_step_time   = 0.0f;
-  double          start_time       = 0.0;
-  double          cloud_buffer_sec = 5.0;
-  Eigen::Matrix4f tf_map_in_target_origin;
+  std::string              path_rosbag;
+  std::string              topic_cloud;
+  std::string              mapping_origin;
+  std::string              pcd_target;
+  std::string              txt_trajectory_out;
+  float                    traj_step_dist   = 0.0f;
+  double                   traj_step_time   = 0.0f;
+  double                   start_time       = 0.0;
+  double                   cloud_buffer_sec = 5.0;
+  geometry_msgs::Transform tf_target_in_map_origin;
 
   void print() {
 
@@ -34,7 +45,9 @@ struct ARGUMENTS
       ROS_INFO("Rosbag path: %s", path_rosbag.c_str());
       ROS_INFO("Topic cloud: %s", topic_cloud.c_str());
       ROS_INFO("Mapping origin: %s", mapping_origin.c_str());
-      mrs_pcl_tools::printEigenMatrix(tf_map_in_target_origin, "Transform target->map");
+      ROS_INFO("Transform map->target: xyz (%0.1f, %0.1f, %0.1f), xyzw (%0.1f, %0.1f, %0.1f, %0.1f)", tf_target_in_map_origin.translation.x,
+               tf_target_in_map_origin.translation.y, tf_target_in_map_origin.translation.z, tf_target_in_map_origin.rotation.x,
+               tf_target_in_map_origin.rotation.y, tf_target_in_map_origin.rotation.z, tf_target_in_map_origin.rotation.w);
       ROS_INFO("Trajectory out: %s", txt_trajectory_out.c_str());
       ROS_INFO("Trajectory distance step: %0.2f; time step: %0.2f", traj_step_dist, traj_step_time);
       ROS_INFO("Point cloud buffer: %0.2f s", cloud_buffer_sec);
@@ -50,10 +63,50 @@ struct TRAJECTORY_POINT
   Eigen::Matrix4f transformation;
   Eigen::Matrix4f transformed_pose;
   Eigen::Matrix4f untransformed_pose;
-  unsigned int    sample_index;
   double          sample_time;
-  float           eucl_distance_from_origin;
-  float           distance_on_trajectory;
+};
+/*//}*/
+
+/*//{ struct BUFFER_QUEUE */
+struct BUFFER_QUEUE
+{
+private:
+  std::vector<std::pair<ros::Time, PC::Ptr>> clouds;
+
+public:
+  ros::Duration buffer_size_secs;
+
+  void insertCloud(const ros::Time &stamp, const PC::Ptr &cloud) {
+
+    if (!clouds.empty()) {
+
+      const ros::Time stamp_latest = clouds.back().first;
+
+      // Check for sequentiality of data
+      if (stamp <= stamp_latest) {
+        ROS_ERROR("Trying to insert cloud with old time stamp to buffer queue. The data should be in correct order, skipping.");
+        return;
+      }
+
+      // Remove old clouds
+      const ros::Time stamp_min = stamp - buffer_size_secs;
+      clouds.erase(std::remove_if(clouds.begin(), clouds.end(), [&stamp_min](const auto &pair_time_cloud) { return pair_time_cloud.first < stamp_min; }),
+                   clouds.end());
+    }
+
+    // Insert new cloud
+    clouds.push_back({stamp, cloud});
+  }
+
+  PC::Ptr getCloudsAsOne() {
+    const PC::Ptr cloud_merged = boost::make_shared<PC>();
+
+    for (const auto &pair_time_cloud : clouds) {
+      *cloud_merged += *pair_time_cloud.second;
+    }
+
+    return cloud_merged;
+  }
 };
 /*//}*/
 
@@ -84,8 +137,8 @@ void printHelp() {
 }
 /*//}*/
 
-/*//{ loadMatrix() */
-std::optional<Eigen::Matrix4f> loadMatrix(const std::string &filepath) {
+/*//{ loadStaticTransformFromFile() */
+std::optional<geometry_msgs::Transform> loadStaticTransformFromFile(const std::string &filepath) {
 
   ROS_INFO("Loading matrix from: %s", filepath.c_str());
 
@@ -112,20 +165,16 @@ std::optional<Eigen::Matrix4f> loadMatrix(const std::string &filepath) {
                  line_numbers.size());
       } else {
 
-        Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
+        geometry_msgs::Transform T;
 
-        T(0, 3) = line_numbers[0];
-        T(1, 3) = line_numbers[1];
-        T(2, 3) = line_numbers[2];
+        T.translation.x = line_numbers[0];
+        T.translation.y = line_numbers[1];
+        T.translation.z = line_numbers[2];
 
-        geometry_msgs::Quaternion quat;
-        quat.x = line_numbers[3];
-        quat.y = line_numbers[4];
-        quat.z = line_numbers[5];
-        quat.w = line_numbers[6];
-
-        mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(quat);
-        T.block<3, 3>(0, 0)             = Eigen::Matrix3d(atti).cast<float>();
+        T.rotation.x = line_numbers[3];
+        T.rotation.y = line_numbers[4];
+        T.rotation.z = line_numbers[5];
+        T.rotation.w = line_numbers[6];
 
         return T;
       }
@@ -155,19 +204,19 @@ bool parseArguments(int argc, char **argv, ARGUMENTS &args) {
   args.pcd_target         = argv[5];
   args.txt_trajectory_out = argv[6];
 
-  const auto tf = loadMatrix(argv[4]);
+  const auto tf = loadStaticTransformFromFile(argv[4]);
   if (!tf) {
     std::cerr << "Could not load transform of mapping in the target origin. Ending." << std::endl;
     return false;
   }
-  args.tf_map_in_target_origin = tf.value();
+  args.tf_target_in_map_origin = tf.value();
 
   for (unsigned int i = 7; i < argc; i += 2) {
     const auto option = std::string(argv[i]);
     if (option == "--traj-step-dist") {
       args.traj_step_dist = float(std::atof(argv[i + 1]));
     } else if (option == "--traj-step-time") {
-      args.traj_step_time = float(std::atof(argv[i + 1]));
+      args.traj_step_time = std::atof(argv[i + 1]);
     } else if (option == "--start-time") {
       args.start_time = std::atof(argv[i + 1]);
     } else if (option == "--cloud-buffer") {
@@ -185,6 +234,9 @@ bool parseArguments(int argc, char **argv, ARGUMENTS &args) {
 /*//}*/
 
 /* -------------------- Global variables -------------------- */
+
+const std::string GLOBAL_FRAME = "global_origin";
+
 pcl::IterativeClosestPoint<pt_XYZ, pt_XYZ> _icp;
 pcl::CropBox<pt_XYZ>                       _filter_box;
 
@@ -195,7 +247,14 @@ ros::Publisher _pub_pc_aligned_local;
 ros::Publisher _pub_path_untransformed;
 ros::Publisher _pub_path_transformed;
 
+std::unique_ptr<tf2_ros::Buffer>            tf_buffer;
+std::unique_ptr<tf2_ros::TransformListener> tf_listener;
+
+ros::Time rosbag_start_time;
+
+
 /* -------------------- Functions -------------------- */
+
 /*//{ eigenMatrixToPoseMsg() */
 geometry_msgs::Pose eigenMatrixToPoseMsg(const Eigen::Matrix4f &mat) {
   geometry_msgs::Pose msg;
@@ -278,10 +337,167 @@ std::optional<std::tuple<Eigen::Matrix4f, PC::Ptr>> registerClouds(const PC::Ptr
 /*//}*/
 
 /*//{ estimateGroundTruthTrajectoryFromRosbag() */
-std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const PC::Ptr &pc_target, const ARGUMENTS &args) {
-  // TODO: estimate trajectory from rosbag and read scan data per time (do not use global map which can be very bad)
+std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosbag::Bag &bag, const PC::Ptr &pc_target, const ARGUMENTS &args) {
 
   std::vector<TRAJECTORY_POINT> drift_data;
+
+  nav_msgs::Path::Ptr path_transformed   = boost::make_shared<nav_msgs::Path>();
+  nav_msgs::Path::Ptr path_untransformed = boost::make_shared<nav_msgs::Path>();
+  path_transformed->header.frame_id      = GLOBAL_FRAME;
+  path_untransformed->header.frame_id    = GLOBAL_FRAME;
+
+  // Preset sample selection variables
+  ros::Time       stamp_prev;
+  Eigen::Vector3f position_prev;
+  Eigen::Matrix4f T_prev;
+  unsigned int    sample_count      = 0;
+  float           trajectory_length = 0.0f;
+
+  // Preset global objects parameters
+  const float resolution = 0.2f;
+  _icp.setMaxCorrespondenceDistance(15.0);
+  _icp.setMaximumIterations(5000);
+  _icp.setTransformationEpsilon(0.03);
+  _icp.setEuclideanFitnessEpsilon(0.03);
+  _icp.setRANSACIterations(500);
+  _icp.setRANSACOutlierRejectionThreshold(0.8);
+  _icp.setUseReciprocalCorrespondences(false);
+
+  // Prepare target cloud
+  const PC::Ptr cloud_target = mrs_pcl_tools::filters::applyVoxelGridFilter(pc_target, resolution);
+
+  // Create n-sec buffer for laser data
+  BUFFER_QUEUE cloud_buffer;
+  cloud_buffer.buffer_size_secs = ros::Duration(args.cloud_buffer_sec);
+
+  ROS_INFO("Reading cloud messages on cloud_topic: %s", args.topic_cloud.c_str());
+  rosbag::View view = rosbag::View(bag, rosbag::TopicQuery(args.topic_cloud));
+
+  // Iterate over rosbag
+  for (const rosbag::MessageInstance &msg : view) {
+
+    // Read point cloud topic
+    const sensor_msgs::PointCloud2::Ptr cloud_msg = msg.instantiate<sensor_msgs::PointCloud2>();
+    if (!cloud_msg) {
+      continue;
+    }
+    ROS_INFO_ONCE("Found atleast one valid message of type (%s).", msg.getDataType().c_str());
+
+    // Filter msgs before specified start time of reading
+    const ros::Time stamp = cloud_msg->header.stamp;
+    if (stamp < rosbag_start_time) {
+      continue;
+    }
+    ROS_INFO_ONCE("Found atleast one valid message with valid time.");
+
+    // Find current pose of cloud origin in world
+    geometry_msgs::TransformStamped lidar_in_world_geom_tf;
+    try {
+      lidar_in_world_geom_tf = tf_buffer->lookupTransform(GLOBAL_FRAME, cloud_msg->header.frame_id, stamp);
+    }
+    catch (tf2::TransformException ex) {
+      ROS_WARN("Failed to lookup transform (target: %s, source: %s, time: %0.2f)", GLOBAL_FRAME.c_str(), cloud_msg->header.frame_id.c_str(), stamp.toSec());
+      continue;
+    }
+    ROS_INFO_ONCE("Found atleast one valid transformation of lidar in world.");
+
+    // Convert msg to PCL
+    const PC::Ptr cloud = boost::make_shared<PC>();
+    pcl::fromROSMsg(*cloud_msg, *cloud);
+
+    // Transform lidar to world
+    Eigen::Affine3d lidar_in_world_eigen = Eigen::Affine3d::Identity();
+    tf::transformMsgToEigen(lidar_in_world_geom_tf.transform, lidar_in_world_eigen);
+    pcl::transformPointCloud(*cloud, *cloud, lidar_in_world_eigen);
+
+    // Insert cloud in world to buffer queue
+    cloud_buffer.insertCloud(stamp, cloud);
+
+    // Get current position of lidar in world
+    const Eigen::Vector3f position = Eigen::Vector3f(lidar_in_world_geom_tf.transform.translation.x, lidar_in_world_geom_tf.transform.translation.y,
+                                                     lidar_in_world_geom_tf.transform.translation.z);
+
+    // Perform registration in first iteration
+    bool perform_registration = sample_count++ == 0;
+    if (perform_registration) {
+      stamp_prev    = stamp;
+      position_prev = position;
+      T_prev        = Eigen::Matrix4f::Identity();
+    }
+    // Other registrations should be performed after some time passes and the lidar moves
+    else {
+      const float  d_position = (position - position_prev).norm();
+      const double d_time     = (stamp - stamp_prev).toSec();
+      perform_registration    = d_time > args.traj_step_time && d_position > args.traj_step_dist;
+      trajectory_length += d_position;
+    }
+
+    /*//{ Perform registration*/
+    if (perform_registration) {
+
+      // Prepare source cloud
+      const PC::Ptr cloud_source = mrs_pcl_tools::filters::applyVoxelGridFilter(cloud_buffer.getCloudsAsOne(), resolution);
+
+      // Publish source and target clouds before registration
+      if (_pub_pc_source_local.getNumSubscribers() > 0) {
+        _pub_pc_source_local.publish(cloud_source);
+      }
+      if (_pub_pc_target_local.getNumSubscribers() > 0) {
+        _pub_pc_target_local.publish(cloud_target);
+      }
+      if (_pub_pc_target_global.getNumSubscribers() > 0) {
+        _pub_pc_target_global.publish(cloud_target);
+      }
+
+      // Find mutual transformations
+      const auto ret = registerClouds(cloud_source, cloud_target, T_prev);
+
+      // Fill return object
+      if (ret) {
+        const auto [T, cloud_aligned] = ret.value();
+
+        const Eigen::Matrix4f pose = lidar_in_world_eigen.matrix().cast<float>();
+
+        TRAJECTORY_POINT dato;
+        dato.transformation     = T;
+        dato.transformed_pose   = T * pose;
+        dato.untransformed_pose = pose;
+        dato.sample_time        = stamp.toSec();
+        drift_data.push_back(dato);
+
+        // Publish aligned cloud
+        if (_pub_pc_aligned_local.getNumSubscribers() > 0) {
+          _pub_pc_aligned_local.publish(cloud_aligned);
+        }
+
+        // Publish nav_msgs::Path msgs
+        geometry_msgs::PoseStamped pose_msg_transformed;
+        geometry_msgs::PoseStamped pose_msg_untransformed;
+        pose_msg_transformed.header   = path_transformed->header;
+        pose_msg_untransformed.header = path_untransformed->header;
+        pose_msg_transformed.pose     = eigenMatrixToPoseMsg(dato.transformed_pose);
+        pose_msg_untransformed.pose   = eigenMatrixToPoseMsg(dato.untransformed_pose);
+        path_transformed->poses.push_back(pose_msg_transformed);
+        path_untransformed->poses.push_back(pose_msg_untransformed);
+
+        if (_pub_path_untransformed.getNumSubscribers() > 0 || _pub_path_transformed.getNumSubscribers() > 0) {
+          try {
+            _pub_path_untransformed.publish(path_untransformed);
+            _pub_path_transformed.publish(path_transformed);
+          }
+          catch (...) {
+            ROS_ERROR("Exception caught during publishing the (un)transformed trajectories.");
+          }
+        }
+
+        T_prev = T;
+      }
+
+      stamp_prev    = stamp;
+      position_prev = position;
+    }
+    /*//}*/
+  }
 
   return drift_data;
 }
@@ -314,10 +530,56 @@ int main(int argc, char **argv) {
   _pub_path_untransformed = nh.advertise<nav_msgs::Path>("trajectory/untransformed", 1);
   _pub_path_transformed   = nh.advertise<nav_msgs::Path>("trajectory/transformed", 1);
 
-  // Find real trajectory using the cloud data within rosbag
-  const std::vector<TRAJECTORY_POINT> data = estimateGroundTruthTrajectoryFromRosbag(ret_target.value(), args);
+  /*//{ Open rosbag */
+  rosbag::Bag bag;
+  try {
+    ROS_INFO("Opening rosbag: %s", args.path_rosbag.c_str());
+    bag.open(args.path_rosbag, rosbag::bagmode::Read);
+  }
+  catch (...) {
+    ROS_ERROR("Couldn't open rosbag: %s", args.path_rosbag.c_str());
+    return -2;
+  }
+  /*//}*/
 
-  // save trajectory
+  /*//{ Fill transform buffer with all the transforms from the rosbag */
+  const std::vector<std::string> tf_topics = {"/tf", "/tf_static"};
+  rosbag::View                   tf_view   = rosbag::View(bag, rosbag::TopicQuery(tf_topics));
+
+  const double rosbag_start_time_sec = tf_view.getBeginTime().toSec() + args.start_time;
+  rosbag_start_time.fromSec(rosbag_start_time_sec);
+  const ros::Duration bag_duration = tf_view.getEndTime() - rosbag_start_time;
+
+  tf_buffer   = std::make_unique<tf2_ros::Buffer>(ros::Duration(2.0 * bag_duration.toSec()));
+  tf_listener = std::make_unique<tf2_ros::TransformListener>(*tf_buffer);
+
+  for (const rosbag::MessageInstance &msg : tf_view) {
+    const tf2_msgs::TFMessage::ConstPtr tf_msg = msg.instantiate<tf2_msgs::TFMessage>();
+    if (tf_msg) {
+      const bool is_static = msg.getTopic() == "/tf_static" || msg.getTopic() == "tf_static";
+      for (const auto &transform : tf_msg->transforms) {
+        tf_buffer->setTransform(transform, "default_authority", is_static);
+      }
+    }
+  }
+
+  // Insert initial transformation map->world
+  geometry_msgs::TransformStamped tf;
+  tf.header.stamp    = rosbag_start_time;
+  tf.header.frame_id = args.mapping_origin;
+  tf.child_frame_id  = GLOBAL_FRAME;
+  tf.transform       = args.tf_target_in_map_origin;
+  tf_buffer->setTransform(tf, "default_authority", true);
+
+  /*//}*/
+
+  // Find real trajectory using the cloud data within rosbag
+  const std::vector<TRAJECTORY_POINT> data = estimateGroundTruthTrajectoryFromRosbag(bag, ret_target.value(), args);
+
+  // Close rosbag
+  bag.close();
+
+  // Save trajectory to text file
   saveTrajectory(args.txt_trajectory_out, data);
 
   return 0;
