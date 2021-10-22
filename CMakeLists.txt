@@ -31,6 +31,7 @@ find_package(catkin REQUIRED COMPONENTS
     std_msgs
     sensor_msgs
     geometry_msgs
+    visualization_msgs
     pcl_ros
     mrs_lib
     dynamic_reconfigure
@@ -73,7 +74,7 @@ generate_dynamic_reconfigure_options(
   cfg/pcl_filtration_dynparam.cfg
   cfg/pcl2map_registration_dynparam.cfg
 )
-generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
+generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs visualization_msgs)
 
 ###################################
 ## catkin specific configuration ##
@@ -82,7 +83,7 @@ generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES PCLSupportLib PCLFiltration PCL2MapRegistration
-  CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs pcl_ros mrs_lib ouster_ros eigen_conversions
+  CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs visualization_msgs pcl_ros mrs_lib ouster_ros eigen_conversions
   DEPENDS Eigen
 )
 

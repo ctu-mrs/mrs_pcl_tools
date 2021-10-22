@@ -6,6 +6,8 @@
 #include <pcl/registration/icp.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <nav_msgs/Path.h>
+#include <nav_msgs/Odometry.h>
+#include <visualization_msgs/MarkerArray.h>
 
 #include <rosbag/bag.h>
 #include <rosbag/view.h>
@@ -31,12 +33,14 @@ struct ARGUMENTS
   std::string              topic_cloud;
   std::string              mapping_origin;
   std::string              pcd_target;
-  std::string              txt_trajectory_out;
+  std::string              txt_trajectory_odom;
+  std::string              txt_trajectory_gt;
   float                    traj_step_dist   = 0.0f;
   double                   traj_step_time   = 0.0f;
   double                   start_time       = 0.0;
   double                   cloud_buffer_sec = 5.0;
   geometry_msgs::Transform tf_target_in_map_origin;
+  bool                     invert_tf_target_in_map_origin = false;
 
   void print() {
 
@@ -45,10 +49,12 @@ struct ARGUMENTS
       ROS_INFO("Rosbag path: %s", path_rosbag.c_str());
       ROS_INFO("Topic cloud: %s", topic_cloud.c_str());
       ROS_INFO("Mapping origin: %s", mapping_origin.c_str());
-      ROS_INFO("Transform map->target: xyz (%0.1f, %0.1f, %0.1f), xyzw (%0.1f, %0.1f, %0.1f, %0.1f)", tf_target_in_map_origin.translation.x,
+      ROS_INFO("Transform map->target: xyz (%0.1f, %0.1f, %0.1f), xyzw (%0.1f, %0.1f, %0.1f, %0.1f), inverted: %s", tf_target_in_map_origin.translation.x,
                tf_target_in_map_origin.translation.y, tf_target_in_map_origin.translation.z, tf_target_in_map_origin.rotation.x,
-               tf_target_in_map_origin.rotation.y, tf_target_in_map_origin.rotation.z, tf_target_in_map_origin.rotation.w);
-      ROS_INFO("Trajectory out: %s", txt_trajectory_out.c_str());
+               tf_target_in_map_origin.rotation.y, tf_target_in_map_origin.rotation.z, tf_target_in_map_origin.rotation.w,
+               invert_tf_target_in_map_origin ? "true" : "false");
+      ROS_INFO("Trajectory odom out: %s", txt_trajectory_odom.c_str());
+      ROS_INFO("Trajectory gt out: %s", txt_trajectory_gt.c_str());
       ROS_INFO("Trajectory distance step: %0.2f; time step: %0.2f", traj_step_dist, traj_step_time);
       ROS_INFO("Point cloud buffer: %0.2f s", cloud_buffer_sec);
       ROS_INFO("Start time offset: %0.2f", start_time);
@@ -75,6 +81,7 @@ private:
 
 public:
   ros::Duration buffer_size_secs;
+  std::string   cloud_frame;
 
   void insertCloud(const ros::Time &stamp, const PC::Ptr &cloud) {
 
@@ -105,6 +112,9 @@ public:
       *cloud_merged += *pair_time_cloud.second;
     }
 
+    pcl_conversions::toPCL(clouds.back().first, cloud_merged->header.stamp);
+    cloud_merged->header.frame_id = cloud_frame;
+
     return cloud_merged;
   }
 };
@@ -119,15 +129,17 @@ void printHelp() {
 
   ROS_ERROR("Usage:");
   ROS_ERROR(
-      "   rosrun mrs_pcl_tools estimate_cloud_to_cloud_drift rosbag.bag topic_cloud mapping_origin tf_map_in_target.txt target.pcd trajectory_out.txt [...]");
+      "   rosrun mrs_pcl_tools estimate_cloud_to_cloud_drift rosbag.bag topic_cloud mapping_origin tf_map_in_target.txt target.pcd trajectory_odom_out.txt "
+      "trajectory_gt_out.txt [...]");
 
   ROS_ERROR("Arguments:");
-  ROS_ERROR(" rosbag.bag:            rosbag containing sensor data (point cloud) and /tf topic with mapping_origin->cloud_origin transformation");
-  ROS_ERROR(" topic_cloud:           point cloud topic (supported types: sensor_msgs/PointCloud2)");
-  ROS_ERROR(" mapping_origin:        mapping origin (string)");
-  ROS_ERROR(" tf_map_in_target.txt:  transformation from the target cloud to the mapping origin (expected format: (x, y, z, qx, qy, qz, qw))");
-  ROS_ERROR(" target.pcd:            target point cloud (ground truth)");
-  ROS_ERROR(" trajectory_out.txt:    corrected (real) trajectory of the robot");
+  ROS_ERROR(" rosbag.bag:              rosbag containing sensor data (point cloud) and /tf topic with mapping_origin->cloud_origin transformation");
+  ROS_ERROR(" topic_cloud:             point cloud topic (supported types: sensor_msgs/PointCloud2)");
+  ROS_ERROR(" mapping_origin:          mapping origin (string)");
+  ROS_ERROR(" tf_map_in_target.txt:    transformation from the target cloud to the mapping origin (expected format: (x, y, z, qx, qy, qz, qw))");
+  ROS_ERROR(" target.pcd:              target point cloud (ground truth)");
+  ROS_ERROR(" trajectory_odom_out.txt: robot estimated trajectory (from the rosbag)");
+  ROS_ERROR(" trajectory_gt_out.txt:   corrected (real) trajectory of the robot");
 
   ROS_ERROR("Optional arguments:");
   ROS_ERROR(" --traj-step-dist:      sampling of trajectory by distance, used if greater than 0.0 (default: 0.0 m)");
@@ -151,8 +163,24 @@ geometry_msgs::Pose eigenMatrixToPoseMsg(const Eigen::Matrix4f &mat) {
 }
 /*//}*/
 
+/*//{ eigenMatrixToTransformMsg() */
+geometry_msgs::Transform eigenMatrixToTransformMsg(const Eigen::Matrix4f &mat) {
+
+  geometry_msgs::Transform transform;
+
+  transform.translation.x = mat(0, 3);
+  transform.translation.y = mat(1, 3);
+  transform.translation.z = mat(2, 3);
+
+  const mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(mat.block<3, 3>(0, 0).cast<double>());
+  transform.rotation                    = atti;
+
+  return transform;
+}
+/*//}*/
+
 /*//{ loadStaticTransformFromFile() */
-std::optional<geometry_msgs::Transform> loadStaticTransformFromFile(const std::string &filepath) {
+std::optional<Eigen::Matrix4f> loadStaticTransformFromFile(const std::string &filepath) {
 
   ROS_INFO("Loading matrix from: %s", filepath.c_str());
 
@@ -164,7 +192,7 @@ std::optional<geometry_msgs::Transform> loadStaticTransformFromFile(const std::s
 
     unsigned int l = 0;
 
-    Eigen::Matrix4d mat;
+    Eigen::Matrix4f mat;
     unsigned int    row = 0;
 
     while (std::getline(infile, line) && row < 4) {
@@ -192,20 +220,11 @@ std::optional<geometry_msgs::Transform> loadStaticTransformFromFile(const std::s
       l++;
     }
 
-    if (row != 4) {
-      ROS_ERROR("[Loading matrix] Did not find 4 rows in the file.");
-    } else {
-      geometry_msgs::Transform   T;
-      const geometry_msgs::Pose &pose = eigenMatrixToPoseMsg(mat.cast<float>());
-      T.translation.x                 = pose.position.x;
-      T.translation.y                 = pose.position.y;
-      T.translation.z                 = pose.position.z;
-      T.rotation.x                    = pose.orientation.x;
-      T.rotation.y                    = pose.orientation.y;
-      T.rotation.z                    = pose.orientation.z;
-      T.rotation.w                    = pose.orientation.w;
-      return T;
+    if (row == 4) {
+      return mat;
     }
+
+    ROS_ERROR("[Loading matrix] Did not find 4 rows in the file.");
 
   } else {
     ROS_ERROR("[Loading matrix] File path (%s) does not exist.", filepath.c_str());
@@ -218,25 +237,32 @@ std::optional<geometry_msgs::Transform> loadStaticTransformFromFile(const std::s
 /*//{ parseArguments() */
 bool parseArguments(int argc, char **argv, ARGUMENTS &args) {
 
-  if (argc < 7) {
+  if (argc < 8) {
     printHelp();
     return false;
   }
 
-  args.path_rosbag        = argv[1];
-  args.topic_cloud        = argv[2];
-  args.mapping_origin     = argv[3];
-  args.pcd_target         = argv[5];
-  args.txt_trajectory_out = argv[6];
+  args.path_rosbag         = argv[1];
+  args.topic_cloud         = argv[2];
+  args.mapping_origin      = argv[3];
+  args.pcd_target          = argv[5];
+  args.txt_trajectory_odom = argv[6];
+  args.txt_trajectory_gt   = argv[7];
 
   const auto tf = loadStaticTransformFromFile(argv[4]);
   if (!tf) {
-    std::cerr << "Could not load transform of mapping in the target origin. Ending." << std::endl;
+    std::cerr << "Could not load transform of target map in the mapping origin. Ending." << std::endl;
     return false;
   }
-  args.tf_target_in_map_origin = tf.value();
+  Eigen::Matrix4f tf_target_in_map_origin = tf.value();
+  if (args.invert_tf_target_in_map_origin) {
+    tf_target_in_map_origin = tf_target_in_map_origin.inverse();
+  }
+  args.tf_target_in_map_origin = eigenMatrixToTransformMsg(tf_target_in_map_origin);
 
-  for (unsigned int i = 7; i < argc; i += 2) {
+  for (unsigned int i = 8; i < argc;) {
+    int i_inc = 2;
+
     const auto option = std::string(argv[i]);
     if (option == "--traj-step-dist") {
       args.traj_step_dist = float(std::atof(argv[i + 1]));
@@ -246,10 +272,15 @@ bool parseArguments(int argc, char **argv, ARGUMENTS &args) {
       args.start_time = std::atof(argv[i + 1]);
     } else if (option == "--cloud-buffer") {
       args.cloud_buffer_sec = std::atof(argv[i + 1]);
+    } else if (option == "--invert-transform") {
+      args.invert_tf_target_in_map_origin = true;
+      i_inc                               = 1;
     } else {
       std::cerr << "Unknown option: " << option.c_str() << ". Ending." << std::endl;
       return false;
     }
+
+    i += i_inc;
   }
 
   args.initialized = true;
@@ -265,12 +296,15 @@ const std::string GLOBAL_FRAME = "global_origin";
 pcl::IterativeClosestPoint<pt_XYZ, pt_XYZ> _icp;
 pcl::CropBox<pt_XYZ>                       _filter_box;
 
+ros::Publisher _pub_pose_odom;
+ros::Publisher _pub_pose_gt;
 ros::Publisher _pub_pc_source_local;
 ros::Publisher _pub_pc_target_global;
 ros::Publisher _pub_pc_target_local;
 ros::Publisher _pub_pc_aligned_local;
 ros::Publisher _pub_path_untransformed;
 ros::Publisher _pub_path_transformed;
+ros::Publisher _pub_paths_correlation;
 
 std::unique_ptr<tf2_ros::Buffer>            tf_buffer;
 std::unique_ptr<tf2_ros::TransformListener> tf_listener;
@@ -281,7 +315,7 @@ ros::Time rosbag_start_time;
 /* -------------------- Functions -------------------- */
 
 /*//{ saveTrajectory() */
-void saveTrajectory(const std::string &filepath, const std::vector<TRAJECTORY_POINT> &data) {
+void saveTrajectory(const std::string &filepath, const std::vector<TRAJECTORY_POINT> &data, const bool transformed_data) {
 
   ROS_INFO("Saving trajectory to: %s", filepath.c_str());
 
@@ -295,13 +329,15 @@ void saveTrajectory(const std::string &filepath, const std::vector<TRAJECTORY_PO
 
     for (const auto &dato : data) {
 
-      const mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(dato.transformed_pose.block<3, 3>(0, 0).cast<double>());
+      const Eigen::Matrix4f &pose = transformed_data ? dato.transformed_pose : dato.untransformed_pose;
+
+      const mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(pose.block<3, 3>(0, 0).cast<double>());
       const geometry_msgs::Quaternion  quat = atti;
 
       outfile << std::fixed << std::setprecision(precision) << dato.sample_time << " ";
-      outfile << std::fixed << std::setprecision(precision) << dato.transformed_pose(0, 3) << " ";
-      outfile << std::fixed << std::setprecision(precision) << dato.transformed_pose(1, 3) << " ";
-      outfile << std::fixed << std::setprecision(precision) << dato.transformed_pose(2, 3) << " ";
+      outfile << std::fixed << std::setprecision(precision) << pose(0, 3) << " ";
+      outfile << std::fixed << std::setprecision(precision) << pose(1, 3) << " ";
+      outfile << std::fixed << std::setprecision(precision) << pose(2, 3) << " ";
       outfile << std::fixed << std::setprecision(precision) << quat.x << " ";
       outfile << std::fixed << std::setprecision(precision) << quat.y << " ";
       outfile << std::fixed << std::setprecision(precision) << quat.z << " ";
@@ -357,6 +393,18 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
   path_transformed->header.frame_id      = GLOBAL_FRAME;
   path_untransformed->header.frame_id    = GLOBAL_FRAME;
 
+  visualization_msgs::MarkerArray::Ptr path_correlation = boost::make_shared<visualization_msgs::MarkerArray>();
+  visualization_msgs::Marker           marker;
+  marker.action             = visualization_msgs::Marker::ADD;
+  marker.header.frame_id    = GLOBAL_FRAME;
+  marker.ns                 = "correlation";
+  marker.scale.x            = 0.05;
+  marker.type               = visualization_msgs::Marker::LINE_LIST;
+  marker.color.a            = 1.0;
+  marker.color.g            = 1.0;
+  marker.pose.orientation.w = 1.0;
+  path_correlation->markers = {marker};
+
   // Preset sample selection variables
   ros::Time       stamp_prev;
   Eigen::Vector3f position_prev;
@@ -380,6 +428,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
   // Create n-sec buffer for laser data
   BUFFER_QUEUE cloud_buffer;
   cloud_buffer.buffer_size_secs = ros::Duration(args.cloud_buffer_sec);
+  cloud_buffer.cloud_frame      = GLOBAL_FRAME;
 
   ROS_INFO("Reading cloud messages on cloud_topic: %s", args.topic_cloud.c_str());
   rosbag::View view = rosbag::View(bag, rosbag::TopicQuery(args.topic_cloud));
@@ -449,7 +498,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
       // Prepare source cloud
       const PC::Ptr cloud_source = mrs_pcl_tools::filters::applyVoxelGridFilter(cloud_buffer.getCloudsAsOne(), resolution);
 
-      // Publish source and target clouds before registration
+      /*//{ Publish source and target clouds before registration */
       if (_pub_pc_source_local.getNumSubscribers() > 0) {
         _pub_pc_source_local.publish(cloud_source);
       }
@@ -459,6 +508,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
       if (_pub_pc_target_global.getNumSubscribers() > 0) {
         _pub_pc_target_global.publish(cloud_target);
       }
+      /*//}*/
 
       // Find mutual transformations
       const auto ret = registerClouds(cloud_source, cloud_target, T_prev);
@@ -476,9 +526,32 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
         dato.sample_time        = stamp.toSec();
         drift_data.push_back(dato);
 
+        /*//{ Publish rviz visualizations */
+
         // Publish aligned cloud
         if (_pub_pc_aligned_local.getNumSubscribers() > 0) {
           _pub_pc_aligned_local.publish(cloud_aligned);
+        }
+
+        // Publish nav_msgs::Odometry msgs
+        nav_msgs::Odometry odom_estimated;
+        nav_msgs::Odometry odom_gt;
+        odom_estimated.header.frame_id = GLOBAL_FRAME;
+        odom_estimated.header.stamp    = stamp;
+        odom_estimated.child_frame_id  = cloud_msg->header.frame_id;
+        odom_estimated.pose.pose       = eigenMatrixToPoseMsg(dato.untransformed_pose);
+        odom_gt.header                 = odom_estimated.header;
+        odom_gt.child_frame_id         = cloud_msg->header.frame_id;
+        odom_gt.pose.pose              = eigenMatrixToPoseMsg(dato.transformed_pose);
+
+        if (_pub_pose_odom.getNumSubscribers() > 0 || _pub_pose_gt.getNumSubscribers() > 0) {
+          try {
+            _pub_pose_odom.publish(odom_estimated);
+            _pub_pose_gt.publish(odom_gt);
+          }
+          catch (...) {
+            ROS_ERROR("Exception caught during publishing the (un)transformed odometries.");
+          }
         }
 
         // Publish nav_msgs::Path msgs
@@ -486,20 +559,30 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
         geometry_msgs::PoseStamped pose_msg_untransformed;
         pose_msg_transformed.header   = path_transformed->header;
         pose_msg_untransformed.header = path_untransformed->header;
-        pose_msg_transformed.pose     = eigenMatrixToPoseMsg(dato.transformed_pose);
-        pose_msg_untransformed.pose   = eigenMatrixToPoseMsg(dato.untransformed_pose);
+        pose_msg_transformed.pose     = odom_gt.pose.pose;
+        pose_msg_untransformed.pose   = odom_estimated.pose.pose;
         path_transformed->poses.push_back(pose_msg_transformed);
         path_untransformed->poses.push_back(pose_msg_untransformed);
 
-        if (_pub_path_untransformed.getNumSubscribers() > 0 || _pub_path_transformed.getNumSubscribers() > 0) {
+        geometry_msgs::Point point_msg_transformed;
+        geometry_msgs::Point point_msg_untransformed;
+        point_msg_transformed   = odom_gt.pose.pose.position;
+        point_msg_untransformed = odom_estimated.pose.pose.position;
+        path_correlation->markers.at(0).points.push_back(point_msg_transformed);
+        path_correlation->markers.at(0).points.push_back(point_msg_untransformed);
+
+        if (_pub_path_untransformed.getNumSubscribers() > 0 || _pub_path_transformed.getNumSubscribers() > 0 ||
+            _pub_paths_correlation.getNumSubscribers() > 0) {
           try {
             _pub_path_untransformed.publish(path_untransformed);
             _pub_path_transformed.publish(path_transformed);
+            _pub_paths_correlation.publish(path_correlation);
           }
           catch (...) {
             ROS_ERROR("Exception caught during publishing the (un)transformed trajectories.");
           }
         }
+        /*//}*/
 
         T_prev = T;
       }
@@ -534,12 +617,15 @@ int main(int argc, char **argv) {
   }
 
   // Common steps for both methods
+  _pub_pose_odom          = nh.advertise<nav_msgs::Odometry>("odometry/estimated", 1);
+  _pub_pose_gt            = nh.advertise<nav_msgs::Odometry>("odometry/ground_truth", 1);
   _pub_pc_target_global   = nh.advertise<sensor_msgs::PointCloud2>("target/global", 1);
   _pub_pc_source_local    = nh.advertise<sensor_msgs::PointCloud2>("source/local", 1);
   _pub_pc_target_local    = nh.advertise<sensor_msgs::PointCloud2>("target/local", 1);
   _pub_pc_aligned_local   = nh.advertise<sensor_msgs::PointCloud2>("aligned/local", 1);
   _pub_path_untransformed = nh.advertise<nav_msgs::Path>("trajectory/untransformed", 1);
   _pub_path_transformed   = nh.advertise<nav_msgs::Path>("trajectory/transformed", 1);
+  _pub_paths_correlation  = nh.advertise<visualization_msgs::MarkerArray>("trajectory/correlation", 1);
 
   /*//{ Open rosbag */
   rosbag::Bag bag;
@@ -585,13 +671,16 @@ int main(int argc, char **argv) {
   /*//}*/
 
   // Find real trajectory using the cloud data within rosbag
-  const std::vector<TRAJECTORY_POINT> data = estimateGroundTruthTrajectoryFromRosbag(bag, ret_target.value(), args);
+  const auto &cloud_target                 = ret_target.value();
+  cloud_target->header.frame_id            = GLOBAL_FRAME;
+  const std::vector<TRAJECTORY_POINT> data = estimateGroundTruthTrajectoryFromRosbag(bag, cloud_target, args);
 
   // Close rosbag
   bag.close();
 
   // Save trajectory to text file
-  saveTrajectory(args.txt_trajectory_out, data);
+  saveTrajectory(args.txt_trajectory_gt, data, true);
+  saveTrajectory(args.txt_trajectory_odom, data, false);
 
   return 0;
 }
