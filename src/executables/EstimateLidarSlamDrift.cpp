@@ -136,7 +136,7 @@ void printHelp() {
   ROS_ERROR(" rosbag.bag:              rosbag containing sensor data (point cloud) and /tf topic with mapping_origin->cloud_origin transformation");
   ROS_ERROR(" topic_cloud:             point cloud topic (supported types: sensor_msgs/PointCloud2)");
   ROS_ERROR(" mapping_origin:          mapping origin (string)");
-  ROS_ERROR(" tf_map_in_target.txt:    transformation from the target cloud to the mapping origin (expected format: (x, y, z, qx, qy, qz, qw))");
+  ROS_ERROR(" tf_map_in_target.txt:    transformation from the target cloud to the mapping origin (expected format: 4x4 matrix (4 rows, cols separated by space))");
   ROS_ERROR(" target.pcd:              target point cloud (ground truth)");
   ROS_ERROR(" trajectory_odom_out.txt: robot estimated trajectory (from the rosbag)");
   ROS_ERROR(" trajectory_gt_out.txt:   corrected (real) trajectory of the robot");
@@ -146,6 +146,7 @@ void printHelp() {
   ROS_ERROR(" --traj-step-time:      sampling of trajectory by time, used if greater than 0.0 (default: 0.0 s)");
   ROS_ERROR(" --cloud-buffer:        buffer length of cloud data in seconds (default: 5.0 s)");
   ROS_ERROR(" --start-time:          start time offset of the rosbag (default: 0.0 s)");
+  ROS_ERROR(" --invert-transform:    if the initial map in target transformation should be inverted (default: false)");
 }
 /*//}*/
 
@@ -435,6 +436,10 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
 
   // Iterate over rosbag
   for (const rosbag::MessageInstance &msg : view) {
+
+    if (!ros::ok()) {
+      return drift_data;
+    }
 
     // Read point cloud topic
     const sensor_msgs::PointCloud2::Ptr cloud_msg = msg.instantiate<sensor_msgs::PointCloud2>();
