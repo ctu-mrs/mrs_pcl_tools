@@ -136,7 +136,8 @@ void printHelp() {
   ROS_ERROR(" rosbag.bag:              rosbag containing sensor data (point cloud) and /tf topic with mapping_origin->cloud_origin transformation");
   ROS_ERROR(" topic_cloud:             point cloud topic (supported types: sensor_msgs/PointCloud2)");
   ROS_ERROR(" mapping_origin:          mapping origin (string)");
-  ROS_ERROR(" tf_map_in_target.txt:    transformation from the target cloud to the mapping origin (expected format: 4x4 matrix (4 rows, cols separated by space))");
+  ROS_ERROR(
+      " tf_map_in_target.txt:    transformation from the target cloud to the mapping origin (expected format: 4x4 matrix (4 rows, cols separated by space))");
   ROS_ERROR(" target.pcd:              target point cloud (ground truth)");
   ROS_ERROR(" trajectory_odom_out.txt: robot estimated trajectory (from the rosbag)");
   ROS_ERROR(" trajectory_gt_out.txt:   corrected (real) trajectory of the robot");
@@ -173,8 +174,12 @@ geometry_msgs::Transform eigenMatrixToTransformMsg(const Eigen::Matrix4f &mat) {
   transform.translation.y = mat(1, 3);
   transform.translation.z = mat(2, 3);
 
-  const mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(mat.block<3, 3>(0, 0).cast<double>());
-  transform.rotation                    = atti;
+  const mrs_lib::AttitudeConverter atti            = mrs_lib::AttitudeConverter(mat.block<3, 3>(0, 0).cast<double>());
+  const Eigen::Quaterniond         atti_normalized = Eigen::Quaterniond(atti).normalized();
+  transform.rotation.x                             = atti_normalized.x();
+  transform.rotation.y                             = atti_normalized.y();
+  transform.rotation.z                             = atti_normalized.z();
+  transform.rotation.w                             = atti_normalized.w();
 
   return transform;
 }
@@ -222,6 +227,11 @@ std::optional<Eigen::Matrix4f> loadStaticTransformFromFile(const std::string &fi
     }
 
     if (row == 4) {
+
+      // Normalize rotation
+      const mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(mat.block<3, 3>(0, 0).cast<double>());
+      mat.block<3, 3>(0, 0)                 = Eigen::Quaternionf(atti).normalized().toRotationMatrix();
+
       return mat;
     }
 
@@ -255,11 +265,6 @@ bool parseArguments(int argc, char **argv, ARGUMENTS &args) {
     std::cerr << "Could not load transform of target map in the mapping origin. Ending." << std::endl;
     return false;
   }
-  Eigen::Matrix4f tf_target_in_map_origin = tf.value();
-  if (args.invert_tf_target_in_map_origin) {
-    tf_target_in_map_origin = tf_target_in_map_origin.inverse();
-  }
-  args.tf_target_in_map_origin = eigenMatrixToTransformMsg(tf_target_in_map_origin);
 
   for (unsigned int i = 8; i < argc;) {
     int i_inc = 2;
@@ -283,6 +288,12 @@ bool parseArguments(int argc, char **argv, ARGUMENTS &args) {
 
     i += i_inc;
   }
+
+  Eigen::Matrix4f tf_target_in_map_origin = tf.value();
+  if (args.invert_tf_target_in_map_origin) {
+    tf_target_in_map_origin = tf_target_in_map_origin.inverse();
+  }
+  args.tf_target_in_map_origin = eigenMatrixToTransformMsg(tf_target_in_map_origin);
 
   args.initialized = true;
 
@@ -438,6 +449,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
   for (const rosbag::MessageInstance &msg : view) {
 
     if (!ros::ok()) {
+      ros::shutdown();
       return drift_data;
     }
 
@@ -611,6 +623,7 @@ int main(int argc, char **argv) {
 
   ros::init(argc, argv, "EstimateLidarSlamDrift");
   ros::NodeHandle nh("EstimateLidarSlamDrift");
+  ros::Time::waitForValid();
 
   args.print();
 
