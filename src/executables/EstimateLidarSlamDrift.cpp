@@ -682,7 +682,7 @@ int main(int argc, char **argv) {
   rosbag_start_time.fromSec(rosbag_start_time_sec);
   const ros::Duration bag_duration = tf_dynamic.getEndTime() - rosbag_start_time;
 
-  tf_buffer   = std::make_unique<tf2_ros::Buffer>(ros::Duration(2.0 * bag_duration.toSec()));
+  tf_buffer   = std::make_unique<tf2_ros::Buffer>(ros::Duration(1.0 * bag_duration.toSec()));
   tf_listener = std::make_unique<tf2_ros::TransformListener>(*tf_buffer);
 
   // Read static tfs
