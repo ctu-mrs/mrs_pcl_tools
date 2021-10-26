@@ -186,7 +186,7 @@ geometry_msgs::Transform eigenMatrixToTransformMsg(const Eigen::Matrix4f &mat) {
 /*//}*/
 
 /*//{ loadStaticTransformFromFile() */
-std::optional<Eigen::Matrix4f> loadStaticTransformFromFile(const std::string &filepath) {
+std::optional<Eigen::Matrix4d> loadStaticTransformFromFile(const std::string &filepath) {
 
   ROS_INFO("Loading matrix from: %s", filepath.c_str());
 
@@ -198,7 +198,7 @@ std::optional<Eigen::Matrix4f> loadStaticTransformFromFile(const std::string &fi
 
     unsigned int l = 0;
 
-    Eigen::Matrix4f mat;
+    Eigen::Matrix4d mat;
     unsigned int    row = 0;
 
     while (std::getline(infile, line) && row < 4) {
@@ -229,8 +229,8 @@ std::optional<Eigen::Matrix4f> loadStaticTransformFromFile(const std::string &fi
     if (row == 4) {
 
       // Normalize rotation
-      const mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(mat.block<3, 3>(0, 0).cast<double>());
-      mat.block<3, 3>(0, 0)                 = Eigen::Quaternionf(atti).normalized().toRotationMatrix();
+      const mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(mat.block<3, 3>(0, 0));
+      mat.block<3, 3>(0, 0)                 = Eigen::Quaterniond(atti).normalized().toRotationMatrix();
 
       return mat;
     }
@@ -289,11 +289,26 @@ bool parseArguments(int argc, char **argv, ARGUMENTS &args) {
     i += i_inc;
   }
 
-  Eigen::Matrix4f tf_target_in_map_origin = tf.value();
+  const Eigen::Matrix4d tf_target_in_map_origin = tf.value();
   if (args.invert_tf_target_in_map_origin) {
-    tf_target_in_map_origin = tf_target_in_map_origin.inverse();
+
+    const double det = tf_target_in_map_origin.determinant();
+    if (det == 0.0) {
+      ROS_ERROR("Input matrix is not invertible!");
+      ros::shutdown();
+      return false;
+    }
+
+    const Eigen::Matrix4d tf_target_in_map_origin_inverted = tf_target_in_map_origin.inverse();
+    mrs_pcl_tools::printEigenMatrix(tf_target_in_map_origin_inverted.cast<float>(), "Target in map (result of inversion):");
+
+    args.tf_target_in_map_origin = eigenMatrixToTransformMsg(tf_target_in_map_origin_inverted.cast<float>());
+
+  } else {
+
+    mrs_pcl_tools::printEigenMatrix(tf_target_in_map_origin.cast<float>(), "Target in map:");
+    args.tf_target_in_map_origin = eigenMatrixToTransformMsg(tf_target_in_map_origin.cast<float>());
   }
-  args.tf_target_in_map_origin = eigenMatrixToTransformMsg(tf_target_in_map_origin);
 
   args.initialized = true;
 
@@ -653,11 +668,13 @@ int main(int argc, char **argv) {
   }
   catch (...) {
     ROS_ERROR("Couldn't open rosbag: %s", args.path_rosbag.c_str());
+    ros::shutdown();
     return -2;
   }
   /*//}*/
 
   /*//{ Fill transform buffer with all the transforms from the rosbag */
+  ROS_INFO("Filling transform buffer.");
   const std::vector<std::string> tf_topics = {"/tf", "/tf_static"};
   rosbag::View                   tf_view   = rosbag::View(bag, rosbag::TopicQuery(tf_topics));
 
@@ -669,6 +686,12 @@ int main(int argc, char **argv) {
   tf_listener = std::make_unique<tf2_ros::TransformListener>(*tf_buffer);
 
   for (const rosbag::MessageInstance &msg : tf_view) {
+
+    if (!ros::ok()) {
+      ros::shutdown();
+      return -1;
+    }
+
     const tf2_msgs::TFMessage::ConstPtr tf_msg = msg.instantiate<tf2_msgs::TFMessage>();
     if (tf_msg) {
       const bool is_static = msg.getTopic() == "/tf_static" || msg.getTopic() == "tf_static";
@@ -684,7 +707,12 @@ int main(int argc, char **argv) {
   tf.header.frame_id = args.mapping_origin;
   tf.child_frame_id  = GLOBAL_FRAME;
   tf.transform       = args.tf_target_in_map_origin;
-  tf_buffer->setTransform(tf, "default_authority", true);
+  const bool succ    = tf_buffer->setTransform(tf, "default_authority", true);
+  if (!succ) {
+    ROS_ERROR("Couldn't set static global transform.");
+    ros::shutdown();
+    return -2;
+  }
 
   /*//}*/
 

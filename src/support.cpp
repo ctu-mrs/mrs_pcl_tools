@@ -150,12 +150,13 @@ void publishCloudMsg(const ros::Publisher &pub, const sensor_msgs::PointCloud2::
 
 /*//{ printEigenMatrix() */
 void printEigenMatrix(const Eigen::Matrix4f &mat, const std::string &prefix) {
-  const std::string          st = (prefix.size() > 0) ? prefix : "Eigen matrix:";
-  mrs_lib::AttitudeConverter atti(mat.block<3, 3>(0, 0).cast<double>());
+  const std::string          st   = (prefix.size() > 0) ? prefix : "Eigen matrix:";
+  mrs_lib::AttitudeConverter atti = mrs_lib::AttitudeConverter(mat.block<3, 3>(0, 0).cast<double>());
   ROS_INFO("[PCLSupportLibrary] %s", st.c_str());
-  ROS_INFO("      | %2.3f %2.3f %2.3f |", mat(0, 0), mat(0, 1), mat(0, 2));
-  ROS_INFO("R   = | %2.3f %2.3f %2.3f |", mat(1, 0), mat(1, 1), mat(1, 2));
-  ROS_INFO("      | %2.3f %2.3f %2.3f |", mat(2, 0), mat(2, 1), mat(2, 2));
+  ROS_INFO("      | %2.3f %2.3f %2.3f %2.3f |", mat(0, 0), mat(0, 1), mat(0, 2), mat(0, 3));
+  ROS_INFO("T   = | %2.3f %2.3f %2.3f %2.3f |", mat(1, 0), mat(1, 1), mat(1, 2), mat(1, 3));
+  ROS_INFO("      | %2.3f %2.3f %2.3f %2.3f |", mat(2, 0), mat(2, 1), mat(2, 2), mat(2, 3));
+  ROS_INFO("      | %2.3f %2.3f %2.3f %2.3f |", mat(3, 0), mat(3, 1), mat(3, 2), mat(3, 3));
   ROS_INFO("RPY = < %2.3f, %2.3f, %2.3f >", atti.getRoll(), atti.getPitch(), atti.getYaw());
   ROS_INFO("t   = < %2.3f, %2.3f, %2.3f >", mat(0, 3), mat(1, 3), mat(2, 3));
 }
