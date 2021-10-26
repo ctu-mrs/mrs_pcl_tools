@@ -675,17 +675,18 @@ int main(int argc, char **argv) {
 
   /*//{ Fill transform buffer with all the transforms from the rosbag */
   ROS_INFO("Filling transform buffer.");
-  const std::vector<std::string> tf_topics = {"/tf", "/tf_static"};
-  rosbag::View                   tf_view   = rosbag::View(bag, rosbag::TopicQuery(tf_topics));
+  rosbag::View tf_dynamic = rosbag::View(bag, rosbag::TopicQuery(std::vector<std::string>{"/tf"}));
+  rosbag::View tf_static  = rosbag::View(bag, rosbag::TopicQuery(std::vector<std::string>{"/tf_static"}));
 
-  const double rosbag_start_time_sec = tf_view.getBeginTime().toSec() + args.start_time;
+  const double rosbag_start_time_sec = tf_dynamic.getBeginTime().toSec() + args.start_time;
   rosbag_start_time.fromSec(rosbag_start_time_sec);
-  const ros::Duration bag_duration = tf_view.getEndTime() - rosbag_start_time;
+  const ros::Duration bag_duration = tf_dynamic.getEndTime() - rosbag_start_time;
 
   tf_buffer   = std::make_unique<tf2_ros::Buffer>(ros::Duration(2.0 * bag_duration.toSec()));
   tf_listener = std::make_unique<tf2_ros::TransformListener>(*tf_buffer);
 
-  for (const rosbag::MessageInstance &msg : tf_view) {
+  // Read static tfs
+  for (const rosbag::MessageInstance &msg : tf_static) {
 
     if (!ros::ok()) {
       ros::shutdown();
@@ -694,9 +695,24 @@ int main(int argc, char **argv) {
 
     const tf2_msgs::TFMessage::ConstPtr tf_msg = msg.instantiate<tf2_msgs::TFMessage>();
     if (tf_msg) {
-      const bool is_static = msg.getTopic() == "/tf_static" || msg.getTopic() == "tf_static";
       for (const auto &transform : tf_msg->transforms) {
-        tf_buffer->setTransform(transform, "default_authority", is_static);
+        tf_buffer->setTransform(transform, "default_authority", true);
+      }
+    }
+  }
+
+  // Read dynamic tfs
+  for (const rosbag::MessageInstance &msg : tf_dynamic) {
+
+    if (!ros::ok()) {
+      ros::shutdown();
+      return -1;
+    }
+
+    const tf2_msgs::TFMessage::ConstPtr tf_msg = msg.instantiate<tf2_msgs::TFMessage>();
+    if (tf_msg) {
+      for (const auto &transform : tf_msg->transforms) {
+        tf_buffer->setTransform(transform, "default_authority", false);
       }
     }
   }
