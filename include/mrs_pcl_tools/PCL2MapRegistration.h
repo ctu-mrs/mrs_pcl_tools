@@ -5,6 +5,7 @@
 
 #include <mutex>
 #include <tuple>
+#include <set>
 
 #include <std_srvs/Trigger.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -17,16 +18,27 @@
 #include <pcl/registration/icp.h>
 #include <pcl/segmentation/sac_segmentation.h>
 
+#include <pcl/surface/concave_hull.h>
+
 #include "mrs_pcl_tools/pcl2map_registration_dynparamConfig.h"
 #include "mrs_pcl_tools/SrvRegisterPointCloudByName.h"
 #include "mrs_pcl_tools/SrvRegisterPointCloudOffline.h"
 
-typedef pcl::FPFHSignature33       feat_FPFH;
-typedef pcl::PointCloud<feat_FPFH> PC_FPFH;
+typedef pcl::FPFHSignature33          feat_FPFH;
+typedef pcl::PointCloud<feat_FPFH>    PC_FPFH;
+typedef std::pair<uint32_t, uint32_t> EDGE;
 //}
 
 namespace mrs_pcl_tools
 {
+
+struct EDGE_COMP
+{
+  template <typename T>
+  bool operator()(const T &l, const T &r) const {
+    return (l.first == r.first && l.second == r.second) || (l.first == r.second && l.second == r.first);
+  }
+};
 
 /* class PCL2MapRegistration //{ */
 class PCL2MapRegistration : public nodelet::Nodelet {
@@ -51,18 +63,24 @@ private:
   ros::Publisher _pub_cloud_target;
   ros::Publisher _pub_cloud_aligned;
 
+  ros::Publisher _pub_dbg_hull_src;
+  ros::Publisher _pub_dbg_hull_target;
+
   std::string _frame_map;
   std::string _path_map;
   std::string _path_pcl;
   std::string _topic_pc2;
+  std::string _cloud_correlation_method;
 
   int   _registration_method_initial;
   int   _registration_method_fine_tune;
   bool  _use_init_guess;
   float _clouds_voxel_leaf;
   float _normal_estimation_radius;
-  float _cloud_correlation_z_crop_offset;
   float _min_convergence_score;
+
+  float  _cloud_correlation_z_crop_offset;
+  double _cloud_correlation_poly_bary_alpha;
 
   float _fpfh_search_rad           = 3.5;
   float _fpfh_similarity_threshold = 0.9;
@@ -113,7 +131,10 @@ private:
 
   PC_NORM::Ptr                loadPcWithNormals(const std::string &pcd_file);
   std::optional<PC_NORM::Ptr> subscribeSinglePointCloudMsg(const std::string &topic);
-  Eigen::Matrix4f             correlateCloudToCloudByCentroid(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
+
+  Eigen::Matrix4f correlateCloudToCloud(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ);
+  Eigen::Matrix4f correlateCloudToCloudByCentroid(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ);
+  Eigen::Matrix4f correlateCloudToCloudByPolylineBarycenter(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ);
 
   std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
   bool callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterPointCloudOffline::Request &req, mrs_pcl_tools::SrvRegisterPointCloudOffline::Response &res);
@@ -132,6 +153,8 @@ private:
   const geometry_msgs::Transform matrixToTfTransform(const Eigen::Matrix4f &mat);
 
   void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc);
+
+  PC_NORM::Ptr getConcaveHull(const PC_NORM::Ptr &pc, const double alpha = 0.1);
 };
 //}
 

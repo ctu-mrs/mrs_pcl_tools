@@ -23,7 +23,8 @@ void PCL2MapRegistration::onInit() {
   param_loader.loadParam("use_init_guess", _use_init_guess, false);
   param_loader.loadParam("clouds_voxel_leaf", _clouds_voxel_leaf, 0.3f);
   param_loader.loadParam("normal_estimation_radius", _normal_estimation_radius, 0.25f);
-  param_loader.loadParam("cloud_correlation_z_crop_offset", _cloud_correlation_z_crop_offset, 2.0f);
+  param_loader.loadParam("cloud_correlation/method", _cloud_correlation_method, std::string("centroid"));
+  param_loader.loadParam("cloud_correlation/z_crop_offset", _cloud_correlation_z_crop_offset, 2.0f);
   param_loader.loadParam("min_convergence_score", _min_convergence_score, 0.5f);
 
   // Parameters: ICPN
@@ -45,9 +46,20 @@ void PCL2MapRegistration::onInit() {
   param_loader.loadParam("sicpn/ransac_iter", _sicpn_ransac_iter);
   param_loader.loadParam("sicpn/use_recip_corr", _sicpn_use_recip_corr);
 
+  const std::vector<std::string> supported_correlation_methods = {"polyline_barycenter", "centroid"};
+  if (std::find(std::begin(supported_correlation_methods), std::end(supported_correlation_methods), _cloud_correlation_method) ==
+      std::end(supported_correlation_methods)) {
+    NODELET_ERROR("[PCL2MapRegistration]: Cloud correlation method (%s) is not supported.", _cloud_correlation_method.c_str());
+    ros::shutdown();
+    return;
+  } else if (_cloud_correlation_method == "polyline_barycenter") {
+    param_loader.loadParam("cloud_correlation/polyline_barycenter/alpha", _cloud_correlation_poly_bary_alpha);
+  }
+
   if (!param_loader.loadedSuccessfully()) {
     NODELET_ERROR("[PCL2MapRegistration]: Some compulsory parameters were not loaded successfully, ending the node");
     ros::shutdown();
+    return;
   }
 
   {
@@ -64,6 +76,9 @@ void PCL2MapRegistration::onInit() {
   _pub_cloud_source  = _nh.advertise<sensor_msgs::PointCloud2>("cloud_source_out", 1);
   _pub_cloud_target  = _nh.advertise<sensor_msgs::PointCloud2>("cloud_target_out", 1);
   _pub_cloud_aligned = _nh.advertise<sensor_msgs::PointCloud2>("cloud_aligned_out", 1);
+
+  _pub_dbg_hull_src    = _nh.advertise<sensor_msgs::PointCloud2>("dbg_hull_source_out", 1);
+  _pub_dbg_hull_target = _nh.advertise<sensor_msgs::PointCloud2>("dbg_hull_target_out", 1);
 
   reconfigure_server_.reset(new ReconfigureServer(config_mutex_, _nh));
   ReconfigureServer::CallbackType f = boost::bind(&PCL2MapRegistration::callbackReconfigure, this, _1, _2);
@@ -120,8 +135,8 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
 
   } else {
 
-    // Match centroids and move pc_src min-z to pc_targ min-z
-    T_corr = correlateCloudToCloudByCentroid(pc_src_filt, pc_targ_filt);
+    // Match clouds
+    T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
   }
 
   // Publish input data
@@ -191,14 +206,14 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
     if (pc_src->points.size() == 0) {
       res.success = false;
       res.message = "Received point cloud with 0 points.";
-      ROS_ERROR("[PCL2MapRegistration] Requested cloud registration to map, but the received data on topic (%s) contain 0 points.", topic.c_str());
+      NODELET_ERROR("[PCL2MapRegistration] Requested cloud registration to map, but the received data on topic (%s) contain 0 points.", topic.c_str());
       return false;
     }
   } else {
     res.success = false;
     res.message = "No point cloud data received.";
-    ROS_ERROR("[PCL2MapRegistration] Requested cloud registration to map, but did not receive data (for %0.2f sec) on topic: %s.",
-              _SUBSCRIBE_MSG_TIMEOUT.toSec(), topic.c_str());
+    NODELET_ERROR("[PCL2MapRegistration] Requested cloud registration to map, but did not receive data (for %0.2f sec) on topic: %s.",
+                  _SUBSCRIBE_MSG_TIMEOUT.toSec(), topic.c_str());
     return false;
   }
 
@@ -223,8 +238,8 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
 
   } else {
 
-    // Match centroids and move pc_src min-z to pc_targ min-z
-    T_corr = correlateCloudToCloudByCentroid(pc_src_filt, pc_targ_filt);
+    // Match clouds
+    T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
   }
 
   // Publish input data
@@ -274,28 +289,28 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     std::scoped_lock lock(_mutex_registration);
     switch (_registration_method_initial) {
       case 0:
-        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: FPFH");
+        NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: FPFH");
         std::tie(converged, score, T_init, pc_aligned) = pcl2map_fpfh(pc_src, pc_targ);
         break;
       case 1:
-        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: NDT");
+        NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: NDT");
         std::tie(converged, score, T_init, pc_aligned) = pcl2map_ndt(pc_src, pc_targ);
         break;
       case 2:
-        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: GICP");
+        NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: GICP");
         std::tie(converged, score, T_init, pc_aligned) = pcl2map_gicp(pc_src, pc_targ);
         break;
       case 3:
-        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: ICPN");
+        NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: ICPN");
         std::tie(converged, score, T_init, pc_aligned) = pcl2map_icpn(pc_src, pc_targ);
         break;
       case 4:
-        ROS_INFO("[PCL2MapRegistration] Registration (initial) with: SICPN");
+        NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: SICPN");
         std::tie(converged, score, T_init, pc_aligned) = pcl2map_sicpn(pc_src, pc_targ);
         break;
       default:
-        ROS_ERROR("[PCL2MapRegistration] Unknown registration (initial) method of type: %d. Allowed: {0=FPFH, 1=NDT, 2=GICP, 3=ICPN, 4=SICPN}",
-                  _registration_method_initial);
+        NODELET_ERROR("[PCL2MapRegistration] Unknown registration (initial) method of type: %d. Allowed: {0=FPFH, 1=NDT, 2=GICP, 3=ICPN, 4=SICPN}",
+                      _registration_method_initial);
         return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (initial) method.", Eigen::Matrix4f::Identity());
     }
   }
@@ -307,7 +322,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
   if (converged) {
 
     // Print transformation matrix
-    ROS_INFO("[PCL2MapRegistration] Registration (initial) converged with score: %0.2f", score);
+    NODELET_INFO("[PCL2MapRegistration] Registration (initial) converged with score: %0.2f", score);
     printEigenMatrix(T_init, "Transformation matrix (initial):");
     std::get<2>(ret) = T_init;
 
@@ -321,37 +336,38 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     const bool      perform_fine_tuning = _registration_method_fine_tune >= 0 && _registration_method_fine_tune <= 4;
 
     if (_registration_method_fine_tune == _registration_method_initial) {
-      ROS_INFO("[PCL2MapRegistration] No registration (fine tuning) as method matches registration (initial).");
+      NODELET_INFO("[PCL2MapRegistration] No registration (fine tuning) as method matches registration (initial).");
     } else {
 
       std::scoped_lock lock(_mutex_registration);
       switch (_registration_method_fine_tune) {
         case -1:
-          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: None");
+          NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: None");
           break;
         case 0:
-          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: FPFH");
+          NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: FPFH");
           std::tie(converged, score, T_fine, pc_aligned) = pcl2map_fpfh(pc_aligned, pc_targ, false);
           break;
         case 1:
-          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: NDT");
+          NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: NDT");
           std::tie(converged, score, T_fine, pc_aligned) = pcl2map_ndt(pc_aligned, pc_targ, false);
           break;
         case 2:
-          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: GICP");
+          NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: GICP");
           std::tie(converged, score, T_fine, pc_aligned) = pcl2map_gicp(pc_aligned, pc_targ, false);
           break;
         case 3:
-          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: ICPN");
+          NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: ICPN");
           std::tie(converged, score, T_fine, pc_aligned) = pcl2map_icpn(pc_aligned, pc_targ, false);
           break;
         case 4:
-          ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) with: SICPN");
+          NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: SICPN");
           std::tie(converged, score, T_fine, pc_aligned) = pcl2map_sicpn(pc_aligned, pc_targ);
           break;
         default:
-          ROS_ERROR("[PCL2MapRegistration] Unknown registration (fine tuning) method of type: %d. Allowed: {-1=None, 0=FPFH, 1=NDT, 2=GICP, 3=ICPN, 4=SICPN}",
-                    _registration_method_fine_tune);
+          NODELET_ERROR(
+              "[PCL2MapRegistration] Unknown registration (fine tuning) method of type: %d. Allowed: {-1=None, 0=FPFH, 1=NDT, 2=GICP, 3=ICPN, 4=SICPN}",
+              _registration_method_fine_tune);
           return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (fine tuning) method.", Eigen::Matrix4f::Identity());
       }
     }
@@ -361,7 +377,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
 
       if (converged) {
         // Print transformation matrix
-        ROS_INFO("[PCL2MapRegistration] Registration (fine tuning) converged with score: %0.2f", score);
+        NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) converged with score: %0.2f", score);
         printEigenMatrix(T_fine, "Transformation matrix (fine tuning):");
 
         // Publish aligned cloud
@@ -370,7 +386,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
         publishCloud(_pub_cloud_aligned, pc_aligned);
 
       } else {
-        ROS_ERROR("[PCL2MapRegistration] Registration (fine tuning) did not converge -- try to change registration (fine tuning) parameters.");
+        NODELET_ERROR("[PCL2MapRegistration] Registration (fine tuning) did not converge -- try to change registration (fine tuning) parameters.");
         std::get<1>(ret) = "Registered (fine tuning) dit not converge.";
       }
     }
@@ -381,13 +397,13 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     printEigenMatrix(T, "Transformation matrix (final):");
 
   } else {
-    ROS_ERROR("[PCL2MapRegistration] Registration (initial) did not converge -- try to change registration (initial) parameters.");
+    NODELET_ERROR("[PCL2MapRegistration] Registration (initial) did not converge -- try to change registration (initial) parameters.");
     return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Registered (initial) dit not converge.", Eigen::Matrix4f::Identity());
   }
 
   if (converged && score > _min_convergence_score) {
     converged = false;
-    ROS_ERROR("[PCL2MapRegistration] Registration (final) converged with low score (score: %0.2f, min_score: %0.2f)", score, _min_convergence_score);
+    NODELET_ERROR("[PCL2MapRegistration] Registration (final) converged with low score (score: %0.2f, min_score: %0.2f)", score, _min_convergence_score);
   }
 
   std::get<0>(ret) = converged;
@@ -499,10 +515,10 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 
   // Calculating required rigid transform to align the input cloud to the target cloud.
   if (enable_init_guess && _use_init_guess) {
-    ROS_INFO("[PCL2MapRegistration] NDT -- using initial guess.");
+    NODELET_INFO("[PCL2MapRegistration] NDT -- using initial guess.");
     ndt.align(*pc_aligned, _initial_guess);
   } else {
-    ROS_INFO("[PCL2MapRegistration] NDT -- no initial guess given.");
+    NODELET_INFO("[PCL2MapRegistration] NDT -- no initial guess given.");
     ndt.align(*pc_aligned);
   }
 
@@ -522,7 +538,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
 
   // Estimate FPFH features
-  ROS_INFO("[PCL2MapRegistration] FPFH -- estimating FPFH features");
+  NODELET_INFO("[PCL2MapRegistration] FPFH -- estimating FPFH features");
   PC_FPFH::Ptr                                        pc_fpfh_src  = boost::make_shared<PC_FPFH>();
   PC_FPFH::Ptr                                        pc_fpfh_targ = boost::make_shared<PC_FPFH>();
   pcl::FPFHEstimationOMP<pt_NORM, pt_NORM, feat_FPFH> fest;
@@ -535,7 +551,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   fest.compute(*pc_fpfh_targ);
 
   // Perform alignment
-  ROS_INFO("[PCL2MapRegistration] FPFH -- aligning");
+  NODELET_INFO("[PCL2MapRegistration] FPFH -- aligning");
   pcl::SampleConsensusPrerejective<pt_NORM, pt_NORM, feat_FPFH> align;
   align.setInputSource(pc_src);
   align.setSourceFeatures(pc_fpfh_src);
@@ -549,10 +565,10 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   align.setInlierFraction(_fpfh_inlier_fraction);                 // Required inlier fraction for accepting a pose hypothesis
 
   if (enable_init_guess && _use_init_guess) {
-    ROS_INFO("[PCL2MapRegistration] FPFH -- using initial guess.");
+    NODELET_INFO("[PCL2MapRegistration] FPFH -- using initial guess.");
     align.align(*pc_aligned, _initial_guess);
   } else {
-    ROS_INFO("[PCL2MapRegistration] FPFH -- no initial guess given.");
+    NODELET_INFO("[PCL2MapRegistration] FPFH -- no initial guess given.");
     align.align(*pc_aligned);
   }
 
@@ -571,7 +587,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   // Create filtered objects
   PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
 
-  ROS_INFO("[PCL2MapRegistration] GICP -- aligning");
+  NODELET_INFO("[PCL2MapRegistration] GICP -- aligning");
   pcl::GeneralizedIterativeClosestPoint<pt_NORM, pt_NORM> gicp;
   gicp.setInputSource(pc_src);
   gicp.setInputTarget(pc_targ);
@@ -585,10 +601,10 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   gicp.setUseReciprocalCorrespondences(_gicp_use_recip_corr);
 
   if (enable_init_guess && _use_init_guess) {
-    ROS_INFO("[PCL2MapRegistration] GICP -- using initial guess.");
+    NODELET_INFO("[PCL2MapRegistration] GICP -- using initial guess.");
     gicp.align(*pc_aligned, _initial_guess);
   } else {
-    ROS_INFO("[PCL2MapRegistration] GICP -- no initial guess given.");
+    NODELET_INFO("[PCL2MapRegistration] GICP -- no initial guess given.");
     gicp.align(*pc_aligned);
   }
 
@@ -620,10 +636,10 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   icpn.setUseReciprocalCorrespondences(_icpn_use_recip_corr);
 
   if (enable_init_guess && _use_init_guess) {
-    ROS_INFO("[PCL2MapRegistration] ICPN -- using initial guess.");
+    NODELET_INFO("[PCL2MapRegistration] ICPN -- using initial guess.");
     icpn.align(*pc_aligned, _initial_guess);
   } else {
-    ROS_INFO("[PCL2MapRegistration] ICPN -- no initial guess given.");
+    NODELET_INFO("[PCL2MapRegistration] ICPN -- no initial guess given.");
     icpn.align(*pc_aligned);
   }
 
@@ -662,7 +678,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   for (unsigned int i = 0; i < _sicpn_number_of_samples; i++) {
 
     // Create initial guess as a rotation by `heading` around pc_src centroid
-    const float             heading = (float)i * 2.0f * M_PI / (float)_sicpn_number_of_samples;
+    const float             heading = float(double(i) * 2.0 * M_PI / double(_sicpn_number_of_samples));
     const Eigen::AngleAxisf heading_ax(heading, Eigen::Vector3f::UnitZ());
     const Eigen::Matrix4f   T_rot = getRotationMatrixAroundPoint(heading_ax.matrix(), centroid_pc_src);
 
@@ -672,10 +688,10 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 
     // Store best score
     if (sicpn.hasConverged()) {
-      const float score = sicpn.getFitnessScore();
-      ROS_INFO("[PCL2MapRegistration] Registration (heading: %0.2f) converged with score: %0.2f", heading, score);
+      const double score = sicpn.getFitnessScore();
+      NODELET_INFO("[PCL2MapRegistration] Registration (heading: %0.2f) converged with score: %0.2f", heading, score);
       if (score < score_best) {
-        score_best      = score;
+        score_best      = float(score);
         T_best          = sicpn.getFinalTransformation();
         pc_aligned_best = pc_aligned;
       }
@@ -691,7 +707,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 
   if (std::get<0>(ret)) {
 
-    ROS_INFO("[PCL2MapRegistration] Registration (SICPN) converged with score: %0.2f", score_best);
+    NODELET_INFO("[PCL2MapRegistration] Registration (SICPN) converged with score: %0.2f", score_best);
 
     // Publish aligned cloud
     pc_aligned_best->header.stamp    = pc_src->header.stamp;
@@ -699,7 +715,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
     publishCloud(_pub_cloud_aligned, pc_aligned_best);
 
   } else {
-    ROS_ERROR("[PCL2MapRegistration] Registration (SICPN) did not converge -- try to change registration (SICPN) parameters.");
+    NODELET_ERROR("[PCL2MapRegistration] Registration (SICPN) did not converge -- try to change registration (SICPN) parameters.");
   }
 
   t.toc_print("[PCL2MapRegistration] SICPN registration run time");
@@ -708,8 +724,21 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 }
 /*//}*/
 
+/*//{ correlateCloudToCloud() */
+Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
+
+  if (_cloud_correlation_method == "polyline_barycenter") {
+    NODELET_INFO("[PCL2MapRegistration] Correlating clouds by their polyline barycenter.");
+    return correlateCloudToCloudByPolylineBarycenter(pc_src, pc_targ);
+  }
+
+  NODELET_INFO("[PCL2MapRegistration] Correlating clouds by their centroids.");
+  return correlateCloudToCloudByCentroid(pc_src, pc_targ);
+}
+/*//}*/
+
 /*//{ correlateCloudToCloudByCentroid() */
-Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloudByCentroid(PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ) {
+Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloudByCentroid(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
 
   // Compute centroids of both clouds
   Eigen::Vector4f centroid_src;
@@ -747,9 +776,74 @@ Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloudByCentroid(PC_NORM::Pt
 }
 /*//}*/
 
+/*//{ correlateCloudToCloudByPolylineBarycenter() */
+Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloudByPolylineBarycenter(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
+  // TODO: precompute everything for global map just once
+
+  // Compute concave hulls of both clouds
+  const PC_NORM::Ptr pc_src_concave_hull  = getConcaveHull(pc_src, _cloud_correlation_poly_bary_alpha);
+  const PC_NORM::Ptr pc_targ_concave_hull = getConcaveHull(pc_targ, _cloud_correlation_poly_bary_alpha);
+
+  pc_src_concave_hull->header.frame_id  = _frame_map;
+  pc_targ_concave_hull->header.frame_id = _frame_map;
+  publishCloud(_pub_dbg_hull_src, pc_src_concave_hull);
+  publishCloud(_pub_dbg_hull_target, pc_targ_concave_hull);
+
+  // TODO: Triangulate both point clouds
+  // TODO: Compute polyline barycenter of both point clouds
+
+  // Compute min/max Z axis points
+  pt_NORM pt_min_src;
+  pt_NORM pt_min_targ;
+  pt_NORM pt_max_src;
+  pt_NORM pt_max_targ;
+  pcl::getMinMax3D(*pc_src, pt_min_src, pt_max_src);
+  pcl::getMinMax3D(*pc_targ, pt_min_targ, pt_max_targ);
+
+  // TODO: Build transformation matrix
+  // TODO: Transform pc_src to pc_targ
+
+  // TODO: Crop pc_targ in z-axis w.r.t. pc_src (assumption that we takeoff from ground and clouds roll/pitch angles can be neglected)
+
+  // TODO: return
+  return Eigen::Matrix4f::Identity();
+}
+/*//}*/
+
+/*//{ getConcaveHull() */
+PC_NORM::Ptr PCL2MapRegistration::getConcaveHull(const PC_NORM::Ptr &pc, const double alpha) {
+  PC_NORM::Ptr cloud_hull = boost::make_shared<PC_NORM>();
+
+  pcl::PolygonMesh mesh;
+
+  pcl::ConcaveHull<pt_NORM> hull;
+  hull.setInputCloud(pc);
+  hull.setAlpha(alpha);
+  hull.setKeepInformation(true);
+  hull.reconstruct(mesh);
+  hull.reconstruct(*cloud_hull);
+
+  std::set<EDGE, EDGE_COMP> edges;
+  for (const auto& polygon : mesh.polygons) {
+    const auto &vertices = polygon.vertices;
+    edges.insert({vertices.at(0), vertices.at(1)});
+    edges.insert({vertices.at(0), vertices.at(2)});
+    edges.insert({vertices.at(1), vertices.at(2)});
+  }
+
+  for (const auto &edge : edges) {
+    std::cout << edge.first << " -> " << edge.second;
+  }
+
+  /* std::cout << mesh << std::endl; */
+
+  return cloud_hull;
+}
+/*//}*/
+
 /*//{ loadPcWithNormals() */
 PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &pcd_file) {
-  ROS_INFO("[PCL2MapRegistration] Loading PCD file: %s.", pcd_file.c_str());
+  NODELET_INFO("[PCL2MapRegistration] Loading PCD file: %s.", pcd_file.c_str());
 
   PC_NORM::Ptr pc_norm = boost::make_shared<PC_NORM>();
 
@@ -757,10 +851,10 @@ PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &pcd_file)
 
     // Load points with normals
     if (pcl::io::loadPCDFile<pt_NORM>(pcd_file, *pc_norm) < 0) {
-      ROS_ERROR("[PCL2MapRegistration] Couldn't read PCD (PointNormal) file: %s.", pcd_file.c_str());
+      NODELET_ERROR("[PCL2MapRegistration] Couldn't read PCD (PointNormal) file: %s.", pcd_file.c_str());
       ros::shutdown();
     }
-    ROS_INFO("[PCL2MapRegistration] Loaded PointNormal PC with %ld points.", pc_norm->points.size());
+    NODELET_INFO("[PCL2MapRegistration] Loaded PointNormal PC with %ld points.", pc_norm->points.size());
 
   } else {
 
@@ -771,11 +865,11 @@ PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &pcd_file)
     if (ret) {
       pc_xyz = ret.value();
     } else {
-      ROS_ERROR("[PCL2MapRegistration] Couldn't read PCD (PointXYZ) file: %s.", pcd_file.c_str());
+      NODELET_ERROR("[PCL2MapRegistration] Couldn't read PCD (PointXYZ) file: %s.", pcd_file.c_str());
       ros::shutdown();
     }
 
-    ROS_INFO("[PCL2MapRegistration] Loaded XYZ PC with %ld points. Estimating the PC normals.", pc_xyz->points.size());
+    NODELET_INFO("[PCL2MapRegistration] Loaded XYZ PC with %ld points. Estimating the PC normals.", pc_xyz->points.size());
 
     // Estimate normals
     PC_NORM::Ptr normals = estimateNormals(pc_xyz, _normal_estimation_radius);
@@ -877,7 +971,7 @@ void PCL2MapRegistration::publishCloud(const ros::Publisher &pub, const PC_NORM:
       pub.publish(cloud);
     }
     catch (...) {
-      ROS_ERROR("[PCL2MapRegistration::publishCloud]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+      NODELET_ERROR("[PCL2MapRegistration::publishCloud]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
     }
   }
 }

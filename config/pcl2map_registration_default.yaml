@@ -5,8 +5,14 @@ method: # [FPFH, NDT, GICP, ICPN, SICPN]
 use_init_guess: false
 clouds_voxel_leaf: 0.3
 normal_estimation_radius: 0.25
-cloud_correlation_z_crop_offset: 2.0
 min_convergence_score: 0.5
+
+cloud_correlation:
+  method: "polyline_barycenter" # [polyline_barycenter, centroid]
+  z_crop_offset: 2.0
+
+  polyline_barycenter:
+    alpha: 0.1
 
 icpn:
   max_corr_dist: 4.0
