@@ -77,8 +77,8 @@ void PCL2MapRegistration::onInit() {
   _pub_cloud_target  = _nh.advertise<sensor_msgs::PointCloud2>("cloud_target_out", 1);
   _pub_cloud_aligned = _nh.advertise<sensor_msgs::PointCloud2>("cloud_aligned_out", 1);
 
-  _pub_dbg_hull_src    = _nh.advertise<sensor_msgs::PointCloud2>("dbg_hull_source_out", 1);
-  _pub_dbg_hull_target = _nh.advertise<sensor_msgs::PointCloud2>("dbg_hull_target_out", 1);
+  _pub_dbg_hull_src    = _nh.advertise<visualization_msgs::MarkerArray>("dbg_hull_source_out", 1);
+  _pub_dbg_hull_target = _nh.advertise<visualization_msgs::MarkerArray>("dbg_hull_target_out", 1);
 
   reconfigure_server_.reset(new ReconfigureServer(config_mutex_, _nh));
   ReconfigureServer::CallbackType f = boost::bind(&PCL2MapRegistration::callbackReconfigure, this, _1, _2);
@@ -725,27 +725,21 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /*//{ correlateCloudToCloud() */
-Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
+Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr &pc_src, PC_NORM::Ptr &pc_targ) {
+
+  std::pair<Eigen::Vector3f, Eigen::Vector3f> origins;
 
   if (_cloud_correlation_method == "polyline_barycenter") {
     NODELET_INFO("[PCL2MapRegistration] Correlating clouds by their polyline barycenter.");
-    return correlateCloudToCloudByPolylineBarycenter(pc_src, pc_targ);
+    origins = getPolylineBarycenters(pc_src, pc_targ);
+  } else {
+    NODELET_INFO("[PCL2MapRegistration] Correlating clouds by their centroids.");
+    origins = getCentroids(pc_src, pc_targ);
   }
 
-  NODELET_INFO("[PCL2MapRegistration] Correlating clouds by their centroids.");
-  return correlateCloudToCloudByCentroid(pc_src, pc_targ);
-}
-/*//}*/
-
-/*//{ correlateCloudToCloudByCentroid() */
-Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloudByCentroid(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
-
-  // Compute centroids of both clouds
-  Eigen::Vector4f centroid_src;
-  Eigen::Vector4f centroid_targ;
-  pcl::compute3DCentroid(*pc_src, centroid_src);
-  pcl::compute3DCentroid(*pc_targ, centroid_targ);
-  const Eigen::Vector4f centroid_diff = centroid_targ - centroid_src;
+  const Eigen::Vector3f origin_src  = origins.first;
+  const Eigen::Vector3f origin_targ = origins.second;
+  const Eigen::Vector3f origin_diff = origin_targ - origin_src;
 
   // Compute min/max Z axis points
   pt_NORM pt_min_src;
@@ -757,8 +751,8 @@ Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloudByCentroid(const PC_NO
 
   // Build transformation matrix
   Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
-  T(0, 3)           = centroid_diff.x();
-  T(1, 3)           = centroid_diff.y();
+  T(0, 3)           = origin_diff.x();
+  T(1, 3)           = origin_diff.y();
   T(2, 3)           = pt_min_targ.z - pt_min_src.z;
 
   // Transform pc_src to pc_targ
@@ -776,68 +770,124 @@ Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloudByCentroid(const PC_NO
 }
 /*//}*/
 
-/*//{ correlateCloudToCloudByPolylineBarycenter() */
-Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloudByPolylineBarycenter(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
+/*//{ getCentroids() */
+std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getCentroids(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
+  return {getCentroid(pc_src), getCentroid(pc_targ)};
+}
+/*//}*/
+
+/*//{ getPolylineBarycenters() */
+std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBarycenters(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
   // TODO: precompute everything for global map just once
 
   // Compute concave hulls of both clouds
-  const PC_NORM::Ptr pc_src_concave_hull  = getConcaveHull(pc_src, _cloud_correlation_poly_bary_alpha);
-  const PC_NORM::Ptr pc_targ_concave_hull = getConcaveHull(pc_targ, _cloud_correlation_poly_bary_alpha);
+  const auto &[pc_src_concave_hull, pc_src_hull_edges]   = getConcaveHull(pc_src, _cloud_correlation_poly_bary_alpha);
+  const auto &[pc_targ_concave_hull, pc_targ_hull_edges] = getConcaveHull(pc_targ, _cloud_correlation_poly_bary_alpha);
 
   pc_src_concave_hull->header.frame_id  = _frame_map;
   pc_targ_concave_hull->header.frame_id = _frame_map;
-  publishCloud(_pub_dbg_hull_src, pc_src_concave_hull);
-  publishCloud(_pub_dbg_hull_target, pc_targ_concave_hull);
+  publishHull(_pub_dbg_hull_src, pc_src_concave_hull, pc_src_hull_edges, Eigen::Vector3f(1, 0, 0));
+  publishHull(_pub_dbg_hull_target, pc_targ_concave_hull, pc_targ_hull_edges, Eigen::Vector3f(0, 0, 1));
 
-  // TODO: Triangulate both point clouds
-  // TODO: Compute polyline barycenter of both point clouds
+  // Compute polyline barycenter of both point clouds
+  const Eigen::Vector3f &barycenter_src  = getPolylineBarycenter(pc_src_hull_edges);
+  const Eigen::Vector3f &barycenter_targ = getPolylineBarycenter(pc_targ_hull_edges);
 
-  // Compute min/max Z axis points
-  pt_NORM pt_min_src;
-  pt_NORM pt_min_targ;
-  pt_NORM pt_max_src;
-  pt_NORM pt_max_targ;
-  pcl::getMinMax3D(*pc_src, pt_min_src, pt_max_src);
-  pcl::getMinMax3D(*pc_targ, pt_min_targ, pt_max_targ);
-
-  // TODO: Build transformation matrix
-  // TODO: Transform pc_src to pc_targ
-
-  // TODO: Crop pc_targ in z-axis w.r.t. pc_src (assumption that we takeoff from ground and clouds roll/pitch angles can be neglected)
-
-  // TODO: return
-  return Eigen::Matrix4f::Identity();
+  return {barycenter_src, barycenter_targ};
 }
 /*//}*/
 
 /*//{ getConcaveHull() */
-PC_NORM::Ptr PCL2MapRegistration::getConcaveHull(const PC_NORM::Ptr &pc, const double alpha) {
-  PC_NORM::Ptr cloud_hull = boost::make_shared<PC_NORM>();
+std::tuple<PC_NORM::Ptr, std::vector<std::pair<pt_NORM, pt_NORM>>> PCL2MapRegistration::getConcaveHull(const PC_NORM::Ptr &pc, const double alpha) {
 
-  pcl::PolygonMesh mesh;
+  PC_NORM::Ptr               cloud_hull = boost::make_shared<PC_NORM>();
+  std::vector<pcl::Vertices> polygons;
 
   pcl::ConcaveHull<pt_NORM> hull;
   hull.setInputCloud(pc);
   hull.setAlpha(alpha);
   hull.setKeepInformation(true);
-  hull.reconstruct(mesh);
-  hull.reconstruct(*cloud_hull);
+  hull.setDimension(3);
+  hull.reconstruct(*cloud_hull, polygons);
 
-  std::set<EDGE, EDGE_COMP> edges;
-  for (const auto& polygon : mesh.polygons) {
+  /*//{ Get set of pair indices (edges) in the hull */
+  typedef std::pair<uint32_t, uint32_t> EDGE;
+  auto                                  edge_cmp = [](const EDGE &l, const EDGE &r) {
+    if ((l.first == r.first && l.second == r.second) || (l.first == r.second && l.second == r.first)) {
+      return false;
+    }
+    return l.first < r.first;
+  };
+
+  std::set<EDGE, decltype(edge_cmp)> edges_idxs(edge_cmp);
+
+  for (const auto &polygon : polygons) {
+
+    if (polygon.vertices.size() != 3) {
+      NODELET_ERROR("[PCL2MapRegistration] Number of vertices does not match 3! Should not happen, something is wrong.");
+      continue;
+    }
+
     const auto &vertices = polygon.vertices;
-    edges.insert({vertices.at(0), vertices.at(1)});
-    edges.insert({vertices.at(0), vertices.at(2)});
-    edges.insert({vertices.at(1), vertices.at(2)});
+
+    /* NODELET_ERROR("inserting:"); */
+    /* NODELET_ERROR(" 1) %d -> %d)", vertices.at(0), vertices.at(1)); */
+    /* NODELET_ERROR(" 2) %d -> %d)", vertices.at(0), vertices.at(2)); */
+    /* NODELET_ERROR(" 3) %d -> %d)", vertices.at(1), vertices.at(2)); */
+    edges_idxs.insert({vertices.at(0), vertices.at(1)});
+    edges_idxs.insert({vertices.at(0), vertices.at(2)});
+    edges_idxs.insert({vertices.at(1), vertices.at(2)});
   }
+  /*//}*/
+
+  // Convert pair indices to 3D point format for edge visualization
+  unsigned int                             it = 0;
+  std::vector<std::pair<pt_NORM, pt_NORM>> edges_points(edges_idxs.size());
+  for (const auto &edge_idx : edges_idxs) {
+    const auto &point_A   = cloud_hull->points.at(edge_idx.first);
+    const auto &point_B   = cloud_hull->points.at(edge_idx.second);
+    edges_points.at(it++) = {point_A, point_B};
+
+    /* NODELET_ERROR("%d: (%.2f, %.2f, %.2f) -> %d: (%.2f, %.2f, %.2f)", edge_idx.first, point_A.x, point_A.y, point_A.z, edge_idx.second, point_B.x, point_B.y,
+     */
+    /* point_B.z); */
+  }
+
+  /* NODELET_ERROR("cloud hull size: %ld", cloud_hull->size()); */
+
+  return std::make_tuple(cloud_hull, edges_points);
+}
+/*//}*/
+
+/*//{ getCentroid() */
+Eigen::Vector3f PCL2MapRegistration::getCentroid(const PC_NORM::Ptr &pc) {
+
+  Eigen::Vector4f centroid;
+  pcl::compute3DCentroid(*pc, centroid);
+
+  return Eigen::Vector3f(centroid.x(), centroid.y(), centroid.z());
+}
+/*//}*/
+
+/*//{ getPolylineBarycenter() */
+Eigen::Vector3f PCL2MapRegistration::getPolylineBarycenter(const std::vector<std::pair<pt_NORM, pt_NORM>> &edges) {
+
+  Eigen::Vector3f midpoint         = Eigen::Vector3f::Zero();
+  float           edges_sum_length = 0.0f;
 
   for (const auto &edge : edges) {
-    std::cout << edge.first << " -> " << edge.second;
+
+    const Eigen::Vector3f edge_from     = Eigen::Vector3f(edge.first.x, edge.first.y, edge.first.z);
+    const Eigen::Vector3f edge_to       = Eigen::Vector3f(edge.second.x, edge.second.y, edge.second.z);
+    const Eigen::Vector3f edge_vec      = edge_to - edge_from;
+    const Eigen::Vector3f edge_midpoint = edge_from + 0.5f * edge_vec;
+    const float           edge_norm     = edge_vec.norm();
+
+    midpoint += edge_norm * edge_midpoint;
+    edges_sum_length += edge_norm;
   }
 
-  /* std::cout << mesh << std::endl; */
-
-  return cloud_hull;
+  return midpoint / edges_sum_length;
 }
 /*//}*/
 
@@ -973,6 +1023,75 @@ void PCL2MapRegistration::publishCloud(const ros::Publisher &pub, const PC_NORM:
     catch (...) {
       NODELET_ERROR("[PCL2MapRegistration::publishCloud]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
     }
+  }
+}
+/*//}*/
+
+/*//{ publishHull() */
+void PCL2MapRegistration::publishHull(const ros::Publisher &pub, const PC_NORM::Ptr &pc, const std::vector<std::pair<pt_NORM, pt_NORM>> &edges,
+                                      const Eigen::Vector3f &color_rgb) {
+
+  if (pub.getNumSubscribers() == 0) {
+    return;
+  }
+
+  const ros::Time now = ros::Time::now();
+
+  /*//{ Vertices */
+  visualization_msgs::Marker m_vertices;
+  m_vertices.ns              = "vertices";
+  m_vertices.action          = visualization_msgs::Marker::ADD;
+  m_vertices.type            = visualization_msgs::Marker::SPHERE_LIST;
+  m_vertices.header.frame_id = pc->header.frame_id;
+  m_vertices.header.stamp    = now;
+  m_vertices.scale.x         = 0.5;
+  m_vertices.scale.y         = 0.5;
+  m_vertices.scale.z         = 0.5;
+  m_vertices.color.a         = 1.0;
+  m_vertices.color.r         = color_rgb.x();
+  m_vertices.color.g         = color_rgb.y();
+  m_vertices.color.b         = color_rgb.z();
+  m_vertices.points.resize(pc->size());
+  m_vertices.pose.orientation.w = 1.0;
+  for (unsigned int i = 0; i < pc->size(); i++) {
+    m_vertices.points.at(i).x = pc->points.at(i).x;
+    m_vertices.points.at(i).y = pc->points.at(i).y;
+    m_vertices.points.at(i).z = pc->points.at(i).z;
+  }
+  /*//}*/
+
+  /*//{ Edges */
+  visualization_msgs::Marker m_edges;
+  m_edges.ns                 = "edges";
+  m_edges.action             = visualization_msgs::Marker::ADD;
+  m_edges.type               = visualization_msgs::Marker::LINE_LIST;
+  m_edges.header             = m_vertices.header;
+  m_edges.scale.x            = 0.07;
+  m_edges.color              = m_vertices.color;
+  m_edges.pose.orientation.w = 1.0;
+  m_edges.points.resize(2 * edges.size());
+
+  unsigned int idx = 0;
+  for (unsigned int i = 0; i < edges.size(); i++) {
+
+    m_edges.points.at(idx).x   = edges.at(i).first.x;
+    m_edges.points.at(idx).y   = edges.at(i).first.y;
+    m_edges.points.at(idx++).z = edges.at(i).first.z;
+
+    m_edges.points.at(idx).x   = edges.at(i).second.x;
+    m_edges.points.at(idx).y   = edges.at(i).second.y;
+    m_edges.points.at(idx++).z = edges.at(i).second.z;
+  }
+  /*//}*/
+
+  visualization_msgs::MarkerArray ma;
+  ma.markers = {m_vertices, m_edges};
+
+  try {
+    pub.publish(ma);
+  }
+  catch (...) {
+    NODELET_ERROR("[PCL2MapRegistration::publishHull]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
   }
 }
 /*//}*/

@@ -9,7 +9,9 @@
 
 #include <std_srvs/Trigger.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <visualization_msgs/MarkerArray.h>
 
+#include <pcl/conversions.h>
 #include <pcl/features/fpfh_omp.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/registration/sample_consensus_prerejective.h>
@@ -17,28 +19,18 @@
 #include <pcl/registration/gicp.h>
 #include <pcl/registration/icp.h>
 #include <pcl/segmentation/sac_segmentation.h>
-
 #include <pcl/surface/concave_hull.h>
 
 #include "mrs_pcl_tools/pcl2map_registration_dynparamConfig.h"
 #include "mrs_pcl_tools/SrvRegisterPointCloudByName.h"
 #include "mrs_pcl_tools/SrvRegisterPointCloudOffline.h"
 
-typedef pcl::FPFHSignature33          feat_FPFH;
-typedef pcl::PointCloud<feat_FPFH>    PC_FPFH;
-typedef std::pair<uint32_t, uint32_t> EDGE;
+typedef pcl::FPFHSignature33       feat_FPFH;
+typedef pcl::PointCloud<feat_FPFH> PC_FPFH;
 //}
 
 namespace mrs_pcl_tools
 {
-
-struct EDGE_COMP
-{
-  template <typename T>
-  bool operator()(const T &l, const T &r) const {
-    return (l.first == r.first && l.second == r.second) || (l.first == r.second && l.second == r.first);
-  }
-};
 
 /* class PCL2MapRegistration //{ */
 class PCL2MapRegistration : public nodelet::Nodelet {
@@ -132,9 +124,12 @@ private:
   PC_NORM::Ptr                loadPcWithNormals(const std::string &pcd_file);
   std::optional<PC_NORM::Ptr> subscribeSinglePointCloudMsg(const std::string &topic);
 
-  Eigen::Matrix4f correlateCloudToCloud(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ);
-  Eigen::Matrix4f correlateCloudToCloudByCentroid(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ);
-  Eigen::Matrix4f correlateCloudToCloudByPolylineBarycenter(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ);
+  Eigen::Matrix4f                             correlateCloudToCloud(PC_NORM::Ptr &pc_src, PC_NORM::Ptr &pc_targ);
+  std::pair<Eigen::Vector3f, Eigen::Vector3f> getCentroids(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ);
+  std::pair<Eigen::Vector3f, Eigen::Vector3f> getPolylineBarycenters(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ);
+
+  Eigen::Vector3f getCentroid(const PC_NORM::Ptr &pc_src);
+  Eigen::Vector3f getPolylineBarycenter(const std::vector<std::pair<pt_NORM, pt_NORM>> &edges);
 
   std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
   bool callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterPointCloudOffline::Request &req, mrs_pcl_tools::SrvRegisterPointCloudOffline::Response &res);
@@ -154,7 +149,8 @@ private:
 
   void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc);
 
-  PC_NORM::Ptr getConcaveHull(const PC_NORM::Ptr &pc, const double alpha = 0.1);
+  std::tuple<PC_NORM::Ptr, std::vector<std::pair<pt_NORM, pt_NORM>>> getConcaveHull(const PC_NORM::Ptr &pc, const double alpha = 0.1);
+  void publishHull(const ros::Publisher &pub, const PC_NORM::Ptr &pc, const std::vector<std::pair<pt_NORM, pt_NORM>> &edges, const Eigen::Vector3f &color_rgb);
 };
 //}
 
