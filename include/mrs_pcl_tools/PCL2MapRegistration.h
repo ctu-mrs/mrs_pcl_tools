@@ -143,16 +143,21 @@ private:
   Eigen::Vector3f getCentroid(const PC_NORM::Ptr &pc_src);
   Eigen::Vector3f getPolylineBarycenter(const std::vector<std::pair<pt_NORM, pt_NORM>> &edges);
 
-  std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
+  std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
+                                                                      const Eigen::Matrix4f &init_guess = Eigen::Matrix4f::Identity());
   bool callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterPointCloudOffline::Request &req, mrs_pcl_tools::SrvRegisterPointCloudOffline::Response &res);
   bool callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegisterPointCloudByName::Request &req, mrs_pcl_tools::SrvRegisterPointCloudByName::Response &res);
   void callbackReconfigure(Config &config, [[maybe_unused]] uint32_t level);
 
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_ndt(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_fpfh(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_gicp(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_icpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_sicpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_ndt(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map, const Eigen::Matrix4f &T_guess,
+                                                                     const bool enable_init_guess = true);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_fpfh(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map, const Eigen::Matrix4f &T_guess,
+                                                                      const bool enable_init_guess = true);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_gicp(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map, const Eigen::Matrix4f &T_guess,
+                                                                      const bool enable_init_guess = true);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_icpn(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map, const Eigen::Matrix4f &T_guess,
+                                                                      const bool enable_init_guess = true);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_sicpn(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map, const Eigen::Matrix4f &T_guess);
 
   void applyRandomTransformation(PC_NORM::Ptr cloud);
 

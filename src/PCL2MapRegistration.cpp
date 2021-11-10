@@ -125,19 +125,19 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
   }
 
   // Correlate two clouds
-  Eigen::Matrix4f T_corr;
+  Eigen::Matrix4f T_guess = Eigen::Matrix4f::Identity();
   if (req.init_guess_use) {
 
     const Eigen::Vector3f &init_guess_translation = Eigen::Vector3f(req.init_guess_translation.x, req.init_guess_translation.y, req.init_guess_translation.z);
-    T_corr                                        = translationYawToMatrix(init_guess_translation, req.init_guess_yaw);
+    const Eigen::Matrix4f  T_random               = translationYawToMatrix(init_guess_translation, req.init_guess_yaw);
 
-    // Correlate: transform source to target
-    pcl::transformPointCloud(*pc_src_filt, *pc_src_filt, T_corr);
+    // Transform by random transformation
+    pcl::transformPointCloud(*pc_src_filt, *pc_src_filt, T_random);
 
   } else {
 
     // Match clouds
-    T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
+    T_guess = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
   }
 
   // Publish input data
@@ -152,10 +152,7 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
 
   // Register given pc to map cloud
   Eigen::Matrix4f T;
-  std::tie(res.success, res.message, T) = registerCloudToCloud(pc_src_filt, pc_targ_filt);
-
-  // Include initial correlation matrix
-  T = T * T_corr;
+  std::tie(res.success, res.message, T) = registerCloudToCloud(pc_src_filt, pc_targ_filt, T_guess);
 
   // Save result as static TF pc_src.frame -> pc_targ.frame
   if (res.success) {
@@ -228,19 +225,19 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   // TODO: SOR and ROR filter
 
   // Correlate two clouds
-  Eigen::Matrix4f T_corr;
+  Eigen::Matrix4f T_guess = Eigen::Matrix4f::Identity();
   if (req.init_guess_use) {
 
     const Eigen::Vector3f &init_guess_translation = Eigen::Vector3f(req.init_guess_translation.x, req.init_guess_translation.y, req.init_guess_translation.z);
-    T_corr                                        = translationYawToMatrix(init_guess_translation, req.init_guess_yaw);
+    const Eigen::Matrix4f  T_random               = translationYawToMatrix(init_guess_translation, req.init_guess_yaw);
 
-    // Correlate: transform source to target
-    pcl::transformPointCloud(*pc_src_filt, *pc_src_filt, T_corr);
+    // Transform by random transformation
+    pcl::transformPointCloud(*pc_src_filt, *pc_src_filt, T_random);
 
   } else {
 
     // Match clouds
-    T_corr = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
+    T_guess = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
   }
 
   // Publish input data
@@ -253,11 +250,7 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
 
   // Register given pc to map cloud
   Eigen::Matrix4f T;
-  std::tie(res.success, res.message, T) = registerCloudToCloud(pc_src_filt, pc_targ_filt);
-
-  // Include initial correlation matrix
-  T = T * T_corr;
-  printEigenMatrix(T, "Transformation matrix (after correlation):");
+  std::tie(res.success, res.message, T) = registerCloudToCloud(pc_src_filt, pc_targ_filt, T_guess);
 
   // Save result as static TF pc_src.frame -> pc_targ.frame
   if (res.success) {
@@ -279,10 +272,11 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
 /*//}*/
 
 /*//{ registerCloudToCloud() */
-std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerCloudToCloud(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
+std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerCloudToCloud(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
+                                                                                         const Eigen::Matrix4f &T_guess) {
   bool            converged;
   float           score;
-  Eigen::Matrix4f T_init;
+  Eigen::Matrix4f T_initial_reg;
   PC_NORM::Ptr    pc_aligned;
 
   /*//{ Perform initial registration */
@@ -291,23 +285,23 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     switch (_registration_method_initial) {
       case 0:
         NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: FPFH");
-        std::tie(converged, score, T_init, pc_aligned) = pcl2map_fpfh(pc_src, pc_targ);
+        std::tie(converged, score, T_initial_reg, pc_aligned) = pcl2map_fpfh(pc_src, pc_targ, T_guess);
         break;
       case 1:
         NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: NDT");
-        std::tie(converged, score, T_init, pc_aligned) = pcl2map_ndt(pc_src, pc_targ);
+        std::tie(converged, score, T_initial_reg, pc_aligned) = pcl2map_ndt(pc_src, pc_targ, T_guess);
         break;
       case 2:
         NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: GICP");
-        std::tie(converged, score, T_init, pc_aligned) = pcl2map_gicp(pc_src, pc_targ);
+        std::tie(converged, score, T_initial_reg, pc_aligned) = pcl2map_gicp(pc_src, pc_targ, T_guess);
         break;
       case 3:
         NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: ICPN");
-        std::tie(converged, score, T_init, pc_aligned) = pcl2map_icpn(pc_src, pc_targ);
+        std::tie(converged, score, T_initial_reg, pc_aligned) = pcl2map_icpn(pc_src, pc_targ, T_guess);
         break;
       case 4:
         NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: SICPN");
-        std::tie(converged, score, T_init, pc_aligned) = pcl2map_sicpn(pc_src, pc_targ);
+        std::tie(converged, score, T_initial_reg, pc_aligned) = pcl2map_sicpn(pc_src, pc_targ, T_guess);
         break;
       default:
         NODELET_ERROR("[PCL2MapRegistration] Unknown registration (initial) method of type: %d. Allowed: {0=FPFH, 1=NDT, 2=GICP, 3=ICPN, 4=SICPN}",
@@ -324,8 +318,8 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
 
     // Print transformation matrix
     NODELET_INFO("[PCL2MapRegistration] Registration (initial) converged with score: %0.2f", score);
-    printEigenMatrix(T_init, "Transformation matrix (initial):");
-    std::get<2>(ret) = T_init;
+    printEigenMatrix(T_initial_reg, "Transformation matrix (initial):");
+    std::get<2>(ret) = T_initial_reg;
 
     // Publish initially aligned cloud
     pc_aligned->header.stamp    = pc_src->header.stamp;
@@ -333,7 +327,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     publishCloud(_pub_cloud_aligned, pc_aligned);
 
     /*//{ Perform fine tuning registration */
-    Eigen::Matrix4f T_fine              = Eigen::Matrix4f::Identity();
+    Eigen::Matrix4f T_fine_reg          = Eigen::Matrix4f::Identity();
     const bool      perform_fine_tuning = _registration_method_fine_tune >= 0 && _registration_method_fine_tune <= 4;
 
     if (_registration_method_fine_tune == _registration_method_initial) {
@@ -347,23 +341,23 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
           break;
         case 0:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: FPFH");
-          std::tie(converged, score, T_fine, pc_aligned) = pcl2map_fpfh(pc_aligned, pc_targ, false);
+          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_fpfh(pc_aligned, pc_targ, T_initial_reg, false);
           break;
         case 1:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: NDT");
-          std::tie(converged, score, T_fine, pc_aligned) = pcl2map_ndt(pc_aligned, pc_targ, false);
+          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_ndt(pc_aligned, pc_targ, T_initial_reg, false);
           break;
         case 2:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: GICP");
-          std::tie(converged, score, T_fine, pc_aligned) = pcl2map_gicp(pc_aligned, pc_targ, false);
+          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_gicp(pc_aligned, pc_targ, T_initial_reg, false);
           break;
         case 3:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: ICPN");
-          std::tie(converged, score, T_fine, pc_aligned) = pcl2map_icpn(pc_aligned, pc_targ, false);
+          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_icpn(pc_aligned, pc_targ, T_initial_reg, false);
           break;
         case 4:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: SICPN");
-          std::tie(converged, score, T_fine, pc_aligned) = pcl2map_sicpn(pc_aligned, pc_targ);
+          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_sicpn(pc_aligned, pc_targ, T_initial_reg);
           break;
         default:
           NODELET_ERROR(
@@ -379,7 +373,8 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
       if (converged) {
         // Print transformation matrix
         NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) converged with score: %0.2f", score);
-        printEigenMatrix(T_fine, "Transformation matrix (fine tuning):");
+        printEigenMatrix(T_fine_reg, "Transformation matrix (after fine tuning):");
+        std::get<2>(ret) = T_fine_reg;
 
         // Publish aligned cloud
         pc_aligned->header.stamp    = pc_src->header.stamp;
@@ -391,11 +386,6 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
         std::get<1>(ret) = "Registered (fine tuning) dit not converge.";
       }
     }
-
-    // Print final transformation matrix
-    const Eigen::Matrix4f T = T_fine * T_init;
-    std::get<2>(ret)        = T;
-    printEigenMatrix(T, "Transformation matrix (final):");
 
   } else {
     NODELET_ERROR("[PCL2MapRegistration] Registration (initial) did not converge -- try to change registration (initial) parameters.");
@@ -493,8 +483,8 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
 //}
 
 /* pcl2map_ndt() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_ndt(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map,
-                                                                                        const bool enable_init_guess) {
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_ndt(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map,
+                                                                                        const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
   TicToc t;
 
   // Filtering input scan to roughly to increase speed of registration.
@@ -520,7 +510,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
     ndt.align(*pc_aligned, _initial_guess);
   } else {
     NODELET_INFO("[PCL2MapRegistration] NDT -- no initial guess given.");
-    ndt.align(*pc_aligned);
+    ndt.align(*pc_aligned, T_guess);
   }
 
   t.toc_print("[PCL2MapRegistration] NDT registration run time");
@@ -530,8 +520,8 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /* pcl2map_fpfh() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_fpfh(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
-                                                                                         const bool enable_init_guess) {
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_fpfh(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
+                                                                                         const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
 
   TicToc t;
 
@@ -570,7 +560,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
     align.align(*pc_aligned, _initial_guess);
   } else {
     NODELET_INFO("[PCL2MapRegistration] FPFH -- no initial guess given.");
-    align.align(*pc_aligned);
+    align.align(*pc_aligned, T_guess);
   }
 
   t.toc_print("[PCL2MapRegistration] FPFH registration run time");
@@ -580,8 +570,8 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /* pcl2map_gicp() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_gicp(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
-                                                                                         const bool enable_init_guess) {
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_gicp(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
+                                                                                         const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
 
   TicToc t;
 
@@ -606,7 +596,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
     gicp.align(*pc_aligned, _initial_guess);
   } else {
     NODELET_INFO("[PCL2MapRegistration] GICP -- no initial guess given.");
-    gicp.align(*pc_aligned);
+    gicp.align(*pc_aligned, T_guess);
   }
 
   t.toc_print("[PCL2MapRegistration] GICP registration run time");
@@ -616,8 +606,8 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /* pcl2map_icpn() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_icpn(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
-                                                                                         const bool enable_init_guess) {
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_icpn(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
+                                                                                         const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
 
   TicToc t;
 
@@ -641,7 +631,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
     icpn.align(*pc_aligned, _initial_guess);
   } else {
     NODELET_INFO("[PCL2MapRegistration] ICPN -- no initial guess given.");
-    icpn.align(*pc_aligned);
+    icpn.align(*pc_aligned, T_guess);
   }
 
   t.toc_print("[PCL2MapRegistration] ICPN registration run time");
@@ -651,7 +641,9 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /* pcl2map_sicpn() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_sicpn(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_sicpn(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
+                                                                                          const Eigen::Matrix4f &T_guess) {
+  // TODO: use T_guess
 
   TicToc t;
 
@@ -684,7 +676,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
     const Eigen::Matrix4f   T_rot = getRotationMatrixAroundPoint(heading_ax.matrix(), centroid_pc_src);
 
     // Perform fine tuning registration
-    PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
+    const PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
     sicpn.align(*pc_aligned, T_rot);
 
     // Store best score
@@ -761,14 +753,10 @@ Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr &pc_src,
   T(1, 3)           = origin_diff.y();
   T(2, 3)           = pt_min_targ.z - pt_min_src.z;
 
-  // Transform pc_src to pc_targ
-  pcl::transformPointCloud(*pc_src, *pc_src, T);
-
   // Crop pc_targ in z-axis w.r.t. pc_src (assumption that we takeoff from ground and clouds roll/pitch angles can be neglected)
   pcl::CropBox<pt_NORM> box;
-  pcl::getMinMax3D(*pc_src, pt_min_src, pt_max_src);
   box.setMin(Eigen::Vector4f(pt_min_targ.x, pt_min_targ.y, pt_min_targ.z, 1.0f));
-  box.setMax(Eigen::Vector4f(pt_max_targ.x, pt_max_targ.y, pt_max_src.z + _cloud_correlation_z_crop_offset, 1.0f));
+  box.setMax(Eigen::Vector4f(pt_max_targ.x, pt_max_targ.y, pt_min_targ.z + (pt_max_src.z - pt_min_src.z) + _cloud_correlation_z_crop_offset, 1.0f));
   box.setInputCloud(pc_targ);
   box.filter(*pc_targ);
 
