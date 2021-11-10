@@ -12,7 +12,7 @@ cloud_correlation:
   z_crop_offset: 2.0
 
   polyline_barycenter:
-    alpha: 1.5
+    alpha: 0.3
 
 icpn:
   max_corr_dist: 4.0

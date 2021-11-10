@@ -32,6 +32,15 @@ typedef pcl::PointCloud<feat_FPFH> PC_FPFH;
 namespace mrs_pcl_tools
 {
 
+struct HULL
+{
+  bool                                     has_data = false;
+  bool                                     concave;
+  PC_NORM::Ptr                             cloud_hull;
+  std::vector<std::pair<pt_NORM, pt_NORM>> edges;
+  Eigen::Vector3f                          polyline_barycenter;
+};
+
 /* class PCL2MapRegistration //{ */
 class PCL2MapRegistration : public nodelet::Nodelet {
 
@@ -111,6 +120,9 @@ private:
   int   _sicpn_ransac_iter;
   bool  _sicpn_use_recip_corr;
 
+  std::mutex _mutex_hull_map;
+  HULL       _hull_concave_map;
+
   Eigen::Matrix4f _initial_guess = Eigen::Matrix4f::Identity();
 
   boost::recursive_mutex                                     config_mutex_;
@@ -149,8 +161,8 @@ private:
 
   void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc);
 
-  std::tuple<PC_NORM::Ptr, std::vector<std::pair<pt_NORM, pt_NORM>>> getConcaveHull(const PC_NORM::Ptr &pc, const double alpha = 0.1);
-  void publishHull(const ros::Publisher &pub, const PC_NORM::Ptr &pc, const std::vector<std::pair<pt_NORM, pt_NORM>> &edges, const Eigen::Vector3f &color_rgb);
+  HULL getConcaveHull(const PC_NORM::Ptr &pc, const double alpha = 0.1);
+  void publishHull(const ros::Publisher &pub, const HULL &hull, const Eigen::Vector3f &color_rgb);
 };
 //}
 

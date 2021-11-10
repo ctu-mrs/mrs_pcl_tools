@@ -111,16 +111,17 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
   }
 
   // Preprocess data
-  PC_NORM::Ptr pc_targ_filt = boost::make_shared<PC_NORM>();
-  PC_NORM::Ptr pc_src_filt  = boost::make_shared<PC_NORM>();
+  PC_NORM::Ptr pc_targ_filt;
+  PC_NORM::Ptr pc_src_filt;
   {
     std::scoped_lock lock(_mutex_registration);
     pc_targ_filt = filters::applyVoxelGridFilter(_pc_map, _clouds_voxel_leaf);
     pc_src_filt  = filters::applyVoxelGridFilter(_pc_offline, _clouds_voxel_leaf);
 
     // for debugging: apply random translation on the slam pc
-    if (req.apply_random_transform)
+    if (req.apply_random_transform) {
       applyRandomTransformation(pc_src_filt);
+    }
   }
 
   // Correlate two clouds
@@ -741,6 +742,11 @@ Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr &pc_src,
   const Eigen::Vector3f origin_targ = origins.second;
   const Eigen::Vector3f origin_diff = origin_targ - origin_src;
 
+  NODELET_INFO("[PCL2MapRegistration] Cloud correlation origins:");
+  NODELET_INFO("[PCL2MapRegistration]  source: (%.1f, %.1f, %.1f)", origin_src.x(), origin_src.y(), origin_src.z());
+  NODELET_INFO("[PCL2MapRegistration]  target: (%.1f, %.1f, %.1f)", origin_targ.x(), origin_targ.y(), origin_targ.z());
+  NODELET_INFO("[PCL2MapRegistration]  s->t:   (%.1f, %.1f, %.1f)", origin_diff.x(), origin_diff.y(), origin_diff.z());
+
   // Compute min/max Z axis points
   pt_NORM pt_min_src;
   pt_NORM pt_min_targ;
@@ -778,43 +784,62 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getCentroids(co
 
 /*//{ getPolylineBarycenters() */
 std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBarycenters(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
-  // TODO: precompute everything for global map just once
 
-  // Compute concave hulls of both clouds
-  const auto &[pc_src_concave_hull, pc_src_hull_edges]   = getConcaveHull(pc_src, _cloud_correlation_poly_bary_alpha);
-  const auto &[pc_targ_concave_hull, pc_targ_hull_edges] = getConcaveHull(pc_targ, _cloud_correlation_poly_bary_alpha);
+  HULL hull_src                        = getConcaveHull(pc_src, _cloud_correlation_poly_bary_alpha);
+  hull_src.polyline_barycenter         = getPolylineBarycenter(hull_src.edges);
+  hull_src.cloud_hull->header.frame_id = _frame_map;
 
-  pc_src_concave_hull->header.frame_id  = _frame_map;
-  pc_targ_concave_hull->header.frame_id = _frame_map;
-  publishHull(_pub_dbg_hull_src, pc_src_concave_hull, pc_src_hull_edges, Eigen::Vector3f(1, 0, 0));
-  publishHull(_pub_dbg_hull_target, pc_targ_concave_hull, pc_targ_hull_edges, Eigen::Vector3f(0, 0, 1));
+  HULL hull_trg;
+  {
+    std::scoped_lock lock(_mutex_hull_map);
 
-  // Compute polyline barycenter of both point clouds
-  const Eigen::Vector3f &barycenter_src  = getPolylineBarycenter(pc_src_hull_edges);
-  const Eigen::Vector3f &barycenter_targ = getPolylineBarycenter(pc_targ_hull_edges);
+    if (_hull_concave_map.has_data) {
 
-  return {barycenter_src, barycenter_targ};
+      hull_trg = _hull_concave_map;
+
+    } else {
+
+      hull_trg                             = getConcaveHull(pc_targ, _cloud_correlation_poly_bary_alpha);
+      hull_trg.polyline_barycenter         = getPolylineBarycenter(hull_trg.edges);
+      hull_trg.cloud_hull->header.frame_id = _frame_map;
+      hull_trg.has_data                    = true;
+
+      _hull_concave_map = hull_trg;
+    }
+  }
+
+  publishHull(_pub_dbg_hull_src, hull_src, Eigen::Vector3f(1, 0, 0));
+  publishHull(_pub_dbg_hull_target, hull_trg, Eigen::Vector3f(0, 0, 1));
+
+  return {hull_src.polyline_barycenter, hull_trg.polyline_barycenter};
 }
 /*//}*/
 
 /*//{ getConcaveHull() */
-std::tuple<PC_NORM::Ptr, std::vector<std::pair<pt_NORM, pt_NORM>>> PCL2MapRegistration::getConcaveHull(const PC_NORM::Ptr &pc, const double alpha) {
+HULL PCL2MapRegistration::getConcaveHull(const PC_NORM::Ptr &pc, const double alpha) {
 
-  PC_NORM::Ptr               cloud_hull = boost::make_shared<PC_NORM>();
+  HULL hull;
+  hull.concave    = true;
+  hull.has_data   = true;
+  hull.cloud_hull = boost::make_shared<PC_NORM>();
+
+  // Construct concave hull in 3D
   std::vector<pcl::Vertices> polygons;
+  pcl::ConcaveHull<pt_NORM>  concave_hull;
+  concave_hull.setInputCloud(pc);
+  concave_hull.setAlpha(alpha);
+  concave_hull.setKeepInformation(true);
+  concave_hull.setDimension(3);
+  concave_hull.reconstruct(*hull.cloud_hull, polygons);
 
-  pcl::ConcaveHull<pt_NORM> hull;
-  hull.setInputCloud(pc);
-  hull.setAlpha(alpha);
-  hull.setKeepInformation(true);
-  hull.setDimension(3);
-  hull.reconstruct(*cloud_hull, polygons);
-
-  /*//{ Get set of pair indices (edges) in the hull */
+  /*//{ Get set of unique pair indices (edges) in the hull */
   typedef std::pair<uint32_t, uint32_t> EDGE;
-  auto                                  edge_cmp = [](const EDGE &l, const EDGE &r) {
+  const auto                            edge_cmp = [](const EDGE &l, const EDGE &r) {
     if ((l.first == r.first && l.second == r.second) || (l.first == r.second && l.second == r.first)) {
       return false;
+    }
+    if (l.first == r.first) {
+      return l.second < r.second;
     }
     return l.first < r.first;
   };
@@ -834,28 +859,30 @@ std::tuple<PC_NORM::Ptr, std::vector<std::pair<pt_NORM, pt_NORM>>> PCL2MapRegist
     /* NODELET_ERROR(" 1) %d -> %d)", vertices.at(0), vertices.at(1)); */
     /* NODELET_ERROR(" 2) %d -> %d)", vertices.at(0), vertices.at(2)); */
     /* NODELET_ERROR(" 3) %d -> %d)", vertices.at(1), vertices.at(2)); */
+
+    // Add all edges in the triangle-polygon
     edges_idxs.insert({vertices.at(0), vertices.at(1)});
     edges_idxs.insert({vertices.at(0), vertices.at(2)});
     edges_idxs.insert({vertices.at(1), vertices.at(2)});
   }
   /*//}*/
 
-  // Convert pair indices to 3D point format for edge visualization
-  unsigned int                             it = 0;
-  std::vector<std::pair<pt_NORM, pt_NORM>> edges_points(edges_idxs.size());
+  // Convert pair indices to 3D point format
+  unsigned int it = 0;
+  hull.edges.resize(edges_idxs.size());
   for (const auto &edge_idx : edges_idxs) {
-    const auto &point_A   = cloud_hull->points.at(edge_idx.first);
-    const auto &point_B   = cloud_hull->points.at(edge_idx.second);
-    edges_points.at(it++) = {point_A, point_B};
+    const auto &point_A = hull.cloud_hull->points.at(edge_idx.first);
+    const auto &point_B = hull.cloud_hull->points.at(edge_idx.second);
+    hull.edges.at(it++) = {point_A, point_B};
 
     /* NODELET_ERROR("%d: (%.2f, %.2f, %.2f) -> %d: (%.2f, %.2f, %.2f)", edge_idx.first, point_A.x, point_A.y, point_A.z, edge_idx.second, point_B.x, point_B.y,
      */
     /* point_B.z); */
   }
 
-  /* NODELET_ERROR("cloud hull size: %ld", cloud_hull->size()); */
+  /* NODELET_ERROR("cloud hull size: %ld", hull.cloud_hull->size()); */
 
-  return std::make_tuple(cloud_hull, edges_points);
+  return hull;
 }
 /*//}*/
 
@@ -883,6 +910,7 @@ Eigen::Vector3f PCL2MapRegistration::getPolylineBarycenter(const std::vector<std
     const Eigen::Vector3f edge_midpoint = edge_from + 0.5f * edge_vec;
     const float           edge_norm     = edge_vec.norm();
 
+    // Weighted sum with weigth being the length of the edges
     midpoint += edge_norm * edge_midpoint;
     edges_sum_length += edge_norm;
   }
@@ -1028,8 +1056,7 @@ void PCL2MapRegistration::publishCloud(const ros::Publisher &pub, const PC_NORM:
 /*//}*/
 
 /*//{ publishHull() */
-void PCL2MapRegistration::publishHull(const ros::Publisher &pub, const PC_NORM::Ptr &pc, const std::vector<std::pair<pt_NORM, pt_NORM>> &edges,
-                                      const Eigen::Vector3f &color_rgb) {
+void PCL2MapRegistration::publishHull(const ros::Publisher &pub, const HULL &hull, const Eigen::Vector3f &color_rgb) {
 
   if (pub.getNumSubscribers() == 0) {
     return;
@@ -1042,21 +1069,21 @@ void PCL2MapRegistration::publishHull(const ros::Publisher &pub, const PC_NORM::
   m_vertices.ns              = "vertices";
   m_vertices.action          = visualization_msgs::Marker::ADD;
   m_vertices.type            = visualization_msgs::Marker::SPHERE_LIST;
-  m_vertices.header.frame_id = pc->header.frame_id;
+  m_vertices.header.frame_id = hull.cloud_hull->header.frame_id;
   m_vertices.header.stamp    = now;
-  m_vertices.scale.x         = 0.5;
-  m_vertices.scale.y         = 0.5;
-  m_vertices.scale.z         = 0.5;
+  m_vertices.scale.x         = 0.3;
+  m_vertices.scale.y         = 0.3;
+  m_vertices.scale.z         = 0.3;
   m_vertices.color.a         = 1.0;
   m_vertices.color.r         = color_rgb.x();
   m_vertices.color.g         = color_rgb.y();
   m_vertices.color.b         = color_rgb.z();
-  m_vertices.points.resize(pc->size());
+  m_vertices.points.resize(hull.cloud_hull->size());
   m_vertices.pose.orientation.w = 1.0;
-  for (unsigned int i = 0; i < pc->size(); i++) {
-    m_vertices.points.at(i).x = pc->points.at(i).x;
-    m_vertices.points.at(i).y = pc->points.at(i).y;
-    m_vertices.points.at(i).z = pc->points.at(i).z;
+  for (unsigned int i = 0; i < hull.cloud_hull->size(); i++) {
+    m_vertices.points.at(i).x = hull.cloud_hull->points.at(i).x;
+    m_vertices.points.at(i).y = hull.cloud_hull->points.at(i).y;
+    m_vertices.points.at(i).z = hull.cloud_hull->points.at(i).z;
   }
   /*//}*/
 
@@ -1069,23 +1096,43 @@ void PCL2MapRegistration::publishHull(const ros::Publisher &pub, const PC_NORM::
   m_edges.scale.x            = 0.07;
   m_edges.color              = m_vertices.color;
   m_edges.pose.orientation.w = 1.0;
-  m_edges.points.resize(2 * edges.size());
+  m_edges.points.resize(2 * hull.edges.size());
 
   unsigned int idx = 0;
-  for (unsigned int i = 0; i < edges.size(); i++) {
+  for (unsigned int i = 0; i < hull.edges.size(); i++) {
 
-    m_edges.points.at(idx).x   = edges.at(i).first.x;
-    m_edges.points.at(idx).y   = edges.at(i).first.y;
-    m_edges.points.at(idx++).z = edges.at(i).first.z;
+    m_edges.points.at(idx).x   = hull.edges.at(i).first.x;
+    m_edges.points.at(idx).y   = hull.edges.at(i).first.y;
+    m_edges.points.at(idx++).z = hull.edges.at(i).first.z;
 
-    m_edges.points.at(idx).x   = edges.at(i).second.x;
-    m_edges.points.at(idx).y   = edges.at(i).second.y;
-    m_edges.points.at(idx++).z = edges.at(i).second.z;
+    m_edges.points.at(idx).x   = hull.edges.at(i).second.x;
+    m_edges.points.at(idx).y   = hull.edges.at(i).second.y;
+    m_edges.points.at(idx++).z = hull.edges.at(i).second.z;
   }
   /*//}*/
 
+  /*//{ Vertices */
+  visualization_msgs::Marker m_barycenter;
+  m_barycenter.ns                 = "barycenter";
+  m_barycenter.action             = visualization_msgs::Marker::ADD;
+  m_barycenter.type               = visualization_msgs::Marker::SPHERE;
+  m_barycenter.header.frame_id    = hull.cloud_hull->header.frame_id;
+  m_barycenter.header.stamp       = now;
+  m_barycenter.scale.x            = 1.0;
+  m_barycenter.scale.y            = 1.0;
+  m_barycenter.scale.z            = 1.0;
+  m_barycenter.color.a            = 1.0;
+  m_barycenter.color.r            = color_rgb.x();
+  m_barycenter.color.g            = color_rgb.y();
+  m_barycenter.color.b            = color_rgb.z();
+  m_barycenter.pose.position.x    = hull.polyline_barycenter.x();
+  m_barycenter.pose.position.y    = hull.polyline_barycenter.y();
+  m_barycenter.pose.position.z    = hull.polyline_barycenter.z();
+  m_barycenter.pose.orientation.w = 1.0;
+  /*//}*/
+
   visualization_msgs::MarkerArray ma;
-  ma.markers = {m_vertices, m_edges};
+  ma.markers = {m_vertices, m_edges, m_barycenter};
 
   try {
     pub.publish(ma);
