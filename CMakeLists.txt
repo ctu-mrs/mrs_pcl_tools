@@ -166,3 +166,8 @@ add_executable(estimate_lidar_slam_drift src/executables/EstimateLidarSlamDrift.
 target_link_libraries(estimate_lidar_slam_drift
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
 )
+
+add_executable(pcd_estimate_normals src/executables/PcdEstimateNormals.cpp)
+target_link_libraries(pcd_estimate_normals
+  PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES}
+)
