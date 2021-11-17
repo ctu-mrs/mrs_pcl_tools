@@ -1,4 +1,9 @@
 #include "mrs_pcl_tools/PCL2MapRegistration.h"
+#include "pcl_conversions/pcl_conversions.h"
+#include "sensor_msgs/PointCloud2.h"
+#include <pcl/common/transforms.h>
+#include <pcl/filters/filter.h>
+#include <pcl/filters/filter_indices.h>
 
 namespace mrs_pcl_tools
 {
@@ -21,7 +26,9 @@ void PCL2MapRegistration::onInit() {
   param_loader.loadParam("method/initial", _registration_method_initial, 4);
   param_loader.loadParam("method/fine_tune", _registration_method_fine_tune, 3);
   param_loader.loadParam("use_init_guess", _use_init_guess, false);
-  param_loader.loadParam("clouds_voxel_leaf", _clouds_voxel_leaf, 0.3f);
+  param_loader.loadParam("preprocess/voxel_leaf", _preprocess_voxel_leaf, 0.3f);
+  param_loader.loadParam("preprocess/ror/radius", _preprocess_ror_radius, 0.0f);
+  param_loader.loadParam("preprocess/ror/neighbors", _preprocess_ror_neighbors, 0);
   param_loader.loadParam("normal_estimation_radius", _normal_estimation_radius, 0.25f);
   param_loader.loadParam("cloud_correlation/method", _cloud_correlation_method, std::string("centroid"));
   param_loader.loadParam("cloud_correlation/z_crop_offset", _cloud_correlation_z_crop_offset, 2.0f);
@@ -115,8 +122,11 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
   PC_NORM::Ptr pc_src_filt;
   {
     std::scoped_lock lock(_mutex_registration);
-    pc_targ_filt = filters::applyVoxelGridFilter(_pc_map, _clouds_voxel_leaf);
-    pc_src_filt  = filters::applyVoxelGridFilter(_pc_offline, _clouds_voxel_leaf);
+    pc_targ_filt = filters::applyVoxelGridFilter(_pc_map, _preprocess_voxel_leaf);
+    pc_src_filt  = filters::applyVoxelGridFilter(_pc_offline, _preprocess_voxel_leaf);
+    if (_preprocess_ror_radius > 0.0f && _preprocess_ror_neighbors > 0) {
+      pc_src_filt = filters::applyRadiusOutlierFilter(pc_src_filt, _preprocess_ror_radius, _preprocess_ror_neighbors);
+    }
 
     // for debugging: apply random translation on the slam pc
     if (req.apply_random_transform) {
@@ -138,6 +148,7 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
 
     // Match clouds
     T_guess = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
+    printEigenMatrix(T_guess, "Transformation matrix (initial guess by cloud correlation):");
   }
 
   // Publish input data
@@ -147,7 +158,7 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
   pc_src_filt->header.frame_id  = _frame_map;
   pc_targ_filt->header.stamp    = stamp;
   pc_targ_filt->header.frame_id = _frame_map;
-  publishCloud(_pub_cloud_source, pc_src_filt);
+  publishCloud(_pub_cloud_source, pc_src_filt, T_guess);
   publishCloud(_pub_cloud_target, pc_targ_filt);
 
   // Register given pc to map cloud
@@ -191,8 +202,8 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   }
 
   // Preprocess data
-  PC_NORM::Ptr pc_src_filt  = boost::make_shared<PC_NORM>();
-  PC_NORM::Ptr pc_targ_filt = boost::make_shared<PC_NORM>();
+  PC_NORM::Ptr pc_src_filt;
+  PC_NORM::Ptr pc_targ_filt;
 
   // Catch the latest msg and store it as source cloud
   PC_NORM::Ptr      pc_src;
@@ -218,9 +229,12 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   // Voxelize both clouds
   {
     std::scoped_lock lock(_mutex_registration);
-    pc_targ_filt = filters::applyVoxelGridFilter(_pc_map, _clouds_voxel_leaf);
+    pc_targ_filt = filters::applyVoxelGridFilter(_pc_map, _preprocess_voxel_leaf);
   }
-  pc_src_filt = filters::applyVoxelGridFilter(pc_src, _clouds_voxel_leaf);
+  pc_src_filt = filters::applyVoxelGridFilter(pc_src, _preprocess_voxel_leaf);
+  if (_preprocess_ror_radius > 0.0f && _preprocess_ror_neighbors > 0) {
+    pc_src_filt = filters::applyRadiusOutlierFilter(pc_src_filt, _preprocess_ror_radius, _preprocess_ror_neighbors);
+  }
 
   // TODO: SOR and ROR filter
 
@@ -238,6 +252,7 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
 
     // Match clouds
     T_guess = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
+    printEigenMatrix(T_guess, "Transformation matrix (initial guess by cloud correlation):");
   }
 
   // Publish input data
@@ -245,7 +260,7 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   pc_src_filt->header.frame_id  = _frame_map;
   pc_targ_filt->header.stamp    = pc_src->header.stamp;
   pc_targ_filt->header.frame_id = _frame_map;
-  publishCloud(_pub_cloud_source, pc_src_filt);
+  publishCloud(_pub_cloud_source, pc_src_filt, T_guess);
   publishCloud(_pub_cloud_target, pc_targ_filt);
 
   // Register given pc to map cloud
@@ -318,7 +333,7 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
 
     // Print transformation matrix
     NODELET_INFO("[PCL2MapRegistration] Registration (initial) converged with score: %0.2f", score);
-    printEigenMatrix(T_initial_reg, "Transformation matrix (initial):");
+    printEigenMatrix(T_initial_reg, "Transformation matrix (after initial registration):");
     std::get<2>(ret) = T_initial_reg;
 
     // Publish initially aligned cloud
@@ -341,23 +356,23 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
           break;
         case 0:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: FPFH");
-          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_fpfh(pc_aligned, pc_targ, T_initial_reg, false);
+          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_fpfh(pc_src, pc_targ, T_initial_reg, false);
           break;
         case 1:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: NDT");
-          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_ndt(pc_aligned, pc_targ, T_initial_reg, false);
+          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_ndt(pc_src, pc_targ, T_initial_reg, false);
           break;
         case 2:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: GICP");
-          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_gicp(pc_aligned, pc_targ, T_initial_reg, false);
+          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_gicp(pc_src, pc_targ, T_initial_reg, false);
           break;
         case 3:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: ICPN");
-          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_icpn(pc_aligned, pc_targ, T_initial_reg, false);
+          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_icpn(pc_src, pc_targ, T_initial_reg, false);
           break;
         case 4:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: SICPN");
-          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_sicpn(pc_aligned, pc_targ, T_initial_reg);
+          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_sicpn(pc_src, pc_targ, T_initial_reg);
           break;
         default:
           NODELET_ERROR(
@@ -413,7 +428,7 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
 
   _registration_method_initial     = config.init_reg_method;
   _registration_method_fine_tune   = config.fine_tune_reg_method;
-  _clouds_voxel_leaf               = config.clouds_voxel_leaf;
+  _preprocess_voxel_leaf           = config.clouds_voxel_leaf;
   _cloud_correlation_z_crop_offset = config.cloud_correlation_z_crop_offset;
   _min_convergence_score           = config.min_convergence_score;
 
@@ -548,12 +563,12 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   align.setSourceFeatures(pc_fpfh_src);
   align.setInputTarget(pc_targ);
   align.setTargetFeatures(pc_fpfh_targ);
-  align.setMaximumIterations(_fpfh_ransac_max_iter);              // Number of RANSAC iterations
-  align.setNumberOfSamples(_fpfh_number_of_samples);              // Number of points to sample for generating/prerejecting a pose
-  align.setCorrespondenceRandomness(_fpfh_corr_randomness);       // Number of nearest features to use
-  align.setSimilarityThreshold(_fpfh_similarity_threshold);       // Polygonal edge length similarity threshold
-  align.setMaxCorrespondenceDistance(1.5f * _clouds_voxel_leaf);  // Inlier threshold
-  align.setInlierFraction(_fpfh_inlier_fraction);                 // Required inlier fraction for accepting a pose hypothesis
+  align.setMaximumIterations(_fpfh_ransac_max_iter);                  // Number of RANSAC iterations
+  align.setNumberOfSamples(_fpfh_number_of_samples);                  // Number of points to sample for generating/prerejecting a pose
+  align.setCorrespondenceRandomness(_fpfh_corr_randomness);           // Number of nearest features to use
+  align.setSimilarityThreshold(_fpfh_similarity_threshold);           // Polygonal edge length similarity threshold
+  align.setMaxCorrespondenceDistance(1.5f * _preprocess_voxel_leaf);  // Inlier threshold
+  align.setInlierFraction(_fpfh_inlier_fraction);                     // Required inlier fraction for accepting a pose hypothesis
 
   if (enable_init_guess && _use_init_guess) {
     NODELET_INFO("[PCL2MapRegistration] FPFH -- using initial guess.");
@@ -612,7 +627,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   TicToc t;
 
   // Create filtered objects
-  PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
+  const PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
 
   pcl::IterativeClosestPointWithNormals<pt_NORM, pt_NORM> icpn;
   icpn.setInputSource(pc_src);
@@ -643,8 +658,6 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /* pcl2map_sicpn() //{*/
 std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_sicpn(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
                                                                                           const Eigen::Matrix4f &T_guess) {
-  // TODO: use T_guess
-
   TicToc t;
 
   // Prepare best-score variables
@@ -673,14 +686,19 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
     // Create initial guess as a rotation by `heading` around pc_src centroid
     const float             heading = float(double(i) * 2.0 * M_PI / double(_sicpn_number_of_samples));
     const Eigen::AngleAxisf heading_ax(heading, Eigen::Vector3f::UnitZ());
-    const Eigen::Matrix4f   T_rot = getRotationMatrixAroundPoint(heading_ax.matrix(), centroid_pc_src);
+    const Eigen::Matrix4f   T_rot       = getRotationMatrixAroundPoint(heading_ax.matrix(), centroid_pc_src);
+    const Eigen::Matrix4f   T_guess_rot = T_guess * T_rot;
 
     // Perform fine tuning registration
     const PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
-    sicpn.align(*pc_aligned, T_rot);
+    sicpn.align(*pc_aligned, T_guess_rot);
 
     // Store best score
     if (sicpn.hasConverged()) {
+
+      publishCloud(_pub_cloud_source, pc_src, T_guess_rot);
+      publishCloud(_pub_cloud_aligned, pc_aligned);
+
       const double score = sicpn.getFitnessScore();
       NODELET_INFO("[PCL2MapRegistration] Registration (heading: %0.2f) converged with score: %0.2f", heading, score);
       if (score < score_best) {
@@ -773,7 +791,10 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getCentroids(co
 /*//{ getPolylineBarycenters() */
 std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBarycenters(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
 
-  HULL hull_src                        = getConcaveHull(pc_src, _cloud_correlation_poly_bary_alpha);
+
+  NODELET_ERROR("getting concave hull:");
+  HULL hull_src = getConcaveHull(pc_src, _cloud_correlation_poly_bary_alpha);
+  NODELET_ERROR("getting barycenter:");
   hull_src.polyline_barycenter         = getPolylineBarycenter(hull_src.edges);
   hull_src.cloud_hull->header.frame_id = _frame_map;
 
@@ -787,7 +808,9 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBary
 
     } else {
 
-      hull_trg                             = getConcaveHull(pc_targ, _cloud_correlation_poly_bary_alpha);
+      NODELET_ERROR("getting concave hull:");
+      hull_trg = getConcaveHull(pc_targ, _cloud_correlation_poly_bary_alpha);
+      NODELET_ERROR("getting barycenter:");
       hull_trg.polyline_barycenter         = getPolylineBarycenter(hull_trg.edges);
       hull_trg.cloud_hull->header.frame_id = _frame_map;
       hull_trg.has_data                    = true;
@@ -808,18 +831,31 @@ HULL PCL2MapRegistration::getConcaveHull(const PC_NORM::Ptr &pc, const double al
 
   HULL hull;
   hull.concave    = true;
-  hull.has_data   = true;
   hull.cloud_hull = boost::make_shared<PC_NORM>();
 
+  const sensor_msgs::PointCloud2::Ptr pc_tmp = boost::make_shared<sensor_msgs::PointCloud2>();
+  pcl::toROSMsg(*pc, *pc_tmp);
+  savePCD("/tmp/pc_src.pcd", pc_tmp, false);
+
+  NODELET_ERROR("getting polygons of cloud with size: %ld", pc->size());
   // Construct concave hull in 3D
   std::vector<pcl::Vertices> polygons;
   pcl::ConcaveHull<pt_NORM>  concave_hull;
   concave_hull.setInputCloud(pc);
   concave_hull.setAlpha(alpha);
   concave_hull.setKeepInformation(true);
-  concave_hull.setDimension(3);
+  /* concave_hull.setDimension(3); */
+  NODELET_ERROR("reconstructing");
   concave_hull.reconstruct(*hull.cloud_hull, polygons);
 
+  if (hull.cloud_hull->empty() || polygons.empty()) {
+    NODELET_ERROR("[PCL2MapRegistration] Convex hull was not found!");
+    return hull;
+  }
+
+  hull.has_data = true;
+
+  NODELET_ERROR("getting pairs");
   /*//{ Get set of unique pair indices (edges) in the hull */
   typedef std::pair<uint32_t, uint32_t> EDGE;
   const auto                            edge_cmp = [](const EDGE &l, const EDGE &r) {
@@ -855,6 +891,7 @@ HULL PCL2MapRegistration::getConcaveHull(const PC_NORM::Ptr &pc, const double al
   }
   /*//}*/
 
+  NODELET_ERROR("getting pairs of points");
   // Convert pair indices to 3D point format
   unsigned int it = 0;
   hull.edges.resize(edges_idxs.size());
@@ -938,11 +975,16 @@ PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &pcd_file)
     NODELET_INFO("[PCL2MapRegistration] Loaded XYZ PC with %ld points. Estimating the PC normals.", pc_xyz->points.size());
 
     // Estimate normals
-    PC_NORM::Ptr normals = estimateNormals(pc_xyz, _normal_estimation_radius);
+    const PC_NORM::Ptr normals = estimateNormals(pc_xyz, _normal_estimation_radius);
 
     // Merge points and normals
     pcl::concatenateFields(*pc_xyz, *normals, *pc_norm);
   }
+
+  std::vector<int> indices;
+  pcl::removeNaNNormalsFromPointCloud(*pc_norm, *pc_norm, indices);
+  pcl::removeNaNFromPointCloud(*pc_norm, *pc_norm, indices);
+  NODELET_INFO("[PCL2MapRegistration] Cloud size after NaN removal: %ld.", pc_norm->points.size());
 
   return pc_norm;
 }
@@ -1031,8 +1073,19 @@ const geometry_msgs::Transform PCL2MapRegistration::matrixToTfTransform(const Ei
 /*//}*/
 
 /*//{ publishCloud() */
-void PCL2MapRegistration::publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &cloud) {
+void PCL2MapRegistration::publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc, const Eigen::Matrix4f &transform) {
   if (pub.getNumSubscribers() > 0) {
+
+    PC_NORM::Ptr cloud;
+
+    if (!transform.isIdentity()) {
+      cloud = boost::make_shared<PC_NORM>();
+      pcl::transformPointCloud(*pc, *cloud, transform);
+      cloud->header = pc->header;
+    } else {
+      cloud = pc;
+    }
+
     try {
       pub.publish(cloud);
     }

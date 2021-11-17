@@ -3,8 +3,8 @@
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
   <arg name="map_frame" default="global_origin" />
 
-  <arg name="target_pcd" default="$(find naki_gazebo_resources)/models/olomouc_marie_snezna/pcd/olomouc_marie_snezna.pcd" />
-  <arg name="source_pcd" default="$(find naki_gazebo_resources)/models/olomouc_marie_snezna/pcd/olomouc_marie_snezna_start_A.pcd" />
+  <arg name="target_pcd" default="$(find naki_gazebo_resources)/models/olomouc_marie_snezna/pcd/olomouc_marie_snezna_normals.pcd" />
+  <arg name="source_pcd" default="$(find naki_gazebo_resources)/models/olomouc_marie_snezna/pcd/real_initial_map_normals.pcd" />
   <arg name="topic_pointcloud2" default="octomap_point_cloud_centers" />
 
   <arg name="nodelet" default="standalone" />

@@ -76,9 +76,12 @@ private:
   int   _registration_method_initial;
   int   _registration_method_fine_tune;
   bool  _use_init_guess;
-  float _clouds_voxel_leaf;
   float _normal_estimation_radius;
   float _min_convergence_score;
+
+  float _preprocess_voxel_leaf;
+  float _preprocess_ror_radius;
+  int _preprocess_ror_neighbors;
 
   float  _cloud_correlation_z_crop_offset;
   double _cloud_correlation_poly_bary_alpha;
@@ -164,7 +167,7 @@ private:
   const Eigen::Matrix4f          translationYawToMatrix(const Eigen::Vector3f &translation, const float yaw);
   const geometry_msgs::Transform matrixToTfTransform(const Eigen::Matrix4f &mat);
 
-  void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc);
+  void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc, const Eigen::Matrix4f &transform = Eigen::Matrix4f::Identity());
 
   HULL getConcaveHull(const PC_NORM::Ptr &pc, const double alpha = 0.1);
   void publishHull(const ros::Publisher &pub, const HULL &hull, const Eigen::Vector3f &color_rgb);
