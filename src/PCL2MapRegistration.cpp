@@ -60,7 +60,9 @@ void PCL2MapRegistration::onInit() {
     ros::shutdown();
     return;
   } else if (_cloud_correlation_method == "polyline_barycenter") {
-    param_loader.loadParam("cloud_correlation/polyline_barycenter/alpha", _cloud_correlation_poly_bary_alpha);
+    param_loader.loadParam("cloud_correlation/polyline_barycenter/concave/alpha", _cloud_correlation_poly_bary_alpha);
+    const std::string hull_type               = param_loader.loadParam2("cloud_correlation/polyline_barycenter/hull", std::string("concave"));
+    _cloud_correlation_poly_bary_hull_concave = hull_type == "concave";
   }
 
   if (!param_loader.loadedSuccessfully()) {
@@ -791,10 +793,7 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getCentroids(co
 /*//{ getPolylineBarycenters() */
 std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBarycenters(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
 
-
-  NODELET_ERROR("getting concave hull:");
-  HULL hull_src = getConcaveHull(pc_src, _cloud_correlation_poly_bary_alpha);
-  NODELET_ERROR("getting barycenter:");
+  HULL hull_src                        = getHull(pc_src, _cloud_correlation_poly_bary_hull_concave, _cloud_correlation_poly_bary_alpha);
   hull_src.polyline_barycenter         = getPolylineBarycenter(hull_src.edges);
   hull_src.cloud_hull->header.frame_id = _frame_map;
 
@@ -808,9 +807,7 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBary
 
     } else {
 
-      NODELET_ERROR("getting concave hull:");
-      hull_trg = getConcaveHull(pc_targ, _cloud_correlation_poly_bary_alpha);
-      NODELET_ERROR("getting barycenter:");
+      hull_trg                             = getHull(pc_targ, _cloud_correlation_poly_bary_hull_concave, _cloud_correlation_poly_bary_alpha);
       hull_trg.polyline_barycenter         = getPolylineBarycenter(hull_trg.edges);
       hull_trg.cloud_hull->header.frame_id = _frame_map;
       hull_trg.has_data                    = true;
@@ -826,36 +823,28 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBary
 }
 /*//}*/
 
-/*//{ getConcaveHull() */
-HULL PCL2MapRegistration::getConcaveHull(const PC_NORM::Ptr &pc, const double alpha) {
+/*//{ getHull() */
+HULL PCL2MapRegistration::getHull(const PC_NORM::Ptr &pc, const bool concave, const double alpha) {
 
   HULL hull;
-  hull.concave    = true;
   hull.cloud_hull = boost::make_shared<PC_NORM>();
+  std::vector<pcl::Vertices> polygons;
 
   const sensor_msgs::PointCloud2::Ptr pc_tmp = boost::make_shared<sensor_msgs::PointCloud2>();
   pcl::toROSMsg(*pc, *pc_tmp);
-  savePCD("/tmp/pc_src.pcd", pc_tmp, false);
 
-  NODELET_ERROR("getting polygons of cloud with size: %ld", pc->size());
-  // Construct concave hull in 3D
-  std::vector<pcl::Vertices> polygons;
-  pcl::ConcaveHull<pt_NORM>  concave_hull;
-  concave_hull.setInputCloud(pc);
-  concave_hull.setAlpha(alpha);
-  concave_hull.setKeepInformation(true);
-  /* concave_hull.setDimension(3); */
-  NODELET_ERROR("reconstructing");
-  concave_hull.reconstruct(*hull.cloud_hull, polygons);
+  // Construct hull in 3D
+  const bool hull_succ = computeHull(pc, hull.cloud_hull, polygons, concave, alpha);
+  hull.concave         = concave && hull_succ;
 
   if (hull.cloud_hull->empty() || polygons.empty()) {
-    NODELET_ERROR("[PCL2MapRegistration] Convex hull was not found!");
+    NODELET_ERROR("[PCL2MapRegistration] Hull was not found!");
     return hull;
   }
+  NODELET_INFO("[PCL2MapRegistration] %s hull was found (vertices: %ld).", hull.concave ? "Concave" : "Convex", hull.cloud_hull->size());
 
   hull.has_data = true;
 
-  NODELET_ERROR("getting pairs");
   /*//{ Get set of unique pair indices (edges) in the hull */
   typedef std::pair<uint32_t, uint32_t> EDGE;
   const auto                            edge_cmp = [](const EDGE &l, const EDGE &r) {
@@ -891,7 +880,6 @@ HULL PCL2MapRegistration::getConcaveHull(const PC_NORM::Ptr &pc, const double al
   }
   /*//}*/
 
-  NODELET_ERROR("getting pairs of points");
   // Convert pair indices to 3D point format
   unsigned int it = 0;
   hull.edges.resize(edges_idxs.size());
@@ -905,9 +893,38 @@ HULL PCL2MapRegistration::getConcaveHull(const PC_NORM::Ptr &pc, const double al
     /* point_B.z); */
   }
 
-  /* NODELET_ERROR("cloud hull size: %ld", hull.cloud_hull->size()); */
-
   return hull;
+}
+/*//}*/
+
+/*//{ computeHull() */
+bool PCL2MapRegistration::computeHull(const PC_NORM::Ptr &cloud_pc_in, const PC_NORM::Ptr &cloud_hull_out, std::vector<pcl::Vertices> &polygons,
+                                      const bool concave, const double alpha) {
+
+  if (concave) {
+
+    pcl::ConcaveHull<pt_NORM> concave_hull;
+    concave_hull.setAlpha(alpha);
+    concave_hull.setKeepInformation(true);
+    concave_hull.setDimension(3);
+    concave_hull.setInputCloud(cloud_pc_in);
+    try {
+      concave_hull.reconstruct(*cloud_hull_out, polygons);
+    }
+    catch (...) {
+      NODELET_ERROR("[PCL2MapRegistration] Segmentation fault during computation of the concave hull (bug in PCL/qhull)! Trying convex hull instead.");
+      return computeHull(cloud_pc_in, cloud_hull_out, polygons, false);
+    }
+
+  } else {
+
+    pcl::ConvexHull<pt_NORM> convex_hull;
+    convex_hull.setInputCloud(cloud_pc_in);
+    convex_hull.setDimension(3);
+    convex_hull.reconstruct(*cloud_hull_out, polygons);
+  }
+
+  return true;
 }
 /*//}*/
 

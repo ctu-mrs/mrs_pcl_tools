@@ -20,6 +20,7 @@
 #include <pcl/registration/icp.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/surface/concave_hull.h>
+#include <pcl/surface/convex_hull.h>
 
 #include "mrs_pcl_tools/pcl2map_registration_dynparamConfig.h"
 #include "mrs_pcl_tools/SrvRegisterPointCloudByName.h"
@@ -81,9 +82,10 @@ private:
 
   float _preprocess_voxel_leaf;
   float _preprocess_ror_radius;
-  int _preprocess_ror_neighbors;
+  int   _preprocess_ror_neighbors;
 
   float  _cloud_correlation_z_crop_offset;
+  bool   _cloud_correlation_poly_bary_hull_concave;
   double _cloud_correlation_poly_bary_alpha;
 
   float _fpfh_search_rad           = 3.5;
@@ -169,7 +171,9 @@ private:
 
   void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc, const Eigen::Matrix4f &transform = Eigen::Matrix4f::Identity());
 
-  HULL getConcaveHull(const PC_NORM::Ptr &pc, const double alpha = 0.1);
+  HULL getHull(const PC_NORM::Ptr &pc, const bool concave, const double alpha = 0.1);
+  bool computeHull(const PC_NORM::Ptr &cloud_pc_in, const PC_NORM::Ptr &cloud_hull_out, std::vector<pcl::Vertices> &polygons, const bool concave,
+                   const double alpha = 0.1);
   void publishHull(const ros::Publisher &pub, const HULL &hull, const Eigen::Vector3f &color_rgb);
 };
 //}

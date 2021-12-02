@@ -17,7 +17,9 @@ cloud_correlation:
   z_crop_offset: 2.0
 
   polyline_barycenter:
-    alpha: 2.0
+    hull: "concave" # [concave, convex]
+    concave:
+      alpha: 2.0
 
 icpn:
   max_corr_dist: 4.0
