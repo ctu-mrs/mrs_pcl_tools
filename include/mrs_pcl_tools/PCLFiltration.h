@@ -17,6 +17,7 @@
 
 #include <mrs_lib/transformer.h>
 #include <mrs_lib/subscribe_handler.h>
+#include <mrs_lib/scope_timer.h>
 
 #include <darpa_mrs_msgs/LandingSpot.h>
 
@@ -157,6 +158,7 @@ class SensorDepthCamera {
 public:
   void initialize(const ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer>& transformer, const std::string& prefix,
                   const std::string& name);
+  void setScopeTimerLogger(const std::shared_ptr<mrs_lib::ScopeTimerLogger> logger_ptr, const bool enable_scope_timer);
 
 private:
   template <typename T>
@@ -176,6 +178,7 @@ private:
 
 private:
   bool            initialized = false;
+  bool            _enable_scope_timer;
   ros::NodeHandle _nh;
   ros::Publisher  pub_points;
   ros::Publisher  pub_points_over_max_range;
@@ -185,7 +188,8 @@ private:
   mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
 
-  std::shared_ptr<mrs_lib::Transformer> _transformer;
+  std::shared_ptr<mrs_lib::Transformer>      _transformer;
+  std::shared_ptr<mrs_lib::ScopeTimerLogger> _scope_time_logger;
 
 private:
   std::string depth_in, depth_camera_info_in, points_out, points_over_max_range_out;
@@ -255,6 +259,7 @@ public:
 
 private:
   bool is_initialized = false;
+  bool _enable_scope_timer;
 
   ros::Subscriber _sub_lidar3d;
   ros::Subscriber _sub_depth;
@@ -270,7 +275,8 @@ private:
   ros::Publisher _pub_depth_over_max_range;
   ros::Publisher _pub_rplidar;
 
-  std::shared_ptr<mrs_lib::Transformer> _transformer;
+  std::shared_ptr<mrs_lib::Transformer>      _transformer;
+  std::shared_ptr<mrs_lib::ScopeTimerLogger> _scope_time_logger;
 
   boost::recursive_mutex                               config_mutex_;
   typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;

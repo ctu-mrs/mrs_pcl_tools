@@ -58,6 +58,9 @@ void PCLFiltration::onInit() {
   // setup transformer
   _transformer = std::make_shared<mrs_lib::Transformer>("PCLFiltration", uav_name);
 
+  param_loader.loadParam("scope_timer/enable", _enable_scope_timer, false);
+  const std::string time_logger_filepath = param_loader.loadParam2("scope_timer/log_filename", std::string(""));
+
   /* 3D LIDAR */
   param_loader.loadParam("lidar3d/keep_organized", _lidar3d_keep_organized, true);
   param_loader.loadParam("lidar3d/republish", _lidar3d_republish, false);
@@ -142,6 +145,12 @@ void PCLFiltration::onInit() {
     ros::shutdown();
   }
 
+
+  _scope_time_logger = std::make_shared<mrs_lib::ScopeTimerLogger>(time_logger_filepath, _enable_scope_timer);
+  for (const auto& cam : _sensors_depth_cameras) {
+    cam->setScopeTimerLogger(_scope_time_logger, _enable_scope_timer);
+  }
+
   if (_lidar3d_republish) {
 
     if (_lidar3d_row_step <= 0 || _lidar3d_col_step <= 0) {
@@ -204,6 +213,8 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& ms
         msg->width, msg->height, _lidar3d_col_step, _lidar3d_row_step);
     return;
   }
+
+  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("PCLFiltration::lidar3dCallback", _scope_time_logger, _enable_scope_timer);
 
   const bool is_ouster = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
   if (is_ouster) {

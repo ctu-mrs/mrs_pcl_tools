@@ -3,6 +3,9 @@
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
   <arg name="node_name" default="pcl_filtration" />
 
+  <arg name="scope_timer/enable" default="false" />
+  <arg name="scope_timer/log_filename" default="" />
+
   <arg name="lidar3d/republish" default="true" />
   <arg name="rplidar_republish" default="false" />
 
@@ -34,6 +37,9 @@
 
       <!-- Parameters -->
       <param name="uav_name" type="string" value="$(arg UAV_NAME)" />
+      
+      <param name="scope_timer/enable" type="bool" value="$(arg scope_timer/enable)" />
+      <param name="scope_timer/log_filename" type="string" value="$(arg scope_timer/log_filename)" />
 
       <param name="lidar3d/republish" type="bool" value="$(arg lidar3d/republish)" />
       <param name="lidar3d/keep_organized" type="bool" value="$(arg lidar3d/keep_organized)" />
