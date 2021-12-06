@@ -89,6 +89,13 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, mrs_lib::ParamLoad
 }
 /*//}*/
 
+/*//{ setScopeTimerLogger() */
+void SensorDepthCamera::setScopeTimerLogger(const std::shared_ptr<mrs_lib::ScopeTimerLogger> logger_ptr, const bool enable_scope_timer) {
+  _enable_scope_timer = enable_scope_timer;
+  _scope_time_logger  = logger_ptr;
+}
+/*//}*/
+
 /*//{ convertDepthToCloud() */
 // Depth conversion inspired by:
 // https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
@@ -174,6 +181,9 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
   if (!initialized)
     return;
 
+  const std::string   scope_label = "PCLFiltration::process_depth_msg::" + sensor_name;
+  mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _scope_time_logger, _enable_scope_timer);
+
   PC::Ptr     cloud, cloud_over_max_range;
   const auto& depth_msg = sh.getMsg();
 
@@ -208,6 +218,8 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
   catch (...) {
   }
 
+  timer.checkpoint("conversion and filtration");
+
   if (landing_spot_detection_use && landing_spot_detection_frame++ % landing_spot_detection_frame_step == 0) {
 
     const bool ret_dbg_pcl                                                     = pub_landing_spot_dbg_pcl.getNumSubscribers() > 0;
@@ -238,6 +250,8 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
       catch (...) {
       }
     }
+
+    timer.checkpoint("landing spot detection");
   }
 }
 /*//}*/
