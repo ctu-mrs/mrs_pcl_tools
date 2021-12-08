@@ -3,13 +3,9 @@
 /* includes //{ */
 #include "support.h"
 
-
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/voxel_grid.h>
-
-#include <pcl/ModelCoefficients.h>
-#include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/sample_consensus/ransac.h>
 #include <pcl/sample_consensus/sac_model_perpendicular_plane.h>
 
@@ -18,8 +14,6 @@
 #include <mrs_lib/transformer.h>
 #include <mrs_lib/subscribe_handler.h>
 #include <mrs_lib/scope_timer.h>
-
-#include <mrs_pcl_tools/LandingSpot.h>
 
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/Range.h>
@@ -168,20 +162,12 @@ private:
   void process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs::Image>& sh);
   void process_camera_info_msg(mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo>& sh);
 
-  pt_XYZRGB colorPointXYZ(const pt_XYZ& point, const uint8_t& ch_r, const uint8_t& ch_g, const uint8_t& ch_b);
-  pt_XYZRGB colorPointXYZ(const Eigen::Vector4f& point, const uint8_t& ch_r, const uint8_t& ch_g, const uint8_t& ch_b);
-  pt_XYZRGB colorPointXYZ(const float& x, const float& y, const float& z, const uint8_t& ch_r, const uint8_t& ch_g, const uint8_t& ch_b);
-
-  std::tuple<bool, float, geometry_msgs::Point, PC_RGB::Ptr> detectLandingPosition(const PC::Ptr& cloud, const bool ret_dbg_pcl);
-
 private:
   bool            initialized = false;
   bool            _enable_scope_timer;
   ros::NodeHandle _nh;
   ros::Publisher  pub_points;
   ros::Publisher  pub_points_over_max_range;
-  ros::Publisher  pub_landing_spot_detection;
-  ros::Publisher  pub_landing_spot_dbg_pcl;
 
   mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
@@ -191,7 +177,6 @@ private:
 
 private:
   std::string depth_in, depth_camera_info_in, points_out, points_over_max_range_out;
-  std::string landing_spot_detection_out, landing_spot_detection_dbg_out;
   std::string sensor_name;
 
   bool has_camera_info = false;
@@ -228,21 +213,6 @@ private:
   bool  bilateral_use;
   float bilateral_sigma_S;
   float bilateral_sigma_R;
-
-private:
-  std::string                                   frame_world;
-  std::unique_ptr<pcl::SACSegmentation<pt_XYZ>> _seg_plane_ptr;
-
-  // Landing spot detection parameters
-  bool  landing_spot_detection_use;
-  float landing_spot_detection_square_size;
-  float landing_spot_detection_square_size_min_ratio;
-  float landing_spot_detection_square_max_ratio;
-  float landing_spot_detection_z_normal_threshold;
-  float landing_spot_detection_ransac_distance_threshold;
-  float landing_spot_detection_min_inliers_ratio;
-  int   landing_spot_detection_frame_step;
-  int   landing_spot_detection_frame = 0;
 };
 
 #include "impl/sensors.hpp"
