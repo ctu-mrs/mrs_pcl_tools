@@ -1,3 +1,7 @@
+scope_timer:
+  enable: true
+  log_filename: ""
+
 lidar3d:
 
   republish: true

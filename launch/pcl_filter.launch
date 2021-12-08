@@ -36,9 +36,9 @@
       <remap from="~rangefinder_in" to="mavros/distance_sensor/garmin" />
 
         <!-- Publishers -->
-      <remap from="~lidar3d_out" to="~points_processed" />
-      <remap from="~lidar3d_over_max_range_out" to="~points_over_max_range" />
-      <remap from="~rplidar_out" to="~scan_processed" />
+      <remap from="~lidar3d_out" to="$(arg topic_3d_lidar_in)_processed" />
+      <remap from="~lidar3d_over_max_range_out" to="$(arg topic_3d_lidar_in)_over_max_range" />
+      <remap from="~rplidar_out" to="rplidarscan_processed" />
 
     </node>
 
