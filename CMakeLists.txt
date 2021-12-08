@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.1.2)
 project(mrs_pcl_tools)
 
 # Override CXX flags inherited from workspace, if precompiled PCL binaries from debian repos are used
