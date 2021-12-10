@@ -7,7 +7,7 @@ normal_estimation_radius: 0.2
 min_convergence_score: 0.5
 
 preprocess:
-  voxel_leaf: 0.05
+  voxel_leaf: 0.2
   ror:
     radius: 1.0
     neighbors: 5
@@ -17,7 +17,7 @@ cloud_correlation:
   z_crop_offset: 2.0
 
   polyline_barycenter:
-    hull: "concave" # [concave, convex]
+    hull: "convex" # [concave, convex]
     concave:
       alpha: 2.0
 
@@ -31,11 +31,11 @@ icpn:
   use_recip_corr: false
 
 sicpn:
-  number_of_samples: 8
+  number_of_samples: 4
   max_corr_dist: 7.0
   ransac_outl_rej_thrd: 0.8
   trans_ep: 0.01
   eucld_fitn_eps: 0.01
-  max_iter: 1000
-  ransac_iter: 300
+  max_iter: 100
+  ransac_iter: 150
   use_recip_corr: false

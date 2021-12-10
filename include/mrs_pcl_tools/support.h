@@ -5,6 +5,7 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/PointIndices.h>
+#include <pcl/common/pca.h>
 
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/statistical_outlier_removal.h>

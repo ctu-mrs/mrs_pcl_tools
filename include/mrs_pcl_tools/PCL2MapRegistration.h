@@ -42,6 +42,14 @@ struct HULL
   Eigen::Vector3f                          polyline_barycenter;
 };
 
+struct EigenVectors
+{
+  bool            valid = false;
+  Eigen::Vector3f x;
+  Eigen::Vector3f y;
+  Eigen::Vector3f z;
+};
+
 /* class PCL2MapRegistration //{ */
 class PCL2MapRegistration : public nodelet::Nodelet {
 
@@ -141,12 +149,14 @@ private:
   PC_NORM::Ptr                loadPcWithNormals(const std::string &pcd_file);
   std::optional<PC_NORM::Ptr> subscribeSinglePointCloudMsg(const std::string &topic);
 
-  Eigen::Matrix4f                             correlateCloudToCloud(PC_NORM::Ptr &pc_src, PC_NORM::Ptr &pc_targ);
-  std::pair<Eigen::Vector3f, Eigen::Vector3f> getCentroids(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ);
-  std::pair<Eigen::Vector3f, Eigen::Vector3f> getPolylineBarycenters(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ);
+  Eigen::Matrix4f                             correlateCloudToCloud(const PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
+  std::pair<Eigen::Vector3f, Eigen::Vector3f> getCentroids(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
+  std::pair<Eigen::Vector3f, Eigen::Vector3f> getPolylineBarycenters(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
+  std::pair<EigenVectors, EigenVectors>       getEigenVectors(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
 
-  Eigen::Vector3f getCentroid(const PC_NORM::Ptr &pc_src);
+  Eigen::Vector3f getCentroid(const PC_NORM::Ptr pc_src);
   Eigen::Vector3f getPolylineBarycenter(const std::vector<std::pair<pt_NORM, pt_NORM>> &edges);
+  EigenVectors    getEigenVectors(const PC_NORM::Ptr cloud);
 
   std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
                                                                       const Eigen::Matrix4f &init_guess = Eigen::Matrix4f::Identity());
@@ -154,27 +164,29 @@ private:
   bool callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegisterPointCloudByName::Request &req, mrs_pcl_tools::SrvRegisterPointCloudByName::Response &res);
   void callbackReconfigure(Config &config, [[maybe_unused]] uint32_t level);
 
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_ndt(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map, const Eigen::Matrix4f &T_guess,
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_ndt(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const Eigen::Matrix4f &T_guess,
                                                                      const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_fpfh(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map, const Eigen::Matrix4f &T_guess,
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_fpfh(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const Eigen::Matrix4f &T_guess,
                                                                       const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_gicp(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map, const Eigen::Matrix4f &T_guess,
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_gicp(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const Eigen::Matrix4f &T_guess,
                                                                       const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_icpn(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map, const Eigen::Matrix4f &T_guess,
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_icpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const Eigen::Matrix4f &T_guess,
                                                                       const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_sicpn(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map, const Eigen::Matrix4f &T_guess);
+  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_sicpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const Eigen::Matrix4f &T_guess);
 
   void applyRandomTransformation(PC_NORM::Ptr cloud);
 
   const Eigen::Matrix4f          translationYawToMatrix(const Eigen::Vector3f &translation, const float yaw);
   const geometry_msgs::Transform matrixToTfTransform(const Eigen::Matrix4f &mat);
 
-  void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc, const Eigen::Matrix4f &transform = Eigen::Matrix4f::Identity());
+  void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr pc, const Eigen::Matrix4f &transform = Eigen::Matrix4f::Identity());
 
-  HULL getHull(const PC_NORM::Ptr &pc, const bool concave, const double alpha = 0.1);
-  bool computeHull(const PC_NORM::Ptr &cloud_pc_in, const PC_NORM::Ptr &cloud_hull_out, std::vector<pcl::Vertices> &polygons, const bool concave,
+  HULL getHull(const PC_NORM::Ptr pc, const bool concave, const double alpha = 0.1);
+  void computeHull(const PC_NORM::Ptr cloud_pc_in, const PC_NORM::Ptr cloud_hull_out, std::vector<pcl::Vertices> &polygons, const bool concave,
                    const double alpha = 0.1);
   void publishHull(const ros::Publisher &pub, const HULL &hull, const Eigen::Vector3f &color_rgb);
+
+  void print(const EigenVectors &eigenvectors, const std::string &ns = "");
 };
 //}
 

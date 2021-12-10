@@ -500,7 +500,7 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
 //}
 
 /* pcl2map_ndt() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_ndt(const PC_NORM::Ptr &pc, const PC_NORM::Ptr &pc_map,
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_ndt(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map,
                                                                                         const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
   TicToc t;
 
@@ -537,7 +537,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /* pcl2map_fpfh() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_fpfh(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_fpfh(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
                                                                                          const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
 
   TicToc t;
@@ -587,7 +587,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /* pcl2map_gicp() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_gicp(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_gicp(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
                                                                                          const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
 
   TicToc t;
@@ -623,7 +623,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /* pcl2map_icpn() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_icpn(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_icpn(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
                                                                                          const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
 
   TicToc t;
@@ -658,7 +658,7 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /* pcl2map_sicpn() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_sicpn(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
+std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_sicpn(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
                                                                                           const Eigen::Matrix4f &T_guess) {
   TicToc t;
 
@@ -738,10 +738,11 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 /*//}*/
 
 /*//{ correlateCloudToCloud() */
-Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr &pc_src, PC_NORM::Ptr &pc_targ) {
+Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(const PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ) {
 
   std::pair<Eigen::Vector3f, Eigen::Vector3f> origins;
 
+  // Find correlation *translation* source->target
   if (_cloud_correlation_method == "polyline_barycenter") {
     NODELET_INFO("[PCL2MapRegistration] Correlating clouds by their polyline barycenter.");
     origins = getPolylineBarycenters(pc_src, pc_targ);
@@ -759,6 +760,23 @@ Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr &pc_src,
   NODELET_INFO("[PCL2MapRegistration]  target: (%.1f, %.1f, %.1f)", origin_targ.x(), origin_targ.y(), origin_targ.z());
   NODELET_INFO("[PCL2MapRegistration]  s->t:   (%.1f, %.1f, %.1f)", origin_diff.x(), origin_diff.y(), origin_diff.z());
 
+  // Find correlation *orientation* source->target
+  float                                       T_heading    = 0.0f;
+  const std::pair<EigenVectors, EigenVectors> eigenvectors = getEigenVectors(pc_src, pc_targ);
+
+  if (eigenvectors.first.valid && eigenvectors.second.valid) {
+    const Eigen::Vector3f vec_x_src  = eigenvectors.first.x.normalized();
+    const Eigen::Vector3f vec_x_targ = eigenvectors.second.x.normalized();
+
+    const float hdg_src  = std::atan2(vec_x_src.y(), vec_x_src.x());
+    const float hdg_targ = std::atan2(vec_x_targ.y(), vec_x_targ.x());
+
+    T_heading = float(std::fmod(hdg_targ - hdg_src + M_PI, 2.0 * M_PI) + M_PI);
+    if (T_heading < -M_PI) {
+      T_heading += 2.0 * M_PI;
+    }
+  }
+
   // Compute min/max Z axis points
   pt_NORM pt_min_src;
   pt_NORM pt_min_targ;
@@ -768,10 +786,8 @@ Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr &pc_src,
   pcl::getMinMax3D(*pc_targ, pt_min_targ, pt_max_targ);
 
   // Build transformation matrix
-  Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
-  T(0, 3)           = origin_diff.x();
-  T(1, 3)           = origin_diff.y();
-  T(2, 3)           = pt_min_targ.z - pt_min_src.z;
+  const Eigen::Vector3f T_translation = Eigen::Vector3f(origin_diff.x(), origin_diff.y(), pt_min_targ.z - pt_min_src.z);
+  const Eigen::Matrix4f T             = translationYawToMatrix(T_translation, T_heading);
 
   // Crop pc_targ in z-axis w.r.t. pc_src (assumption that we takeoff from ground and clouds roll/pitch angles can be neglected)
   pcl::CropBox<pt_NORM> box;
@@ -785,13 +801,13 @@ Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(PC_NORM::Ptr &pc_src,
 /*//}*/
 
 /*//{ getCentroids() */
-std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getCentroids(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
+std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getCentroids(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
   return {getCentroid(pc_src), getCentroid(pc_targ)};
 }
 /*//}*/
 
 /*//{ getPolylineBarycenters() */
-std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBarycenters(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ) {
+std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBarycenters(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
 
   HULL hull_src                        = getHull(pc_src, _cloud_correlation_poly_bary_hull_concave, _cloud_correlation_poly_bary_alpha);
   hull_src.polyline_barycenter         = getPolylineBarycenter(hull_src.edges);
@@ -823,19 +839,31 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBary
 }
 /*//}*/
 
+/*//{ getEigenVectors() */
+std::pair<EigenVectors, EigenVectors> PCL2MapRegistration::getEigenVectors(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
+
+  const EigenVectors eigenvectors_src  = getEigenVectors(pc_src);
+  const EigenVectors eigenvectors_targ = getEigenVectors(pc_targ);
+
+  print(eigenvectors_src, "source");
+  print(eigenvectors_targ, "targ");
+
+  // TODO: debug publish
+
+  return {eigenvectors_src, eigenvectors_targ};
+}
+/*//}*/
+
 /*//{ getHull() */
-HULL PCL2MapRegistration::getHull(const PC_NORM::Ptr &pc, const bool concave, const double alpha) {
+HULL PCL2MapRegistration::getHull(const PC_NORM::Ptr pc, const bool concave, const double alpha) {
 
   HULL hull;
   hull.cloud_hull = boost::make_shared<PC_NORM>();
-  std::vector<pcl::Vertices> polygons;
-
-  const sensor_msgs::PointCloud2::Ptr pc_tmp = boost::make_shared<sensor_msgs::PointCloud2>();
-  pcl::toROSMsg(*pc, *pc_tmp);
+  hull.concave    = concave;
 
   // Construct hull in 3D
-  const bool hull_succ = computeHull(pc, hull.cloud_hull, polygons, concave, alpha);
-  hull.concave         = concave && hull_succ;
+  std::vector<pcl::Vertices> polygons;
+  computeHull(pc, hull.cloud_hull, polygons, concave, alpha);
 
   if (hull.cloud_hull->empty() || polygons.empty()) {
     NODELET_ERROR("[PCL2MapRegistration] Hull was not found!");
@@ -898,7 +926,7 @@ HULL PCL2MapRegistration::getHull(const PC_NORM::Ptr &pc, const bool concave, co
 /*//}*/
 
 /*//{ computeHull() */
-bool PCL2MapRegistration::computeHull(const PC_NORM::Ptr &cloud_pc_in, const PC_NORM::Ptr &cloud_hull_out, std::vector<pcl::Vertices> &polygons,
+void PCL2MapRegistration::computeHull(const PC_NORM::Ptr cloud_pc_in, const PC_NORM::Ptr cloud_hull_out, std::vector<pcl::Vertices> &polygons,
                                       const bool concave, const double alpha) {
 
   if (concave) {
@@ -908,13 +936,7 @@ bool PCL2MapRegistration::computeHull(const PC_NORM::Ptr &cloud_pc_in, const PC_
     concave_hull.setKeepInformation(true);
     concave_hull.setDimension(3);
     concave_hull.setInputCloud(cloud_pc_in);
-    try {
-      concave_hull.reconstruct(*cloud_hull_out, polygons);
-    }
-    catch (...) {
-      NODELET_ERROR("[PCL2MapRegistration] Segmentation fault during computation of the concave hull (bug in PCL/qhull)! Trying convex hull instead.");
-      return computeHull(cloud_pc_in, cloud_hull_out, polygons, false);
-    }
+    concave_hull.reconstruct(*cloud_hull_out, polygons);
 
   } else {
 
@@ -923,13 +945,11 @@ bool PCL2MapRegistration::computeHull(const PC_NORM::Ptr &cloud_pc_in, const PC_
     convex_hull.setDimension(3);
     convex_hull.reconstruct(*cloud_hull_out, polygons);
   }
-
-  return true;
 }
 /*//}*/
 
 /*//{ getCentroid() */
-Eigen::Vector3f PCL2MapRegistration::getCentroid(const PC_NORM::Ptr &pc) {
+Eigen::Vector3f PCL2MapRegistration::getCentroid(const PC_NORM::Ptr pc) {
 
   Eigen::Vector4f centroid;
   pcl::compute3DCentroid(*pc, centroid);
@@ -958,6 +978,81 @@ Eigen::Vector3f PCL2MapRegistration::getPolylineBarycenter(const std::vector<std
   }
 
   return midpoint / edges_sum_length;
+}
+/*//}*/
+
+/*//{ getEigenVectors() */
+EigenVectors PCL2MapRegistration::getEigenVectors(const PC_NORM::Ptr cloud) {
+
+  EigenVectors ret;
+
+  if (cloud->empty()) {
+    NODELET_ERROR("[PCL2MapRegistration] Input cloud is empty. Cannot compute eigenvectors.");
+    return ret;
+  }
+
+  float num_valid_points = 0.0f;
+
+  // Compute mean
+  float mean[3] = {0.0f, 0.0f, 0.0f};
+  for (const auto &point : cloud->points) {
+
+    if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) {
+      /* NODELET_ERROR("[PCL2MapRegistration] Found NaN point (%.1f, %.1f, %.1f)!!", point.x, point.y, point.z); */
+      continue;
+    }
+
+    mean[0] += point.x;
+    mean[1] += point.y;
+    mean[2] += point.z;
+
+    num_valid_points += 1.0f;
+  }
+
+  mean[0] /= num_valid_points;
+  mean[1] /= num_valid_points;
+  mean[2] /= num_valid_points;
+
+  // Compute covariance matrix
+  Eigen::Matrix3f cov = Eigen::Matrix3f::Zero();
+
+  for (unsigned int i = 0; i < 3; i++) {
+    for (unsigned int j = i; j < 3; j++) {
+
+      for (const auto &point : cloud->points) {
+
+        if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) {
+          /* NODELET_ERROR("[PCL2MapRegistration] Found NaN point (%.1f, %.1f, %.1f)!!", point.x, point.y, point.z); */
+          continue;
+        }
+
+        const auto point_vec = point.getArray3fMap();
+        cov(i, j) += (point_vec[i] - mean[i]) * (point_vec[j] - mean[j]);
+      }
+
+      cov(i, j) /= num_valid_points;
+      cov(j, i) = cov(i, j);
+    }
+  }
+  /* std::cout << "number of points: " << num_valid_points << std::endl; */
+  /* std::cout << "mean:" << std::endl; */
+  /* std::cout << "  x: " << mean[0] << std::endl; */
+  /* std::cout << "  y: " << mean[1] << std::endl; */
+  /* std::cout << "  z: " << mean[2] << std::endl; */
+  /* std::cout << "covariance matrix:" << std::endl; */
+  /* std::cout << cov << std::endl; */
+
+  // Compute eigenvectors
+  Eigen::EigenSolver<Eigen::Matrix3f> es           = Eigen::EigenSolver<Eigen::Matrix3f>(cov);
+  const auto                          eigenvectors = es.eigenvectors();
+  const auto                          eigenvals    = es.eigenvalues();
+
+  ret.x = Eigen::Vector3f(eigenvectors(0, 0).real(), eigenvectors(1, 0).real(), eigenvectors(2, 0).real()).normalized() * eigenvals(0).real();
+  ret.y = Eigen::Vector3f(eigenvectors(0, 1).real(), eigenvectors(1, 1).real(), eigenvectors(2, 1).real()).normalized() * eigenvals(1).real();
+  ret.z = Eigen::Vector3f(eigenvectors(0, 2).real(), eigenvectors(1, 2).real(), eigenvectors(2, 2).real()).normalized() * eigenvals(2).real();
+
+  ret.valid = true;
+  return ret;
 }
 /*//}*/
 
@@ -997,6 +1092,8 @@ PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &pcd_file)
     // Merge points and normals
     pcl::concatenateFields(*pc_xyz, *normals, *pc_norm);
   }
+
+  pc_norm->is_dense = false;
 
   std::vector<int> indices;
   pcl::removeNaNNormalsFromPointCloud(*pc_norm, *pc_norm, indices);
@@ -1090,7 +1187,7 @@ const geometry_msgs::Transform PCL2MapRegistration::matrixToTfTransform(const Ei
 /*//}*/
 
 /*//{ publishCloud() */
-void PCL2MapRegistration::publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr &pc, const Eigen::Matrix4f &transform) {
+void PCL2MapRegistration::publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr pc, const Eigen::Matrix4f &transform) {
   if (pub.getNumSubscribers() > 0) {
 
     PC_NORM::Ptr cloud;
@@ -1198,6 +1295,20 @@ void PCL2MapRegistration::publishHull(const ros::Publisher &pub, const HULL &hul
   catch (...) {
     NODELET_ERROR("[PCL2MapRegistration::publishHull]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
   }
+}
+/*//}*/
+
+/*//{ print */
+void PCL2MapRegistration::print(const EigenVectors &eigenvectors, const std::string &ns) {
+
+  if (!ns.empty()) {
+    NODELET_INFO("[PCL2MapRegistration] Eigenvectors of %s", ns.c_str());
+  } else {
+    NODELET_INFO("[PCL2MapRegistration] Eigenvectors:");
+  }
+  NODELET_INFO("[PCL2MapRegistration]   x: (%.1f, %.1f, %.1f)", eigenvectors.x.x(), eigenvectors.x.y(), eigenvectors.x.z());
+  NODELET_INFO("[PCL2MapRegistration]   y: (%.1f, %.1f, %.1f)", eigenvectors.y.x(), eigenvectors.y.y(), eigenvectors.y.z());
+  NODELET_INFO("[PCL2MapRegistration]   z: (%.1f, %.1f, %.1f)", eigenvectors.z.x(), eigenvectors.z.y(), eigenvectors.z.z());
 }
 /*//}*/
 
