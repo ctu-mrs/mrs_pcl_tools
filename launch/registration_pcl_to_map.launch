@@ -33,6 +33,7 @@
       <remap from="~cloud_aligned_out" to="registration/aligned" />
       <remap from="~dbg_hull_source_out" to="registration/dbg/hull_source" />
       <remap from="~dbg_hull_target_out" to="registration/dbg/hull_target" />
+      <remap from="~dbg_pca_out" to="registration/dbg/pca" />
 
       <!-- Service servers -->
       <remap from="~srv_register_offline" to="~register/offline" />

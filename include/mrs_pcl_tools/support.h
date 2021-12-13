@@ -63,7 +63,7 @@ typename boost::shared_ptr<PC_t> applyVoxelGridFilter(typename boost::shared_ptr
 
 /*//{ applyRadiusOutlierFilter() */
 template <typename PC_t>
-typename boost::shared_ptr<PC_t> applyRadiusOutlierFilter(typename boost::shared_ptr<PC_t> const &cloud, const float radius, const int neighbors) {
+typename boost::shared_ptr<PC_t> applyRadiusOutlierFilter(typename boost::shared_ptr<PC_t> const &cloud, const float radius, const int neighbors, const bool keep_organized = true) {
 
   boost::shared_ptr<PC_t> cloud_out = boost::make_shared<PC_t>();
 
@@ -81,7 +81,7 @@ typename boost::shared_ptr<PC_t> applyRadiusOutlierFilter(typename boost::shared
   /* outrem.setIndices(finite_indices); */
   outrem.setRadiusSearch(radius);
   outrem.setMinNeighborsInRadius(neighbors);
-  outrem.setKeepOrganized(true);
+  outrem.setKeepOrganized(keep_organized);
 
   outrem.filter(*cloud_out);
   /* } */

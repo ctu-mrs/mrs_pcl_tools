@@ -50,6 +50,28 @@ struct EigenVectors
   Eigen::Vector3f z;
 };
 
+struct RegistrationInput
+{
+  PC_NORM::Ptr cloud_source;
+  PC_NORM::Ptr cloud_target;
+
+  bool            has_origins = false;
+  Eigen::Vector3f origin_source;
+  Eigen::Vector3f origin_target;
+
+  bool            enable_init_guess = true;
+  Eigen::Matrix4f T_guess           = Eigen::Matrix4f::Identity();
+};
+
+struct RegistrationOutput
+{
+  bool            converged      = false;
+  double          fitness_score  = 0.0;
+  Eigen::Matrix4f transformation = Eigen::Matrix4f::Identity();
+  PC_NORM::Ptr    cloud_aligned;
+  std::string     status_msg;
+};
+
 /* class PCL2MapRegistration //{ */
 class PCL2MapRegistration : public nodelet::Nodelet {
 
@@ -75,6 +97,7 @@ private:
 
   ros::Publisher _pub_dbg_hull_src;
   ros::Publisher _pub_dbg_hull_target;
+  ros::Publisher _pub_dbg_pca;
 
   std::string _frame_map;
   std::string _path_map;
@@ -149,42 +172,50 @@ private:
   PC_NORM::Ptr                loadPcWithNormals(const std::string &pcd_file);
   std::optional<PC_NORM::Ptr> subscribeSinglePointCloudMsg(const std::string &topic);
 
-  Eigen::Matrix4f                             correlateCloudToCloud(const PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ);
+  void                                        correlateCloudToCloud(RegistrationInput &input);
   std::pair<Eigen::Vector3f, Eigen::Vector3f> getCentroids(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
-  std::pair<Eigen::Vector3f, Eigen::Vector3f> getPolylineBarycenters(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
+  std::pair<HULL, HULL>                       getHulls(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
   std::pair<EigenVectors, EigenVectors>       getEigenVectors(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ);
 
   Eigen::Vector3f getCentroid(const PC_NORM::Ptr pc_src);
   Eigen::Vector3f getPolylineBarycenter(const std::vector<std::pair<pt_NORM, pt_NORM>> &edges);
   EigenVectors    getEigenVectors(const PC_NORM::Ptr cloud);
 
-  std::tuple<bool, std::string, Eigen::Matrix4f> registerCloudToCloud(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
-                                                                      const Eigen::Matrix4f &init_guess = Eigen::Matrix4f::Identity());
+  RegistrationOutput registerCloudToCloud(RegistrationInput &input);
   bool callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterPointCloudOffline::Request &req, mrs_pcl_tools::SrvRegisterPointCloudOffline::Response &res);
   bool callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegisterPointCloudByName::Request &req, mrs_pcl_tools::SrvRegisterPointCloudByName::Response &res);
   void callbackReconfigure(Config &config, [[maybe_unused]] uint32_t level);
 
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_ndt(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const Eigen::Matrix4f &T_guess,
-                                                                     const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_fpfh(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const Eigen::Matrix4f &T_guess,
-                                                                      const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_gicp(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const Eigen::Matrix4f &T_guess,
-                                                                      const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_icpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const Eigen::Matrix4f &T_guess,
-                                                                      const bool enable_init_guess = true);
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> pcl2map_sicpn(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map, const Eigen::Matrix4f &T_guess);
+  RegistrationOutput pcl2map_ndt(RegistrationInput &input);
+  RegistrationOutput pcl2map_fpfh(RegistrationInput &input);
+  RegistrationOutput pcl2map_gicp(RegistrationInput &input);
+  RegistrationOutput pcl2map_icpn(RegistrationInput &input);
+  RegistrationOutput pcl2map_sicpn(RegistrationInput &input);
 
-  void applyRandomTransformation(PC_NORM::Ptr cloud);
+  void applyRandomTransformation(const PC_NORM::Ptr cloud);
+  void removeNans(PC_NORM::Ptr &cloud);
+
+  bool checkNans(const PC_NORM::Ptr cloud, const std::string &ns = "");
 
   const Eigen::Matrix4f          translationYawToMatrix(const Eigen::Vector3f &translation, const float yaw);
+  const Eigen::Matrix4f          translationToMatrix(const Eigen::Vector3f &translation);
   const geometry_msgs::Transform matrixToTfTransform(const Eigen::Matrix4f &mat);
-
-  void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr pc, const Eigen::Matrix4f &transform = Eigen::Matrix4f::Identity());
+  geometry_msgs::Point           toGeometryMsg(const Eigen::Vector3f &point);
+  std_msgs::ColorRGBA            toColorMsg(const Eigen::Vector3f &rgb, const float alpha = 1.0);
 
   HULL getHull(const PC_NORM::Ptr pc, const bool concave, const double alpha = 0.1);
   void computeHull(const PC_NORM::Ptr cloud_pc_in, const PC_NORM::Ptr cloud_hull_out, std::vector<pcl::Vertices> &polygons, const bool concave,
                    const double alpha = 0.1);
+
+  void transformHull(HULL &hull, const Eigen::Matrix4f &mat);
+  void transformEigenVector(Eigen::Vector3f &vec, const Eigen::Affine3f &mat);
+  void transformEigenVectors(EigenVectors &eigenvectors, const Eigen::Matrix4f &mat);
+  void translateEigenVector(Eigen::Vector3f &vec, const Eigen::Matrix4f &mat);
+
+  void publishCloud(const ros::Publisher &pub, const PC_NORM::Ptr pc, const Eigen::Matrix4f &transform = Eigen::Matrix4f::Identity());
   void publishHull(const ros::Publisher &pub, const HULL &hull, const Eigen::Vector3f &color_rgb);
+  void publishPCA(const ros::Publisher &pub, const std::string &frame_id, const std::pair<EigenVectors, EigenVectors> &eigenvectors,
+                  const std::pair<Eigen::Vector3f, Eigen::Vector3f> &origins);
 
   void print(const EigenVectors &eigenvectors, const std::string &ns = "");
 };

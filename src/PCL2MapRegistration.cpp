@@ -88,6 +88,7 @@ void PCL2MapRegistration::onInit() {
 
   _pub_dbg_hull_src    = _nh.advertise<visualization_msgs::MarkerArray>("dbg_hull_source_out", 1);
   _pub_dbg_hull_target = _nh.advertise<visualization_msgs::MarkerArray>("dbg_hull_target_out", 1);
+  _pub_dbg_pca         = _nh.advertise<visualization_msgs::MarkerArray>("dbg_pca_out", 1);
 
   reconfigure_server_.reset(new ReconfigureServer(config_mutex_, _nh));
   ReconfigureServer::CallbackType f = boost::bind(&PCL2MapRegistration::callbackReconfigure, this, _1, _2);
@@ -125,9 +126,10 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
   {
     std::scoped_lock lock(_mutex_registration);
     pc_targ_filt = filters::applyVoxelGridFilter(_pc_map, _preprocess_voxel_leaf);
-    pc_src_filt  = filters::applyVoxelGridFilter(_pc_offline, _preprocess_voxel_leaf);
+
+    pc_src_filt = filters::applyVoxelGridFilter(_pc_offline, _preprocess_voxel_leaf);
     if (_preprocess_ror_radius > 0.0f && _preprocess_ror_neighbors > 0) {
-      pc_src_filt = filters::applyRadiusOutlierFilter(pc_src_filt, _preprocess_ror_radius, _preprocess_ror_neighbors);
+      pc_src_filt = filters::applyRadiusOutlierFilter(pc_src_filt, _preprocess_ror_radius, _preprocess_ror_neighbors, false);
     }
 
     // for debugging: apply random translation on the slam pc
@@ -136,21 +138,22 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
     }
   }
 
+  RegistrationInput reg_input;
+  reg_input.cloud_source      = pc_src_filt;
+  reg_input.cloud_target      = pc_targ_filt;
+  reg_input.enable_init_guess = req.init_guess_use;
+
   // Correlate two clouds
-  Eigen::Matrix4f T_guess = Eigen::Matrix4f::Identity();
   if (req.init_guess_use) {
 
     const Eigen::Vector3f &init_guess_translation = Eigen::Vector3f(req.init_guess_translation.x, req.init_guess_translation.y, req.init_guess_translation.z);
-    const Eigen::Matrix4f  T_random               = translationYawToMatrix(init_guess_translation, req.init_guess_yaw);
-
-    // Transform by random transformation
-    pcl::transformPointCloud(*pc_src_filt, *pc_src_filt, T_random);
+    reg_input.T_guess                             = translationYawToMatrix(init_guess_translation, req.init_guess_yaw);
 
   } else {
 
     // Match clouds
-    T_guess = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
-    printEigenMatrix(T_guess, "Transformation matrix (initial guess by cloud correlation):");
+    correlateCloudToCloud(reg_input);
+    printEigenMatrix(reg_input.T_guess, "Transformation matrix (initial guess by cloud correlation):");
   }
 
   // Publish input data
@@ -160,12 +163,13 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
   pc_src_filt->header.frame_id  = _frame_map;
   pc_targ_filt->header.stamp    = stamp;
   pc_targ_filt->header.frame_id = _frame_map;
-  publishCloud(_pub_cloud_source, pc_src_filt, T_guess);
+  publishCloud(_pub_cloud_source, pc_src_filt, reg_input.T_guess);
   publishCloud(_pub_cloud_target, pc_targ_filt);
 
   // Register given pc to map cloud
-  Eigen::Matrix4f T;
-  std::tie(res.success, res.message, T) = registerCloudToCloud(pc_src_filt, pc_targ_filt, T_guess);
+  const RegistrationOutput reg_output = registerCloudToCloud(reg_input);
+  res.success                         = reg_output.converged;
+  res.message                         = reg_output.status_msg;
 
   // Save result as static TF pc_src.frame -> pc_targ.frame
   if (res.success) {
@@ -177,7 +181,7 @@ bool PCL2MapRegistration::callbackSrvRegisterOffline(mrs_pcl_tools::SrvRegisterP
     tf_msg.child_frame_id  = _frame_map;
 
     // Fill transform
-    tf_msg.transform = matrixToTfTransform(T.inverse());
+    tf_msg.transform = matrixToTfTransform(reg_output.transformation.inverse());
 
     res.transform = tf_msg;
   }
@@ -235,26 +239,25 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   }
   pc_src_filt = filters::applyVoxelGridFilter(pc_src, _preprocess_voxel_leaf);
   if (_preprocess_ror_radius > 0.0f && _preprocess_ror_neighbors > 0) {
-    pc_src_filt = filters::applyRadiusOutlierFilter(pc_src_filt, _preprocess_ror_radius, _preprocess_ror_neighbors);
+    pc_src_filt = filters::applyRadiusOutlierFilter(pc_src_filt, _preprocess_ror_radius, _preprocess_ror_neighbors, false);
   }
 
-  // TODO: SOR and ROR filter
+  RegistrationInput reg_input;
+  reg_input.cloud_source      = pc_src_filt;
+  reg_input.cloud_target      = pc_targ_filt;
+  reg_input.enable_init_guess = req.init_guess_use;
 
   // Correlate two clouds
-  Eigen::Matrix4f T_guess = Eigen::Matrix4f::Identity();
   if (req.init_guess_use) {
 
     const Eigen::Vector3f &init_guess_translation = Eigen::Vector3f(req.init_guess_translation.x, req.init_guess_translation.y, req.init_guess_translation.z);
-    const Eigen::Matrix4f  T_random               = translationYawToMatrix(init_guess_translation, req.init_guess_yaw);
-
-    // Transform by random transformation
-    pcl::transformPointCloud(*pc_src_filt, *pc_src_filt, T_random);
+    reg_input.T_guess                             = translationYawToMatrix(init_guess_translation, req.init_guess_yaw);
 
   } else {
 
     // Match clouds
-    T_guess = correlateCloudToCloud(pc_src_filt, pc_targ_filt);
-    printEigenMatrix(T_guess, "Transformation matrix (initial guess by cloud correlation):");
+    correlateCloudToCloud(reg_input);
+    printEigenMatrix(reg_input.T_guess, "Transformation matrix (initial guess by cloud correlation):");
   }
 
   // Publish input data
@@ -262,12 +265,13 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   pc_src_filt->header.frame_id  = _frame_map;
   pc_targ_filt->header.stamp    = pc_src->header.stamp;
   pc_targ_filt->header.frame_id = _frame_map;
-  publishCloud(_pub_cloud_source, pc_src_filt, T_guess);
+  publishCloud(_pub_cloud_source, pc_src_filt, reg_input.T_guess);
   publishCloud(_pub_cloud_target, pc_targ_filt);
 
   // Register given pc to map cloud
-  Eigen::Matrix4f T;
-  std::tie(res.success, res.message, T) = registerCloudToCloud(pc_src_filt, pc_targ_filt, T_guess);
+  const RegistrationOutput reg_output = registerCloudToCloud(reg_input);
+  res.success                         = reg_output.converged;
+  res.message                         = reg_output.status_msg;
 
   // Save result as static TF pc_src.frame -> pc_targ.frame
   if (res.success) {
@@ -279,7 +283,7 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
     tf_msg.child_frame_id  = _frame_map;
 
     // Fill transform
-    tf_msg.transform = matrixToTfTransform(T.inverse());
+    tf_msg.transform = matrixToTfTransform(reg_output.transformation.inverse());
 
     res.transform = tf_msg;
   }
@@ -289,12 +293,9 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
 /*//}*/
 
 /*//{ registerCloudToCloud() */
-std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerCloudToCloud(const PC_NORM::Ptr &pc_src, const PC_NORM::Ptr &pc_targ,
-                                                                                         const Eigen::Matrix4f &T_guess) {
-  bool            converged;
-  float           score;
-  Eigen::Matrix4f T_initial_reg;
-  PC_NORM::Ptr    pc_aligned;
+RegistrationOutput PCL2MapRegistration::registerCloudToCloud(RegistrationInput &input) {
+
+  RegistrationOutput reg_output;
 
   /*//{ Perform initial registration */
   {
@@ -302,50 +303,54 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
     switch (_registration_method_initial) {
       case 0:
         NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: FPFH");
-        std::tie(converged, score, T_initial_reg, pc_aligned) = pcl2map_fpfh(pc_src, pc_targ, T_guess);
+        reg_output = pcl2map_fpfh(input);
         break;
       case 1:
         NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: NDT");
-        std::tie(converged, score, T_initial_reg, pc_aligned) = pcl2map_ndt(pc_src, pc_targ, T_guess);
+        reg_output = pcl2map_ndt(input);
         break;
       case 2:
         NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: GICP");
-        std::tie(converged, score, T_initial_reg, pc_aligned) = pcl2map_gicp(pc_src, pc_targ, T_guess);
+        reg_output = pcl2map_gicp(input);
         break;
       case 3:
         NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: ICPN");
-        std::tie(converged, score, T_initial_reg, pc_aligned) = pcl2map_icpn(pc_src, pc_targ, T_guess);
+        reg_output = pcl2map_icpn(input);
         break;
       case 4:
         NODELET_INFO("[PCL2MapRegistration] Registration (initial) with: SICPN");
-        std::tie(converged, score, T_initial_reg, pc_aligned) = pcl2map_sicpn(pc_src, pc_targ, T_guess);
+        reg_output = pcl2map_sicpn(input);
         break;
       default:
         NODELET_ERROR("[PCL2MapRegistration] Unknown registration (initial) method of type: %d. Allowed: {0=FPFH, 1=NDT, 2=GICP, 3=ICPN, 4=SICPN}",
                       _registration_method_initial);
-        return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (initial) method.", Eigen::Matrix4f::Identity());
+
+        reg_output.status_msg = "Unknown registration (initial) method.";
+        return reg_output;
     }
   }
   /*//}*/
 
-  std::tuple<bool, std::string, Eigen::Matrix4f> ret;
-  std::get<1>(ret) = "Registration successfull.";
+  reg_output.status_msg = "Registration successfull.";
 
-  if (converged) {
+  if (reg_output.converged) {
 
     // Print transformation matrix
-    NODELET_INFO("[PCL2MapRegistration] Registration (initial) converged with score: %0.2f", score);
-    printEigenMatrix(T_initial_reg, "Transformation matrix (after initial registration):");
-    std::get<2>(ret) = T_initial_reg;
+    NODELET_INFO("[PCL2MapRegistration] Registration (initial) converged with score: %0.2f", reg_output.fitness_score);
+    printEigenMatrix(reg_output.transformation, "Transformation matrix (after initial registration):");
+
+    // Store for fine registration and disable user's initial guess for fine registration
+    input.T_guess           = reg_output.transformation;
+    input.enable_init_guess = false;
 
     // Publish initially aligned cloud
-    pc_aligned->header.stamp    = pc_src->header.stamp;
-    pc_aligned->header.frame_id = _frame_map;
-    publishCloud(_pub_cloud_aligned, pc_aligned);
+    reg_output.cloud_aligned->header.stamp    = input.cloud_source->header.stamp;
+    reg_output.cloud_aligned->header.frame_id = _frame_map;
+    publishCloud(_pub_cloud_aligned, reg_output.cloud_aligned);
 
     /*//{ Perform fine tuning registration */
-    Eigen::Matrix4f T_fine_reg          = Eigen::Matrix4f::Identity();
-    const bool      perform_fine_tuning = _registration_method_fine_tune >= 0 && _registration_method_fine_tune <= 4;
+    const bool perform_fine_tuning =
+        _registration_method_fine_tune >= 0 && _registration_method_fine_tune <= 4 && _registration_method_fine_tune != _registration_method_initial;
 
     if (_registration_method_fine_tune == _registration_method_initial) {
       NODELET_INFO("[PCL2MapRegistration] No registration (fine tuning) as method matches registration (initial).");
@@ -358,64 +363,74 @@ std::tuple<bool, std::string, Eigen::Matrix4f> PCL2MapRegistration::registerClou
           break;
         case 0:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: FPFH");
-          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_fpfh(pc_src, pc_targ, T_initial_reg, false);
+          reg_output = pcl2map_fpfh(input);
           break;
         case 1:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: NDT");
-          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_ndt(pc_src, pc_targ, T_initial_reg, false);
+          reg_output = pcl2map_ndt(input);
           break;
         case 2:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: GICP");
-          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_gicp(pc_src, pc_targ, T_initial_reg, false);
+          reg_output = pcl2map_gicp(input);
           break;
         case 3:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: ICPN");
-          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_icpn(pc_src, pc_targ, T_initial_reg, false);
+          reg_output = pcl2map_icpn(input);
           break;
         case 4:
           NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) with: SICPN");
-          std::tie(converged, score, T_fine_reg, pc_aligned) = pcl2map_sicpn(pc_src, pc_targ, T_initial_reg);
+          reg_output = pcl2map_sicpn(input);
           break;
         default:
           NODELET_ERROR(
               "[PCL2MapRegistration] Unknown registration (fine tuning) method of type: %d. Allowed: {-1=None, 0=FPFH, 1=NDT, 2=GICP, 3=ICPN, 4=SICPN}",
               _registration_method_fine_tune);
-          return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Unknown registration (fine tuning) method.", Eigen::Matrix4f::Identity());
+
+          reg_output.status_msg = "Unknown registration (fine tuning) method.";
+          return reg_output;
       }
     }
     /*//}*/
 
     if (perform_fine_tuning) {
 
-      if (converged) {
+      if (reg_output.converged) {
+
         // Print transformation matrix
-        NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) converged with score: %0.2f", score);
-        printEigenMatrix(T_fine_reg, "Transformation matrix (after fine tuning):");
-        std::get<2>(ret) = T_fine_reg;
+        NODELET_INFO("[PCL2MapRegistration] Registration (fine tuning) converged with score: %0.2f", reg_output.fitness_score);
+        printEigenMatrix(reg_output.transformation, "Transformation matrix (after fine tuning):");
+
+        // Store for future registrations
+        input.T_guess = reg_output.transformation;
 
         // Publish aligned cloud
-        pc_aligned->header.stamp    = pc_src->header.stamp;
-        pc_aligned->header.frame_id = _frame_map;
-        publishCloud(_pub_cloud_aligned, pc_aligned);
+        reg_output.cloud_aligned->header.stamp    = input.cloud_source->header.stamp;
+        reg_output.cloud_aligned->header.frame_id = _frame_map;
+        publishCloud(_pub_cloud_aligned, reg_output.cloud_aligned);
 
       } else {
+
         NODELET_ERROR("[PCL2MapRegistration] Registration (fine tuning) did not converge -- try to change registration (fine tuning) parameters.");
-        std::get<1>(ret) = "Registered (fine tuning) dit not converge.";
+        reg_output.status_msg = "Registered (fine tuning) dit not converge.";
+        return reg_output;
       }
     }
 
   } else {
+
     NODELET_ERROR("[PCL2MapRegistration] Registration (initial) did not converge -- try to change registration (initial) parameters.");
-    return std::make_tuple<bool, std::string, Eigen::Matrix4f>(false, "Registered (initial) dit not converge.", Eigen::Matrix4f::Identity());
+    reg_output.status_msg = "Registered (initial) dit not converge.";
+    return reg_output;
   }
 
-  if (converged && score > _min_convergence_score) {
-    converged = false;
-    NODELET_ERROR("[PCL2MapRegistration] Registration (final) converged with low score (score: %0.2f, min_score: %0.2f)", score, _min_convergence_score);
+  if (reg_output.converged && reg_output.fitness_score > _min_convergence_score) {
+    NODELET_ERROR("[PCL2MapRegistration] Registration (final) converged with low score (score: %0.2f, min_score: %0.2f)", reg_output.fitness_score,
+                  _min_convergence_score);
+    reg_output.converged  = false;
+    reg_output.status_msg = "Registration converged with low score.";
   }
 
-  std::get<0>(ret) = converged;
-  return ret;
+  return reg_output;
 }
 /*//}*/
 
@@ -500,17 +515,17 @@ void PCL2MapRegistration::callbackReconfigure(Config &config, [[maybe_unused]] u
 //}
 
 /* pcl2map_ndt() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_ndt(const PC_NORM::Ptr pc, const PC_NORM::Ptr pc_map,
-                                                                                        const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
+RegistrationOutput PCL2MapRegistration::pcl2map_ndt(RegistrationInput &input) {
+
   TicToc t;
 
-  // Filtering input scan to roughly to increase speed of registration.
-  PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
+  RegistrationOutput output;
+  output.cloud_aligned = boost::make_shared<PC_NORM>();
 
   // Initializing Normal Distributions Transform (NDT).
   pcl::NormalDistributionsTransform<pt_NORM, pt_NORM> ndt;
-  ndt.setInputSource(pc);
-  ndt.setInputTarget(pc_map);
+  ndt.setInputSource(input.cloud_source);
+  ndt.setInputTarget(input.cloud_target);
 
   // Setting minimum transformation difference for termination condition.
   // Setting maximum step size for More-Thuente line search.
@@ -522,28 +537,30 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   ndt.setMaximumIterations(_ndt_maximum_iterations);
 
   // Calculating required rigid transform to align the input cloud to the target cloud.
-  if (enable_init_guess && _use_init_guess) {
+  if (input.enable_init_guess && _use_init_guess) {
     NODELET_INFO("[PCL2MapRegistration] NDT -- using initial guess.");
-    ndt.align(*pc_aligned, _initial_guess);
+    ndt.align(*output.cloud_aligned, _initial_guess);
   } else {
     NODELET_INFO("[PCL2MapRegistration] NDT -- no initial guess given.");
-    ndt.align(*pc_aligned, T_guess);
+    ndt.align(*output.cloud_aligned, input.T_guess);
   }
 
   t.toc_print("[PCL2MapRegistration] NDT registration run time");
 
-  return std::make_tuple(ndt.hasConverged(), ndt.getFitnessScore(), ndt.getFinalTransformation(), pc_aligned);
+  output.converged      = ndt.hasConverged();
+  output.fitness_score  = ndt.getFitnessScore();
+  output.transformation = ndt.getFinalTransformation();
+
+  return output;
 }
 /*//}*/
 
 /* pcl2map_fpfh() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_fpfh(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
-                                                                                         const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
+RegistrationOutput PCL2MapRegistration::pcl2map_fpfh(RegistrationInput &input) {
 
-  TicToc t;
-
-  // Create filtered objects
-  PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
+  TicToc             t;
+  RegistrationOutput output;
+  output.cloud_aligned = boost::make_shared<PC_NORM>();
 
   // Estimate FPFH features
   NODELET_INFO("[PCL2MapRegistration] FPFH -- estimating FPFH features");
@@ -551,19 +568,19 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   PC_FPFH::Ptr                                        pc_fpfh_targ = boost::make_shared<PC_FPFH>();
   pcl::FPFHEstimationOMP<pt_NORM, pt_NORM, feat_FPFH> fest;
   fest.setRadiusSearch(_fpfh_search_rad);
-  fest.setInputCloud(pc_src);
-  fest.setInputNormals(pc_src);
+  fest.setInputCloud(input.cloud_source);
+  fest.setInputNormals(input.cloud_source);
   fest.compute(*pc_fpfh_src);
-  fest.setInputCloud(pc_targ);
-  fest.setInputNormals(pc_targ);
+  fest.setInputCloud(input.cloud_target);
+  fest.setInputNormals(input.cloud_target);
   fest.compute(*pc_fpfh_targ);
 
   // Perform alignment
   NODELET_INFO("[PCL2MapRegistration] FPFH -- aligning");
   pcl::SampleConsensusPrerejective<pt_NORM, pt_NORM, feat_FPFH> align;
-  align.setInputSource(pc_src);
+  align.setInputSource(input.cloud_source);
   align.setSourceFeatures(pc_fpfh_src);
-  align.setInputTarget(pc_targ);
+  align.setInputTarget(input.cloud_target);
   align.setTargetFeatures(pc_fpfh_targ);
   align.setMaximumIterations(_fpfh_ransac_max_iter);                  // Number of RANSAC iterations
   align.setNumberOfSamples(_fpfh_number_of_samples);                  // Number of points to sample for generating/prerejecting a pose
@@ -572,33 +589,35 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   align.setMaxCorrespondenceDistance(1.5f * _preprocess_voxel_leaf);  // Inlier threshold
   align.setInlierFraction(_fpfh_inlier_fraction);                     // Required inlier fraction for accepting a pose hypothesis
 
-  if (enable_init_guess && _use_init_guess) {
+  if (input.enable_init_guess && _use_init_guess) {
     NODELET_INFO("[PCL2MapRegistration] FPFH -- using initial guess.");
-    align.align(*pc_aligned, _initial_guess);
+    align.align(*output.cloud_aligned, _initial_guess);
   } else {
     NODELET_INFO("[PCL2MapRegistration] FPFH -- no initial guess given.");
-    align.align(*pc_aligned, T_guess);
+    align.align(*output.cloud_aligned, input.T_guess);
   }
 
   t.toc_print("[PCL2MapRegistration] FPFH registration run time");
 
-  return std::make_tuple(align.hasConverged(), align.getFitnessScore(), align.getFinalTransformation(), pc_aligned);
+  output.converged      = align.hasConverged();
+  output.fitness_score  = align.getFitnessScore();
+  output.transformation = align.getFinalTransformation();
+
+  return output;
 }
 /*//}*/
 
 /* pcl2map_gicp() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_gicp(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
-                                                                                         const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
+RegistrationOutput PCL2MapRegistration::pcl2map_gicp(RegistrationInput &input) {
 
-  TicToc t;
-
-  // Create filtered objects
-  PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
+  TicToc             t;
+  RegistrationOutput output;
+  output.cloud_aligned = boost::make_shared<PC_NORM>();
 
   NODELET_INFO("[PCL2MapRegistration] GICP -- aligning");
   pcl::GeneralizedIterativeClosestPoint<pt_NORM, pt_NORM> gicp;
-  gicp.setInputSource(pc_src);
-  gicp.setInputTarget(pc_targ);
+  gicp.setInputSource(input.cloud_source);
+  gicp.setInputTarget(input.cloud_target);
 
   gicp.setMaxCorrespondenceDistance(_gicp_max_corr_dist);
   gicp.setMaximumIterations(_gicp_max_iter);
@@ -608,32 +627,34 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   gicp.setTransformationEpsilon(_gicp_trans_eps);
   gicp.setUseReciprocalCorrespondences(_gicp_use_recip_corr);
 
-  if (enable_init_guess && _use_init_guess) {
+  if (input.enable_init_guess && _use_init_guess) {
     NODELET_INFO("[PCL2MapRegistration] GICP -- using initial guess.");
-    gicp.align(*pc_aligned, _initial_guess);
+    gicp.align(*output.cloud_aligned, _initial_guess);
   } else {
     NODELET_INFO("[PCL2MapRegistration] GICP -- no initial guess given.");
-    gicp.align(*pc_aligned, T_guess);
+    gicp.align(*output.cloud_aligned, input.T_guess);
   }
 
   t.toc_print("[PCL2MapRegistration] GICP registration run time");
 
-  return std::make_tuple(gicp.hasConverged(), gicp.getFitnessScore(), gicp.getFinalTransformation(), pc_aligned);
+  output.converged      = gicp.hasConverged();
+  output.fitness_score  = gicp.getFitnessScore();
+  output.transformation = gicp.getFinalTransformation();
+
+  return output;
 }
 /*//}*/
 
 /* pcl2map_icpn() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_icpn(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
-                                                                                         const Eigen::Matrix4f &T_guess, const bool enable_init_guess) {
+RegistrationOutput PCL2MapRegistration::pcl2map_icpn(RegistrationInput &input) {
 
-  TicToc t;
-
-  // Create filtered objects
-  const PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
+  TicToc             t;
+  RegistrationOutput output;
+  output.cloud_aligned = boost::make_shared<PC_NORM>();
 
   pcl::IterativeClosestPointWithNormals<pt_NORM, pt_NORM> icpn;
-  icpn.setInputSource(pc_src);
-  icpn.setInputTarget(pc_targ);
+  icpn.setInputSource(input.cloud_source);
+  icpn.setInputTarget(input.cloud_target);
 
   icpn.setMaxCorrespondenceDistance(_icpn_max_corr_dist);
   icpn.setMaximumIterations(_icpn_max_iter);
@@ -643,38 +664,46 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
   icpn.setRANSACOutlierRejectionThreshold(_icpn_ransac_outl_rej_thrd);
   icpn.setUseReciprocalCorrespondences(_icpn_use_recip_corr);
 
-  if (enable_init_guess && _use_init_guess) {
+  if (input.enable_init_guess && _use_init_guess) {
     NODELET_INFO("[PCL2MapRegistration] ICPN -- using initial guess.");
-    icpn.align(*pc_aligned, _initial_guess);
+    icpn.align(*output.cloud_aligned, _initial_guess);
   } else {
     NODELET_INFO("[PCL2MapRegistration] ICPN -- no initial guess given.");
-    icpn.align(*pc_aligned, T_guess);
+    icpn.align(*output.cloud_aligned, input.T_guess);
   }
 
   t.toc_print("[PCL2MapRegistration] ICPN registration run time");
 
-  return std::make_tuple(icpn.hasConverged(), icpn.getFitnessScore(), icpn.getFinalTransformation(), pc_aligned);
+  output.converged      = icpn.hasConverged();
+  output.fitness_score  = icpn.getFitnessScore();
+  output.transformation = icpn.getFinalTransformation();
+
+  return output;
 }
 /*//}*/
 
 /* pcl2map_sicpn() //{*/
-std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2map_sicpn(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ,
-                                                                                          const Eigen::Matrix4f &T_guess) {
-  TicToc t;
+RegistrationOutput PCL2MapRegistration::pcl2map_sicpn(RegistrationInput &input) {
+  TicToc             t;
+  RegistrationOutput output;
 
   // Prepare best-score variables
   float           score_best = std::numeric_limits<float>::infinity();
   Eigen::Matrix4f T_best;
-  PC_NORM::Ptr    pc_aligned_best = boost::make_shared<PC_NORM>();
+  PC_NORM::Ptr    cloud_aligned_best = boost::make_shared<PC_NORM>();
 
-  // Compute src cloud centroid
-  Eigen::Vector4f centroid_pc_src;
-  pcl::compute3DCentroid(*pc_src, centroid_pc_src);
+  // Compute src cloud origin
+  Eigen::Vector4f cloud_source_origin;
+  if (input.has_origins) {
+    cloud_source_origin = Eigen::Vector4f(input.origin_source.x(), input.origin_source.y(), input.origin_source.z(), 1.0f);
+  } else {
+    pcl::compute3DCentroid(*input.cloud_source, cloud_source_origin);
+  }
 
   // Prepare ICP object
   pcl::IterativeClosestPointWithNormals<pt_NORM, pt_NORM> sicpn;
-  sicpn.setInputSource(pc_src);
-  sicpn.setInputTarget(pc_targ);
+  sicpn.setInputSource(input.cloud_source);
+  sicpn.setInputTarget(input.cloud_target);
   sicpn.setMaxCorrespondenceDistance(_icpn_max_corr_dist);
   sicpn.setMaximumIterations(_icpn_max_iter);
   sicpn.setTransformationEpsilon(_icpn_trans_eps);
@@ -685,11 +714,11 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 
   for (unsigned int i = 0; i < _sicpn_number_of_samples; i++) {
 
-    // Create initial guess as a rotation by `heading` around pc_src centroid
+    // Create initial guess as a rotation by `heading` around input.cloud_source origin
     const float             heading = float(double(i) * 2.0 * M_PI / double(_sicpn_number_of_samples));
     const Eigen::AngleAxisf heading_ax(heading, Eigen::Vector3f::UnitZ());
-    const Eigen::Matrix4f   T_rot       = getRotationMatrixAroundPoint(heading_ax.matrix(), centroid_pc_src);
-    const Eigen::Matrix4f   T_guess_rot = T_guess * T_rot;
+    const Eigen::Matrix4f   T_rot       = getRotationMatrixAroundPoint(heading_ax.matrix(), cloud_source_origin);
+    const Eigen::Matrix4f   T_guess_rot = input.T_guess * T_rot;
 
     // Perform fine tuning registration
     const PC_NORM::Ptr pc_aligned = boost::make_shared<PC_NORM>();
@@ -698,34 +727,32 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
     // Store best score
     if (sicpn.hasConverged()) {
 
-      publishCloud(_pub_cloud_source, pc_src, T_guess_rot);
+      publishCloud(_pub_cloud_source, input.cloud_source, T_guess_rot);
       publishCloud(_pub_cloud_aligned, pc_aligned);
 
       const double score = sicpn.getFitnessScore();
       NODELET_INFO("[PCL2MapRegistration] Registration (heading: %0.2f) converged with score: %0.2f", heading, score);
       if (score < score_best) {
-        score_best      = float(score);
-        T_best          = sicpn.getFinalTransformation();
-        pc_aligned_best = pc_aligned;
+        score_best         = float(score);
+        T_best             = sicpn.getFinalTransformation();
+        cloud_aligned_best = pc_aligned;
       }
     }
   }
 
-  // Return tuple
-  std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> ret;
-  std::get<0>(ret) = std::isfinite(score_best);
-  std::get<1>(ret) = score_best;
-  std::get<2>(ret) = T_best;
-  std::get<3>(ret) = pc_aligned_best;
+  output.converged      = std::isfinite(score_best);
+  output.fitness_score  = score_best;
+  output.transformation = T_best;
+  output.cloud_aligned  = cloud_aligned_best;
 
-  if (std::get<0>(ret)) {
+  if (output.converged) {
 
     NODELET_INFO("[PCL2MapRegistration] Registration (SICPN) converged with score: %0.2f", score_best);
 
     // Publish aligned cloud
-    pc_aligned_best->header.stamp    = pc_src->header.stamp;
-    pc_aligned_best->header.frame_id = _frame_map;
-    publishCloud(_pub_cloud_aligned, pc_aligned_best);
+    cloud_aligned_best->header.stamp    = input.cloud_source->header.stamp;
+    cloud_aligned_best->header.frame_id = _frame_map;
+    publishCloud(_pub_cloud_aligned, cloud_aligned_best);
 
   } else {
     NODELET_ERROR("[PCL2MapRegistration] Registration (SICPN) did not converge -- try to change registration (SICPN) parameters.");
@@ -733,70 +760,146 @@ std::tuple<bool, float, Eigen::Matrix4f, PC_NORM::Ptr> PCL2MapRegistration::pcl2
 
   t.toc_print("[PCL2MapRegistration] SICPN registration run time");
 
-  return ret;
+  return output;
 }
 /*//}*/
 
 /*//{ correlateCloudToCloud() */
-Eigen::Matrix4f PCL2MapRegistration::correlateCloudToCloud(const PC_NORM::Ptr pc_src, PC_NORM::Ptr pc_targ) {
+void PCL2MapRegistration::correlateCloudToCloud(RegistrationInput &input) {
 
   std::pair<Eigen::Vector3f, Eigen::Vector3f> origins;
 
-  // Find correlation *translation* source->target
+  bool                  has_hulls = false;
+  std::pair<HULL, HULL> hulls;
+
+  /*//{ Find correlation *translation* source->target */
   if (_cloud_correlation_method == "polyline_barycenter") {
+
     NODELET_INFO("[PCL2MapRegistration] Correlating clouds by their polyline barycenter.");
-    origins = getPolylineBarycenters(pc_src, pc_targ);
+
+    hulls     = getHulls(input.cloud_source, input.cloud_target);
+    has_hulls = hulls.first.has_data && hulls.second.has_data;
+
+    origins = {hulls.first.polyline_barycenter, hulls.second.polyline_barycenter};
+
   } else {
+
     NODELET_INFO("[PCL2MapRegistration] Correlating clouds by their centroids.");
-    origins = getCentroids(pc_src, pc_targ);
+    origins = getCentroids(input.cloud_source, input.cloud_target);
   }
+
+  input.has_origins   = true;
+  input.origin_source = origins.first;
+  input.origin_target = origins.second;
 
   const Eigen::Vector3f origin_src  = origins.first;
   const Eigen::Vector3f origin_targ = origins.second;
   const Eigen::Vector3f origin_diff = origin_targ - origin_src;
+  /*//}*/
 
-  NODELET_INFO("[PCL2MapRegistration] Cloud correlation origins:");
-  NODELET_INFO("[PCL2MapRegistration]  source: (%.1f, %.1f, %.1f)", origin_src.x(), origin_src.y(), origin_src.z());
-  NODELET_INFO("[PCL2MapRegistration]  target: (%.1f, %.1f, %.1f)", origin_targ.x(), origin_targ.y(), origin_targ.z());
-  NODELET_INFO("[PCL2MapRegistration]  s->t:   (%.1f, %.1f, %.1f)", origin_diff.x(), origin_diff.y(), origin_diff.z());
+  NODELET_INFO("[PCL2MapRegistration] Cloud correlation:");
 
-  // Find correlation *orientation* source->target
-  float                                       T_heading    = 0.0f;
-  const std::pair<EigenVectors, EigenVectors> eigenvectors = getEigenVectors(pc_src, pc_targ);
+  /*//{ Find correlation *orientation* source->target */
+  float                                 azimuth          = 0.0f;
+  std::pair<EigenVectors, EigenVectors> eigenvectors     = getEigenVectors(input.cloud_source, input.cloud_target);
+  const bool                            has_eigenvectors = eigenvectors.first.valid && eigenvectors.second.valid;
 
-  if (eigenvectors.first.valid && eigenvectors.second.valid) {
-    const Eigen::Vector3f vec_x_src  = eigenvectors.first.x.normalized();
-    const Eigen::Vector3f vec_x_targ = eigenvectors.second.x.normalized();
+  if (has_eigenvectors) {
 
-    const float hdg_src  = std::atan2(vec_x_src.y(), vec_x_src.x());
-    const float hdg_targ = std::atan2(vec_x_targ.y(), vec_x_targ.x());
+    Eigen::Vector3f vec_maxnorm_src_xyproj  = Eigen::Vector3f(eigenvectors.first.x.x(), eigenvectors.first.x.y(), 0.0f);
+    Eigen::Vector3f vec_maxnorm_targ_xyproj = Eigen::Vector3f(eigenvectors.second.x.x(), eigenvectors.second.x.y(), 0.0f);
 
-    T_heading = float(std::fmod(hdg_targ - hdg_src + M_PI, 2.0 * M_PI) + M_PI);
-    if (T_heading < -M_PI) {
-      T_heading += 2.0 * M_PI;
+    const Eigen::Vector3f vec_y_src_xyproj  = Eigen::Vector3f(eigenvectors.first.y.x(), eigenvectors.first.y.y(), 0.0f);
+    const Eigen::Vector3f vec_y_targ_xyproj = Eigen::Vector3f(eigenvectors.second.y.x(), eigenvectors.second.y.y(), 0.0f);
+
+    if (vec_y_src_xyproj.norm() > vec_maxnorm_src_xyproj.norm()) {
+      vec_maxnorm_src_xyproj = vec_y_src_xyproj;
     }
+
+    if (vec_y_targ_xyproj.norm() > vec_maxnorm_targ_xyproj.norm()) {
+      vec_maxnorm_targ_xyproj = vec_y_targ_xyproj;
+    }
+
+    const float azimuth_src  = std::atan2(vec_maxnorm_src_xyproj.y(), vec_maxnorm_src_xyproj.x());
+    const float azimuth_targ = std::atan2(vec_maxnorm_targ_xyproj.y(), vec_maxnorm_targ_xyproj.x());
+
+    azimuth = float(std::fmod(azimuth_targ - azimuth_src, 2.0 * M_PI));
+    if (azimuth < -M_PI) {
+      azimuth += 2.0 * M_PI;
+    } else if (azimuth > M_PI) {
+      azimuth -= 2.0 * M_PI;
+    }
+
+    NODELET_INFO("[PCL2MapRegistration]  source: xyz: (%.1f, %.1f, %.1f), largest-eigenvector azimuth: %.3f", origin_src.x(), origin_src.y(), origin_src.z(),
+                 azimuth_src);
+    NODELET_INFO("[PCL2MapRegistration]  target: xyz: (%.1f, %.1f, %.1f), largest-eigenvector azimuth: %.3f", origin_targ.x(), origin_targ.y(), origin_targ.z(),
+                 azimuth_targ);
+    NODELET_INFO("[PCL2MapRegistration]  s->t:   xyz: (%.1f, %.1f, %.1f), largest-eigenvector azimuth: %.3f", origin_diff.x(), origin_diff.y(), origin_diff.z(),
+                 azimuth);
+
+  } else {
+
+    NODELET_INFO("[PCL2MapRegistration]  source: xyz: (%.1f, %.1f, %.1f), largest-eigenvector azimuth: N/A", origin_src.x(), origin_src.y(), origin_src.z());
+    NODELET_INFO("[PCL2MapRegistration]  target: xyz: (%.1f, %.1f, %.1f), largest-eigenvector azimuth: N/A", origin_targ.x(), origin_targ.y(), origin_targ.z());
+    NODELET_INFO("[PCL2MapRegistration]  s->t:   xyz: (%.1f, %.1f, %.1f), largest-eigenvector azimuth: N/A", origin_diff.x(), origin_diff.y(), origin_diff.z());
   }
+  /*//}*/
 
   // Compute min/max Z axis points
   pt_NORM pt_min_src;
   pt_NORM pt_min_targ;
   pt_NORM pt_max_src;
   pt_NORM pt_max_targ;
-  pcl::getMinMax3D(*pc_src, pt_min_src, pt_max_src);
-  pcl::getMinMax3D(*pc_targ, pt_min_targ, pt_max_targ);
+  pcl::getMinMax3D(*input.cloud_source, pt_min_src, pt_max_src);
+  pcl::getMinMax3D(*input.cloud_target, pt_min_targ, pt_max_targ);
 
-  // Build transformation matrix
-  const Eigen::Vector3f T_translation = Eigen::Vector3f(origin_diff.x(), origin_diff.y(), pt_min_targ.z - pt_min_src.z);
-  const Eigen::Matrix4f T             = translationYawToMatrix(T_translation, T_heading);
+  /*//{ Build transformation matrix */
+  // Get rotation around the target centroid
+  const Eigen::Vector4f   origin_src_4f = Eigen::Vector4f(origin_src.x(), origin_src.y(), origin_src.z(), 1.0f);
+  const Eigen::AngleAxisf azimuth_ax    = Eigen::AngleAxisf(azimuth, Eigen::Vector3f::UnitZ());
+  const Eigen::Matrix4f   T_rot         = getRotationMatrixAroundPoint(azimuth_ax.matrix(), origin_src_4f);
 
-  // Crop pc_targ in z-axis w.r.t. pc_src (assumption that we takeoff from ground and clouds roll/pitch angles can be neglected)
+  // Get translation
+  const Eigen::Matrix4f T_translation = translationToMatrix(Eigen::Vector3f(origin_diff.x(), origin_diff.y(), pt_min_targ.z - pt_min_src.z));
+
+  // Build transformation matrix: rotate around the target centroid and translate to it
+  input.T_guess = T_translation * T_rot;
+
+  /*//}*/
+
+  // Crop input.cloud_target in z-axis w.r.t. input.cloud_source (assumption that we takeoff from ground and clouds roll/pitch angles can be neglected)
   pcl::CropBox<pt_NORM> box;
   box.setMin(Eigen::Vector4f(pt_min_targ.x, pt_min_targ.y, pt_min_targ.z, 1.0f));
   box.setMax(Eigen::Vector4f(pt_max_targ.x, pt_max_targ.y, pt_min_targ.z + (pt_max_src.z - pt_min_src.z) + _cloud_correlation_z_crop_offset, 1.0f));
-  box.setInputCloud(pc_targ);
-  box.filter(*pc_targ);
+  box.setInputCloud(input.cloud_target);
+  box.filter(*input.cloud_target);
 
-  return T;
+  /*//{ Publish debugs */
+  if (_pub_dbg_hull_src.getNumSubscribers() != 0 || _pub_dbg_hull_target.getNumSubscribers() != 0 || _pub_dbg_pca != 0) {
+
+    // Transform source cloud origin (polyline barycenter or centroid)
+    transformEigenVector(origins.first, Eigen::Affine3f(input.T_guess));
+
+    if (has_hulls) {
+
+      // Transform source hull only
+      transformHull(hulls.first, input.T_guess);
+
+      // Publish both hulls
+      publishHull(_pub_dbg_hull_src, hulls.first, Eigen::Vector3f(1, 0, 0));
+      publishHull(_pub_dbg_hull_target, hulls.second, Eigen::Vector3f(0, 0, 1));
+    }
+
+    if (has_eigenvectors) {
+
+      // Transform source eigenvectors (rotate only)
+      transformEigenVectors(eigenvectors.first, T_rot);
+
+      // Publish both eigenvectors
+      publishPCA(_pub_dbg_pca, _frame_map, eigenvectors, origins);
+    }
+  }
+  /*//}*/
 }
 /*//}*/
 
@@ -806,12 +909,13 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getCentroids(co
 }
 /*//}*/
 
-/*//{ getPolylineBarycenters() */
-std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBarycenters(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
+/*//{ getHulls() */
+std::pair<HULL, HULL> PCL2MapRegistration::getHulls(const PC_NORM::Ptr pc_src, const PC_NORM::Ptr pc_targ) {
 
   HULL hull_src                        = getHull(pc_src, _cloud_correlation_poly_bary_hull_concave, _cloud_correlation_poly_bary_alpha);
   hull_src.polyline_barycenter         = getPolylineBarycenter(hull_src.edges);
   hull_src.cloud_hull->header.frame_id = _frame_map;
+  hull_src.has_data                    = true;
 
   HULL hull_trg;
   {
@@ -832,10 +936,7 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> PCL2MapRegistration::getPolylineBary
     }
   }
 
-  publishHull(_pub_dbg_hull_src, hull_src, Eigen::Vector3f(1, 0, 0));
-  publishHull(_pub_dbg_hull_target, hull_trg, Eigen::Vector3f(0, 0, 1));
-
-  return {hull_src.polyline_barycenter, hull_trg.polyline_barycenter};
+  return {hull_src, hull_trg};
 }
 /*//}*/
 
@@ -847,8 +948,6 @@ std::pair<EigenVectors, EigenVectors> PCL2MapRegistration::getEigenVectors(const
 
   print(eigenvectors_src, "source");
   print(eigenvectors_targ, "targ");
-
-  // TODO: debug publish
 
   return {eigenvectors_src, eigenvectors_targ};
 }
@@ -916,7 +1015,8 @@ HULL PCL2MapRegistration::getHull(const PC_NORM::Ptr pc, const bool concave, con
     const auto &point_B = hull.cloud_hull->points.at(edge_idx.second);
     hull.edges.at(it++) = {point_A, point_B};
 
-    /* NODELET_ERROR("%d: (%.2f, %.2f, %.2f) -> %d: (%.2f, %.2f, %.2f)", edge_idx.first, point_A.x, point_A.y, point_A.z, edge_idx.second, point_B.x, point_B.y,
+    /* NODELET_ERROR("%d: (%.2f, %.2f, %.2f) -> %d: (%.2f, %.2f, %.2f)", edge_idx.first, point_A.x, point_A.y, point_A.z, edge_idx.second, point_B.x,
+     * point_B.y,
      */
     /* point_B.z); */
   }
@@ -997,11 +1097,6 @@ EigenVectors PCL2MapRegistration::getEigenVectors(const PC_NORM::Ptr cloud) {
   float mean[3] = {0.0f, 0.0f, 0.0f};
   for (const auto &point : cloud->points) {
 
-    if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) {
-      /* NODELET_ERROR("[PCL2MapRegistration] Found NaN point (%.1f, %.1f, %.1f)!!", point.x, point.y, point.z); */
-      continue;
-    }
-
     mean[0] += point.x;
     mean[1] += point.y;
     mean[2] += point.z;
@@ -1020,11 +1115,6 @@ EigenVectors PCL2MapRegistration::getEigenVectors(const PC_NORM::Ptr cloud) {
     for (unsigned int j = i; j < 3; j++) {
 
       for (const auto &point : cloud->points) {
-
-        if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) {
-          /* NODELET_ERROR("[PCL2MapRegistration] Found NaN point (%.1f, %.1f, %.1f)!!", point.x, point.y, point.z); */
-          continue;
-        }
 
         const auto point_vec = point.getArray3fMap();
         cov(i, j) += (point_vec[i] - mean[i]) * (point_vec[j] - mean[j]);
@@ -1093,11 +1183,7 @@ PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &pcd_file)
     pcl::concatenateFields(*pc_xyz, *normals, *pc_norm);
   }
 
-  pc_norm->is_dense = false;
-
-  std::vector<int> indices;
-  pcl::removeNaNNormalsFromPointCloud(*pc_norm, *pc_norm, indices);
-  pcl::removeNaNFromPointCloud(*pc_norm, *pc_norm, indices);
+  removeNans(pc_norm);
   NODELET_INFO("[PCL2MapRegistration] Cloud size after NaN removal: %ld.", pc_norm->points.size());
 
   return pc_norm;
@@ -1132,9 +1218,9 @@ std::optional<PC_NORM::Ptr> PCL2MapRegistration::subscribeSinglePointCloudMsg(co
 /*//}*/
 
 /*//{ applyRandomTransformation() */
-void PCL2MapRegistration::applyRandomTransformation(PC_NORM::Ptr cloud) {
+void PCL2MapRegistration::applyRandomTransformation(const PC_NORM::Ptr cloud) {
 
-  Eigen::Matrix4f T;
+  Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
 
   // Random rotation in some random interval (for debugging)
   const Eigen::AngleAxisf roll(-0.03f * M_PI + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (0.06f * M_PI))), Eigen::Vector3f::UnitX());
@@ -1146,6 +1232,8 @@ void PCL2MapRegistration::applyRandomTransformation(PC_NORM::Ptr cloud) {
   T(0, 3) = -25.0f + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / 50.0f));
   T(1, 3) = -25.0f + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / 50.0f));
   T(2, 3) = -15.0f + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / 30.0f));
+
+  printEigenMatrix(T, "Applying random transformation:");
 
   // Transform cloud
   pcl::transformPointCloud(*cloud, *cloud, T);
@@ -1167,6 +1255,21 @@ const Eigen::Matrix4f PCL2MapRegistration::translationYawToMatrix(const Eigen::V
   const Eigen::AngleAxisf rot_ax  = Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitZ());
   const Eigen::Matrix3d   rot_mat = mrs_lib::AttitudeConverter(rot_ax);
   T.block<3, 3>(0, 0)             = rot_mat.cast<float>();
+
+  return T;
+}
+/*//}*/
+
+/*//{ translationToMatrix() */
+const Eigen::Matrix4f PCL2MapRegistration::translationToMatrix(const Eigen::Vector3f &translation) {
+
+  // Initialize
+  Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
+
+  // Fill in translation
+  T(0, 3) = translation.x();
+  T(1, 3) = translation.y();
+  T(2, 3) = translation.z();
 
   return T;
 }
@@ -1213,7 +1316,7 @@ void PCL2MapRegistration::publishCloud(const ros::Publisher &pub, const PC_NORM:
 /*//{ publishHull() */
 void PCL2MapRegistration::publishHull(const ros::Publisher &pub, const HULL &hull, const Eigen::Vector3f &color_rgb) {
 
-  if (pub.getNumSubscribers() == 0) {
+  if (pub.getNumSubscribers() == 0 || !hull.has_data) {
     return;
   }
 
@@ -1266,7 +1369,7 @@ void PCL2MapRegistration::publishHull(const ros::Publisher &pub, const HULL &hul
   }
   /*//}*/
 
-  /*//{ Vertices */
+  /*//{ Barycenters */
   visualization_msgs::Marker m_barycenter;
   m_barycenter.ns                 = "barycenter";
   m_barycenter.action             = visualization_msgs::Marker::ADD;
@@ -1276,7 +1379,7 @@ void PCL2MapRegistration::publishHull(const ros::Publisher &pub, const HULL &hul
   m_barycenter.scale.x            = 1.0;
   m_barycenter.scale.y            = 1.0;
   m_barycenter.scale.z            = 1.0;
-  m_barycenter.color.a            = 1.0;
+  m_barycenter.color.a            = 0.5;
   m_barycenter.color.r            = color_rgb.x();
   m_barycenter.color.g            = color_rgb.y();
   m_barycenter.color.b            = color_rgb.z();
@@ -1298,6 +1401,231 @@ void PCL2MapRegistration::publishHull(const ros::Publisher &pub, const HULL &hul
 }
 /*//}*/
 
+/*//{ publishPCA() */
+void PCL2MapRegistration::publishPCA(const ros::Publisher &pub, const std::string &frame_id, const std::pair<EigenVectors, EigenVectors> &eigenvectors,
+                                     const std::pair<Eigen::Vector3f, Eigen::Vector3f> &origins) {
+
+  if (pub.getNumSubscribers() == 0 || !eigenvectors.first.valid || !eigenvectors.second.valid) {
+    return;
+  }
+
+  const ros::Time       now           = ros::Time::now();
+  const Eigen::Vector3f color_red     = Eigen::Vector3f(1.0f, 0.0f, 0.0f);
+  const Eigen::Vector3f color_green   = Eigen::Vector3f(0.0f, 1.0f, 0.0f);
+  const Eigen::Vector3f color_blue    = Eigen::Vector3f(0.0f, 0.0f, 1.0f);
+  const Eigen::Vector3f color_grey    = Eigen::Vector3f(0.84f, 0.84f, 1.84f);
+  const double          vec_vis_scale = 0.07;
+
+  /*//{ First */
+
+  visualization_msgs::Marker m_first;
+
+  {
+    m_first.ns              = "eigenvectors_source";
+    m_first.action          = visualization_msgs::Marker::ADD;
+    m_first.type            = visualization_msgs::Marker::LINE_LIST;
+    m_first.header.frame_id = frame_id;
+    m_first.header.stamp    = now;
+    m_first.scale.x         = vec_vis_scale;
+    m_first.colors.resize(8);
+    m_first.points.resize(8);
+
+    const auto &origin = origins.first;
+    const auto &vecs   = eigenvectors.first;
+
+    // Scale and 3D-place vectors
+    const float scale  = std::max(vecs.x.norm(), std::max(vecs.y.norm(), vecs.z.norm()));
+    const auto  vec_x  = origin + vecs.x / scale;
+    const auto  vec_y  = origin + vecs.y / scale;
+    const auto  vec_z  = origin + vecs.z / scale;
+    const auto  vec_xy = origin + (vecs.x + vecs.y) / scale;
+
+    // Visualize x
+    m_first.points.at(0) = toGeometryMsg(origin);
+    m_first.points.at(1) = toGeometryMsg(vec_x);
+    m_first.colors.at(0) = toColorMsg(color_red);
+    m_first.colors.at(1) = toColorMsg(color_red);
+
+    // Visualize y
+    m_first.points.at(2) = toGeometryMsg(origin);
+    m_first.points.at(3) = toGeometryMsg(vec_y);
+    m_first.colors.at(2) = toColorMsg(color_green);
+    m_first.colors.at(3) = toColorMsg(color_green);
+
+    // Visualize x
+    m_first.points.at(4) = toGeometryMsg(origin);
+    m_first.points.at(5) = toGeometryMsg(vec_z);
+    m_first.colors.at(4) = toColorMsg(color_blue);
+    m_first.colors.at(5) = toColorMsg(color_blue);
+
+    // Visualize x
+    m_first.points.at(6) = toGeometryMsg(origin);
+    m_first.points.at(7) = toGeometryMsg(vec_xy);
+    m_first.colors.at(6) = toColorMsg(color_grey);
+    m_first.colors.at(7) = toColorMsg(color_grey);
+  }
+  /*//}*/
+
+  /*//{ Second */
+
+  visualization_msgs::Marker m_second;
+
+  {
+    m_second.ns              = "eigenvectors_target";
+    m_second.action          = visualization_msgs::Marker::ADD;
+    m_second.type            = visualization_msgs::Marker::LINE_LIST;
+    m_second.header.frame_id = frame_id;
+    m_second.header.stamp    = now;
+    m_second.scale.x         = vec_vis_scale;
+    m_second.colors.resize(8);
+    m_second.points.resize(8);
+
+    const auto &origin = origins.second;
+    const auto &vecs   = eigenvectors.second;
+
+    // Scale and 3D-place vectors
+    const float scale  = std::max(vecs.x.norm(), std::max(vecs.y.norm(), vecs.z.norm()));
+    const auto  vec_x  = origin + vecs.x / scale;
+    const auto  vec_y  = origin + vecs.y / scale;
+    const auto  vec_z  = origin + vecs.z / scale;
+    const auto  vec_xy = origin + (vecs.x + vecs.y) / scale;
+
+    // Visualize x
+    m_second.points.at(0) = toGeometryMsg(origin);
+    m_second.points.at(1) = toGeometryMsg(vec_x);
+    m_second.colors.at(0) = toColorMsg(color_red);
+    m_second.colors.at(1) = toColorMsg(color_red);
+
+    // Visualize y
+    m_second.points.at(2) = toGeometryMsg(origin);
+    m_second.points.at(3) = toGeometryMsg(vec_y);
+    m_second.colors.at(2) = toColorMsg(color_green);
+    m_second.colors.at(3) = toColorMsg(color_green);
+
+    // Visualize x
+    m_second.points.at(4) = toGeometryMsg(origin);
+    m_second.points.at(5) = toGeometryMsg(vec_z);
+    m_second.colors.at(4) = toColorMsg(color_blue);
+    m_second.colors.at(5) = toColorMsg(color_blue);
+
+    // Visualize x
+    m_second.points.at(6) = toGeometryMsg(origin);
+    m_second.points.at(7) = toGeometryMsg(vec_xy);
+    m_second.colors.at(6) = toColorMsg(color_grey);
+    m_second.colors.at(7) = toColorMsg(color_grey);
+  }
+  /*//}*/
+
+  visualization_msgs::MarkerArray ma;
+  ma.markers = {m_first, m_second};
+
+  try {
+    pub.publish(ma);
+  }
+  catch (...) {
+    NODELET_ERROR("[PCL2MapRegistration::publishPCA]: Exception caught during publishing on topic: %s", pub.getTopic().c_str());
+  }
+}
+/*//}*/
+
+/*//{ removeNans() */
+void PCL2MapRegistration::removeNans(PC_NORM::Ptr &cloud) {
+
+  size_t             k         = 0;
+  const PC_NORM::Ptr cloud_out = boost::make_shared<PC_NORM>();
+  cloud_out->points.resize(cloud->size());
+
+  for (const auto &point : cloud->points) {
+    const bool xyz_valid  = std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z);
+    const bool norm_valid = std::isfinite(point.normal_x) && std::isfinite(point.normal_y) && std::isfinite(point.normal_z);
+
+    if (xyz_valid && norm_valid) {
+      cloud_out->points.at(k++) = point;
+    }
+  }
+
+  cloud_out->points.resize(k);
+  cloud_out->header   = cloud->header;
+  cloud_out->is_dense = true;
+  cloud_out->width    = k;
+  cloud_out->height   = 1;
+
+  cloud = cloud_out;
+}
+/*//}*/
+
+/*//{ transformHull() */
+void PCL2MapRegistration::transformHull(HULL &hull, const Eigen::Matrix4f &mat) {
+
+  // Transform cloud
+  pcl::transformPointCloud(*hull.cloud_hull, *hull.cloud_hull, mat);
+
+  // Transform edges
+  const Eigen::Affine3f mat_affine = Eigen::Affine3f(mat);
+  for (auto &edge_pair : hull.edges) {
+    edge_pair.first  = pcl::transformPointWithNormal(edge_pair.first, mat_affine);
+    edge_pair.second = pcl::transformPointWithNormal(edge_pair.second, mat_affine);
+  }
+
+  // Transform polyline barycenter
+  transformEigenVector(hull.polyline_barycenter, mat_affine);
+}
+/*//}*/
+
+/*//{ transformEigenVector() */
+void PCL2MapRegistration::transformEigenVector(Eigen::Vector3f &vec, const Eigen::Affine3f &mat) {
+  vec = mat * vec;
+}
+/*//}*/
+
+/*//{ transformEigenVectors() */
+void PCL2MapRegistration::transformEigenVectors(EigenVectors &eigenvectors, const Eigen::Matrix4f &mat) {
+
+  const Eigen::Affine3f T_affine = Eigen::Affine3f(mat);
+
+  transformEigenVector(eigenvectors.x, T_affine);
+  transformEigenVector(eigenvectors.y, T_affine);
+  transformEigenVector(eigenvectors.z, T_affine);
+}
+/*//}*/
+
+/*//{ translateEigenVector() */
+void PCL2MapRegistration::translateEigenVector(Eigen::Vector3f &vec, const Eigen::Matrix4f &mat) {
+  vec = vec + Eigen::Vector3f(mat(0, 3), mat(1, 3), mat(2, 3));
+}
+/*//}*/
+
+/*//{ checkNans */
+bool PCL2MapRegistration::checkNans(const PC_NORM::Ptr cloud, const std::string &ns) {
+  size_t xyz_invalid_count  = 0;
+  size_t norm_invalid_count = 0;
+  size_t both_invalid_count = 0;
+
+  for (const auto &point : cloud->points) {
+
+    const bool xyz_invalid  = !(std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z));
+    const bool norm_invalid = !(std::isfinite(point.normal_x) && std::isfinite(point.normal_y) && std::isfinite(point.normal_z));
+
+    if (xyz_invalid && norm_invalid) {
+      both_invalid_count++;
+    } else if (xyz_invalid && !norm_invalid) {
+      xyz_invalid_count++;
+    } else if (norm_invalid && !xyz_invalid) {
+      norm_invalid_count++;
+    }
+  }
+
+  if (xyz_invalid_count > 0 || norm_invalid_count > 0 || both_invalid_count > 0) {
+    NODELET_ERROR("[PCL2MapRegistration] Cloud %shas NaNs (xyz+normals: %ld, xyz only: %ld, normals only: %ld)", ns.empty() ? " " : (ns + " ").c_str(),
+                  both_invalid_count, xyz_invalid_count, norm_invalid_count);
+    return true;
+  }
+
+  NODELET_INFO("[PCL2MapRegistration] Cloud has no NaNs.");
+  return false;
+}
+/*//}*/
+
 /*//{ print */
 void PCL2MapRegistration::print(const EigenVectors &eigenvectors, const std::string &ns) {
 
@@ -1309,6 +1637,27 @@ void PCL2MapRegistration::print(const EigenVectors &eigenvectors, const std::str
   NODELET_INFO("[PCL2MapRegistration]   x: (%.1f, %.1f, %.1f)", eigenvectors.x.x(), eigenvectors.x.y(), eigenvectors.x.z());
   NODELET_INFO("[PCL2MapRegistration]   y: (%.1f, %.1f, %.1f)", eigenvectors.y.x(), eigenvectors.y.y(), eigenvectors.y.z());
   NODELET_INFO("[PCL2MapRegistration]   z: (%.1f, %.1f, %.1f)", eigenvectors.z.x(), eigenvectors.z.y(), eigenvectors.z.z());
+}
+/*//}*/
+
+/*//{ toGeometryMsg */
+geometry_msgs::Point PCL2MapRegistration::toGeometryMsg(const Eigen::Vector3f &point) {
+  geometry_msgs::Point geom_point;
+  geom_point.x = point.x();
+  geom_point.y = point.y();
+  geom_point.z = point.z();
+  return geom_point;
+}
+/*//}*/
+
+/*//{ toColorMsg */
+std_msgs::ColorRGBA PCL2MapRegistration::toColorMsg(const Eigen::Vector3f &rgb, const float alpha) {
+  std_msgs::ColorRGBA color_msg;
+  color_msg.r = rgb.x();
+  color_msg.g = rgb.y();
+  color_msg.b = rgb.z();
+  color_msg.a = alpha;
+  return color_msg;
 }
 /*//}*/
 
