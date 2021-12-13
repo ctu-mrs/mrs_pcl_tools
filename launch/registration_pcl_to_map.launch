@@ -1,10 +1,10 @@
 <launch>
 
   <arg name="UAV_NAME" default="$(env UAV_NAME)" />
-  <arg name="map_frame" default="$(arg UAV_NAME)/global_origin" />
+  <arg name="map_frame" default="global_origin" />
 
-  <arg name="target_pcd" default="$(find naki_gazebo_resources)/models/olomouc_sv_moric/pcd/olomouc_sv_moric.pcd" />
-  <arg name="source_pcd" default="$(find naki_gazebo_resources)/models/olomouc_sv_moric/pcd/olomouc_start_D.pcd" />
+  <arg name="target_pcd" default="$(find naki_gazebo_resources)/models/olomouc_marie_snezna/pcd/olomouc_marie_snezna_normals.pcd" />
+  <arg name="source_pcd" default="$(find naki_gazebo_resources)/models/olomouc_marie_snezna/pcd/real_initial_map_normals.pcd" />
   <arg name="topic_pointcloud2" default="octomap_point_cloud_centers" />
 
   <arg name="nodelet" default="standalone" />
@@ -31,6 +31,9 @@
       <remap from="~cloud_source_out" to="registration/source" />
       <remap from="~cloud_target_out" to="registration/target" />
       <remap from="~cloud_aligned_out" to="registration/aligned" />
+      <remap from="~dbg_hull_source_out" to="registration/dbg/hull_source" />
+      <remap from="~dbg_hull_target_out" to="registration/dbg/hull_target" />
+      <remap from="~dbg_pca_out" to="registration/dbg/pca" />
 
       <!-- Service servers -->
       <remap from="~srv_register_offline" to="~register/offline" />

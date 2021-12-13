@@ -52,7 +52,7 @@ void savePCD(const std::string &pcd_file, const sensor_msgs::PointCloud2::Ptr &c
 PC_NORM::Ptr estimateNormals(const PC::Ptr &cloud, const float &normal_est_radius) {
 
   // XYZ type to XYZNormalPoint
-  PC_NORM::Ptr cloud_norm = boost::make_shared<PC_NORM>();
+  const PC_NORM::Ptr cloud_norm = boost::make_shared<PC_NORM>();
   pcl::copyPointCloud(*cloud, *cloud_norm);
 
   // Estimate normals
