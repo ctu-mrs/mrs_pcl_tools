@@ -1,4 +1,4 @@
-# mrs_pcl_tools
+# MRS PointCloudLibrary tools
 
 Package grouping smaller nodes for processing, filtering, and general online/offline work with pointclouds.
 
@@ -6,6 +6,9 @@ Package grouping smaller nodes for processing, filtering, and general online/off
 [ouster driver](https://github.com/ctu-mrs/ouster) for Ouster point type
 
 ## PCL cross-compilation
+**We no more manually compile the PCL library, see [#126](https://github.com/ctu-mrs/mrs_uav_system/issues/126).**
+This makes this manual purely informational.
+
 Point Cloud Library (PCL) is available in Debian repositories, however this package has disabled hardware-specific optimizations.
 In order to enable hardware-specific optimizations (cmake flag `-march=native`), PCL has to be compiled manually on your machine.
 The installation process has been tested on Ubuntu 20.04 and ROS Noetic (PCL version 1.10.1).
@@ -13,7 +16,7 @@ The installation process has been tested on Ubuntu 20.04 and ROS Noetic (PCL ver
 **Before installation**:
 
 - make sure your machine has at least 28GB of RAM+SWAP memory (32GB is recommended, manual to increase SWAP memory is e.g., [here](https://askubuntu.com/a/1177939))
-- change the PCL build flags/profile if needed in [`mrs_pcl_tools/install/install_pcl.sh`](https://mrs.felk.cvut.cz/gitlab/uav/perception/mrs_pcl_tools/blob/master/install/install_pcl.sh) (default profile: `RelWithDebInfo`, profiles match `mrs_workspace`)
+- change the PCL build flags/profile if needed in [`mrs_pcl_tools/install/install_pcl.sh`](https://github.com/ctu-mrs/mrs_pcl_tools/blob/master/install/install_pcl.sh) (default profile: `RelWithDebInfo`, profiles match `mrs_workspace`)
 
 **Run installation** (can take up to 1 hour, compiler may fail internally so restart if that happens):
 
