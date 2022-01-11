@@ -1,9 +1,4 @@
 #include "mrs_pcl_tools/PCLFiltration.h"
-#include <limits>
-#include <pcl/common/point_tests.h>
-#include <pcl/filters/passthrough.h>
-#include <pcl/pcl_base.h>
-#include <pcl/point_traits.h>
 
 namespace mrs_pcl_tools
 {
@@ -54,13 +49,17 @@ void PCLFiltration::onInit() {
   // Scope timer
   _common_handlers->param_loader->loadParam("scope_timer/enable", _common_handlers->scope_timer_enabled, false);
   const std::string time_logger_filepath = _common_handlers->param_loader->loadParam2("scope_timer/log_filename", std::string(""));
-  _common_handlers->scope_timer_logger = std::make_shared<mrs_lib::ScopeTimerLogger>(time_logger_filepath, _common_handlers->scope_timer_enabled);
+  _common_handlers->scope_timer_logger   = std::make_shared<mrs_lib::ScopeTimerLogger>(time_logger_filepath, _common_handlers->scope_timer_enabled);
 
   // Diagnostics message
-  _common_handlers->pub_diagnostics = nh.advertise<mrs_msgs::PclToolsDiagnostics>("diagnostics_out", 1);
+  _common_handlers->diagnostics = std::make_shared<Diagnostics_t>(nh);
+
   /*//}*/
 
   /* 3D LIDAR */
+  _common_handlers->param_loader->loadParam("lidar3d/frequency", _lidar3d_frequency);
+  _common_handlers->param_loader->loadParam("lidar3d/vfov", _lidar3d_vfov);
+
   _common_handlers->param_loader->loadParam("lidar3d/keep_organized", _lidar3d_keep_organized, true);
   _common_handlers->param_loader->loadParam("lidar3d/republish", _lidar3d_republish, false);
   _common_handlers->param_loader->loadParam("lidar3d/invalid_value", _lidar3d_invalid_value, std::numeric_limits<float>::quiet_NaN());
@@ -84,11 +83,12 @@ void PCLFiltration::onInit() {
   }
 
   _lidar3d_downsample_use = _lidar3d_dynamic_row_selection_enabled || _lidar3d_row_step > 1 || _lidar3d_col_step > 1;
-  if (_lidar3d_downsample_use)
+  if (_lidar3d_downsample_use) {
     NODELET_INFO("[PCLFiltration] Downsampling of input lidar data is enabled -> dynamically: %s, row step: %d, col step: %d",
                  _lidar3d_dynamic_row_selection_enabled ? "true" : "false", _lidar3d_row_step, _lidar3d_col_step);
-  else
+  } else {
     NODELET_INFO("[PCLFiltration] Downsampling of input lidar data is disabled.");
+  }
 
   // load ground removal parameters
   const bool use_ground_removal = _common_handlers->param_loader->loadParam2<bool>("lidar3d/ground_removal/use", false);
@@ -184,8 +184,10 @@ void PCLFiltration::callbackReconfigure(Config& config, [[maybe_unused]] uint32_
 
 /* lidar3dCallback() //{ */
 void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
-  if (!is_initialized || !_lidar3d_republish)
+
+  if (!is_initialized || !_lidar3d_republish) {
     return;
+  }
 
   if (msg->width % _lidar3d_col_step != 0 || msg->height % _lidar3d_row_step != 0) {
     NODELET_WARN(
@@ -195,7 +197,16 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& ms
     return;
   }
 
-  mrs_lib::ScopeTimer timer =
+  const mrs_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_msgs::PclToolsDiagnostics>();
+  diag_msg->sensor_name                             = "ouster";
+  diag_msg->stamp                                   = msg->header.stamp;
+  diag_msg->sensor_type                             = mrs_msgs::PclToolsDiagnostics::SENSOR_TYPE_LIDAR_3D;
+  diag_msg->cols_before                             = msg->width;
+  diag_msg->rows_before                             = msg->height;
+  diag_msg->frequency                               = _lidar3d_frequency;
+  diag_msg->vfov                                    = _lidar3d_vfov;
+
+  const mrs_lib::ScopeTimer timer =
       mrs_lib::ScopeTimer("PCLFiltration::lidar3dCallback", _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
   const bool is_ouster = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
@@ -210,6 +221,10 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& ms
     pcl::fromROSMsg(*msg, *cloud);
     process_msg(cloud);
   }
+
+  diag_msg->cols_after = msg->width;
+  diag_msg->rows_after = msg->height;
+  _common_handlers->diagnostics->publish(diag_msg);
 }
 
 template <typename PC>

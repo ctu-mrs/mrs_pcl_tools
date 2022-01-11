@@ -34,6 +34,9 @@
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
+/* #include <pcl/pcl_base.h> */
+/* #include <pcl/point_traits.h> */
+
 //}
 
 namespace mrs_pcl_tools
@@ -41,6 +44,29 @@ namespace mrs_pcl_tools
 using vec3_t = Eigen::Vector3f;
 using vec4_t = Eigen::Vector4f;
 using quat_t = Eigen::Quaternionf;
+
+/*//{ struct Diagnostics_t */
+struct Diagnostics_t
+{
+  Diagnostics_t(ros::NodeHandle& nh) {
+    _pub_diagnostics = nh.advertise<mrs_msgs::PclToolsDiagnostics>("diagnostics_out", 10);
+  }
+
+  void const publish(const mrs_msgs::PclToolsDiagnosticsConstPtr& msg) {
+    if (_pub_diagnostics.getNumSubscribers() > 0) {
+      try {
+        _pub_diagnostics.publish(msg);
+      }
+      catch (...) {
+        ROS_ERROR("[PCLFiltration] Failed to publish msg on topic (%s).", _pub_diagnostics.getTopic().c_str());
+      }
+    }
+  }
+
+private:
+  ros::Publisher _pub_diagnostics;
+};
+/*//}*/
 
 /*//{ struct CommonHandlers_t */
 struct CommonHandlers_t
@@ -51,7 +77,7 @@ struct CommonHandlers_t
   bool                                       scope_timer_enabled;
   std::shared_ptr<mrs_lib::ScopeTimerLogger> scope_timer_logger;
 
-  ros::Publisher pub_diagnostics;
+  std::shared_ptr<Diagnostics_t> diagnostics;
 };
 /*//}*/
 
@@ -191,6 +217,9 @@ private:
   std::string depth_in, depth_camera_info_in, points_out, points_over_max_range_out;
   std::string sensor_name;
 
+  float frequency;
+  float vfov;
+
   bool has_camera_info = false;
   bool publish_over_max_range;
 
@@ -203,7 +232,7 @@ private:
   float focal_length;
   float focal_length_inverse;
 
-// Filters parameters
+  // Filters parameters
 private:
   int downsample_step_col;
   int downsample_step_row;
@@ -265,6 +294,8 @@ private:
 
   /* 3D LIDAR */
   void  lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+  float _lidar3d_frequency;
+  float _lidar3d_vfov;
   bool  _lidar3d_keep_organized;
   bool  _lidar3d_republish;
   float _lidar3d_invalid_value;

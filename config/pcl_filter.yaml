@@ -4,14 +4,17 @@ scope_timer:
 
 lidar3d:
 
+  frequency: 10 # [Hz]
+  vfov: 90      # [deg]
+
   republish: true
   keep_organized: true
 
   clip:
     range:
       use: true
-      min: 0.7
-      max: 40.0
+      min: 0.7  # [m]
+      max: 40.0 # [m]
     intensity:
       use: false
       threshold: 35

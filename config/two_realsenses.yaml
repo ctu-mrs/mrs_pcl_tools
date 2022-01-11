@@ -3,6 +3,9 @@ depth:
 
   up_rgbd:
 
+    frequency: 30 # [Hz]
+    vfov: 60      # [deg]
+
     topic:
       depth_in: "up_rgbd/depth/image_rect_raw"
       depth_camera_info_in: "up_rgbd/depth/camera_info"
@@ -29,6 +32,9 @@ depth:
         sigma_R: 0.005
 
   down_rgbd:
+
+    frequency: 30 # [Hz]
+    vfov: 60      # [deg]
 
     topic:
       depth_in: "down_rgbd/depth/image_rect_raw"

@@ -9,6 +9,9 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
   _common_handlers = common_handlers;
   sensor_name      = name;
 
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/frequency", frequency);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/vfov", vfov);
+
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/downsample/step/col", downsample_step_col, 1);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/downsample/step/row", downsample_step_row, 1);
   if (downsample_step_col < 1) {
@@ -148,11 +151,12 @@ void SensorDepthCamera::imagePointToCloudPoint(const int x, const int y, const f
 /*//{ process_depth_msg() */
 void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs::Image>& sh) {
 
-  if (!initialized)
+  if (!initialized) {
     return;
+  }
 
-  const std::string   scope_label = "PCLFiltration::process_depth_msg::" + sensor_name;
-  mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
+  const std::string         scope_label = "PCLFiltration::process_depth_msg::" + sensor_name;
+  const mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
   PC::Ptr     cloud, cloud_over_max_range;
   const auto& depth_msg = sh.getMsg();
@@ -165,6 +169,15 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
     ROS_ERROR_THROTTLE(5.0, "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
     return;
   }
+
+  const mrs_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_msgs::PclToolsDiagnostics>();
+  diag_msg->sensor_name                             = sensor_name;
+  diag_msg->stamp                                   = depth_msg->header.stamp;
+  diag_msg->sensor_type                             = mrs_msgs::PclToolsDiagnostics::SENSOR_TYPE_DEPTH_CAMERA;
+  diag_msg->cols_before                             = cloud->width;
+  diag_msg->rows_before                             = cloud->height;
+  diag_msg->frequency                               = frequency;
+  diag_msg->vfov                                    = vfov;
 
   // Apply filters to the original cloud (beware, the filters are applied in sequential order: no parallelization)
   if (voxel_grid_use) {
@@ -182,11 +195,16 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
 
   try {
     pub_points.publish(cloud);
-    if (publish_over_max_range)
+    if (publish_over_max_range) {
       pub_points_over_max_range.publish(cloud_over_max_range);
+    }
   }
   catch (...) {
   }
+
+  diag_msg->cols_after = cloud->width;
+  diag_msg->rows_after = cloud->height;
+  _common_handlers->diagnostics->publish(diag_msg);
 }
 /*//}*/
 
@@ -222,8 +240,9 @@ void SensorDepthCamera::process_camera_info_msg(mrs_lib::SubscribeHandler<sensor
 
     // Advertise publishers
     pub_points = _nh.advertise<sensor_msgs::PointCloud2>(points_out, 1);
-    if (publish_over_max_range)
+    if (publish_over_max_range) {
       pub_points_over_max_range = _nh.advertise<sensor_msgs::PointCloud2>(points_over_max_range_out, 1);
+    }
 
     // Start subscribe handler for depth data
     mrs_lib::SubscribeHandlerOptions shopts(_nh);
