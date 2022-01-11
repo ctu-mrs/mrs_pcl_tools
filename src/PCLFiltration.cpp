@@ -211,19 +211,24 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& ms
 
   const bool is_ouster = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
   if (is_ouster) {
+
     NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: ouster_ros::Point.");
     PC_OS::Ptr cloud = boost::make_shared<PC_OS>();
     pcl::fromROSMsg(*msg, *cloud);
     process_msg(cloud);
+    diag_msg->cols_after = cloud->width;
+    diag_msg->rows_after = cloud->height;
+
   } else {
+
     NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: pcl::PointXYZI.");
     PC_I::Ptr cloud = boost::make_shared<PC_I>();
     pcl::fromROSMsg(*msg, *cloud);
     process_msg(cloud);
+    diag_msg->cols_after = cloud->width;
+    diag_msg->rows_after = cloud->height;
   }
 
-  diag_msg->cols_after = msg->width;
-  diag_msg->rows_after = msg->height;
   _common_handlers->diagnostics->publish(diag_msg);
 }
 
