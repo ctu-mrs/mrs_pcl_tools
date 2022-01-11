@@ -40,7 +40,7 @@
       <remap from="~lidar3d_over_max_range_out" to="$(arg topic_3d_lidar_in)_over_max_range" />
       <remap from="~rplidar_out" to="rplidar/scan_processed" />
       
-      <remap from="~diagnostics_out" to="diagnostics" />
+      <remap from="~diagnostics_out" to="~diagnostics" />
 
     </node>
 
