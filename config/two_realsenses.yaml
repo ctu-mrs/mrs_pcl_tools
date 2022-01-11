@@ -28,9 +28,6 @@ depth:
         sigma_S: 0.0 # used if both >0
         sigma_R: 0.005
 
-    landing_spot_detection:
-      use: false
-
   down_rgbd:
 
     topic:
@@ -38,8 +35,6 @@ depth:
       depth_camera_info_in: "down_rgbd/depth/camera_info"
       points_out: "down_rgbd/points_processed"
       points_over_max_range_out: "down_rgbd/points_over_max_range" # used if non-empty and range_clip used
-      landing_spot_detection_out: "down_rgbd/landing_spot_detection"
-      landing_spot_detection_dbg_out: "down_rgbd/landing_spot_detection_dbg"
 
     filter:
       downsample:
@@ -59,16 +54,3 @@ depth:
       bilateral:
         sigma_S: 0.0 # used if both >0
         sigma_R: 0.005
-
-    landing_spot_detection:
-      use: true
-      frame_step: 15 # run on every n-th data frame
-      square:
-        size: 1.0           # square-like landing spot size in meters
-        min_size_ratio: 0.9 # square is valid if its width and height are greater than (size*min_size_ratio)
-        max_ratio: 0.95     # square is valid if the ratio of its points to all points is lower than this threshold (otherwise, we're too close to decide on landability)
-      plane_detection:
-        normal_z_threshold: 0.7        # threshold of z-axis normal for plane to be classified as a landing spot
-        ransac_distance_threshold: 0.1 # lower value will filter out more "noisy" planes
-        min_inliers_ratio: 0.8
-      world_frame: "subt"

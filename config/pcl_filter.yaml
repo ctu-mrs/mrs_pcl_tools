@@ -7,10 +7,15 @@ lidar3d:
   republish: true
   keep_organized: true
 
-  range_clip:
-    use: true
-    min: 0.7
-    max: 40.0
+  clip:
+    range:
+      use: true
+      min: 0.7
+      max: 40.0
+    intensity:
+      use: false
+      threshold: 35
+      range: 5.0
 
   ground_removal:
     use: false
@@ -26,12 +31,6 @@ lidar3d:
     dynamic_row_selection: false
     row_step: 1
     col_step: 1
-
-  filter:
-    intensity:
-      use: false
-      threshold: 35
-      range: 5.0
 
 rplidar:
   republish: false

@@ -27,6 +27,8 @@
 
 #include <visualization_msgs/MarkerArray.h>
 
+#include <mrs_msgs/PclToolsDiagnostics.h>
+
 #include <boost/smart_ptr/make_shared_array.hpp>
 #include <limits>
 
@@ -40,30 +42,43 @@ using vec3_t = Eigen::Vector3f;
 using vec4_t = Eigen::Vector4f;
 using quat_t = Eigen::Quaternionf;
 
+/*//{ struct CommonHandlers_t */
+struct CommonHandlers_t
+{
+  std::shared_ptr<mrs_lib::ParamLoader> param_loader;
+  std::shared_ptr<mrs_lib::Transformer> transformer;
+
+  bool                                       scope_timer_enabled;
+  std::shared_ptr<mrs_lib::ScopeTimerLogger> scope_timer_logger;
+
+  ros::Publisher pub_diagnostics;
+};
+/*//}*/
+
 /* class RemoveBelowGroundFilter //{ */
 
 class RemoveBelowGroundFilter {
 public:
-  void initialize(ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer> transformer = nullptr,
-                  const bool publish_plane_marker = false) {
-    keep_organized = pl.loadParamReusable<bool>("keep_organized", false);
-    pl.loadParam("ground_removal/range/use", range_use, false);
-    pl.loadParam("ground_removal/range/max_difference", range_max_diff, 1.0);
-    pl.loadParam("ground_removal/range/max_difference_without_rangefinder", range_max_diff_without_rangefinder, 1.5);
-    pl.loadParam("ground_removal/static_frame_id", static_frame_id);
-    pl.loadParam("ground_removal/max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
-    pl.loadParam("ground_removal/ransac/max_inlier_distance", max_inlier_dist, 3.0);
-    pl.loadParam("ground_removal/ransac/max_angle_difference", max_angle_diff, 15.0 / 180.0 * M_PI);
-    pl.loadParam("ground_removal/plane_offset", plane_offset, 1.0);
+  void initialize(ros::NodeHandle& nh, const std::shared_ptr<CommonHandlers_t> common_handlers, const bool publish_plane_marker = false) {
+    keep_organized = common_handlers->param_loader->loadParamReusable<bool>("keep_organized", false);
+    common_handlers->param_loader->loadParam("ground_removal/range/use", range_use, false);
+    common_handlers->param_loader->loadParam("ground_removal/range/max_difference", range_max_diff, 1.0);
+    common_handlers->param_loader->loadParam("ground_removal/range/max_difference_without_rangefinder", range_max_diff_without_rangefinder, 1.5);
+    common_handlers->param_loader->loadParam("ground_removal/static_frame_id", static_frame_id);
+    common_handlers->param_loader->loadParam("ground_removal/max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
+    common_handlers->param_loader->loadParam("ground_removal/ransac/max_inlier_distance", max_inlier_dist, 3.0);
+    common_handlers->param_loader->loadParam("ground_removal/ransac/max_angle_difference", max_angle_diff, 15.0 / 180.0 * M_PI);
+    common_handlers->param_loader->loadParam("ground_removal/plane_offset", plane_offset, 1.0);
 
-    if (transformer == nullptr) {
-      const auto pfx = pl.getPrefix();
-      pl.setPrefix("");
-      const std::string uav_name = pl.loadParamReusable<std::string>("uav_name");
-      pl.setPrefix(pfx);
+    if (common_handlers->transformer == nullptr) {
+      const auto pfx = common_handlers->param_loader->getPrefix();
+      common_handlers->param_loader->setPrefix("");
+      const std::string uav_name = common_handlers->param_loader->loadParamReusable<std::string>("uav_name");
+      common_handlers->param_loader->setPrefix(pfx);
       this->transformer = std::make_shared<mrs_lib::Transformer>("RemoveBelowGroundFilter", uav_name);
-    } else
-      this->transformer = transformer;
+    } else {
+      this->transformer = common_handlers->transformer;
+    }
 
     if (range_use) {
       mrs_lib::SubscribeHandlerOptions shopts(nh);
@@ -72,8 +87,9 @@ public:
       mrs_lib::construct_object(sh_range, shopts, "rangefinder_in");
     }
 
-    if (publish_plane_marker)
+    if (publish_plane_marker) {
       pub_fitted_plane = nh.advertise<visualization_msgs::MarkerArray>("lidar3d_fitted_plane", 10);
+    }
 
     initialized = true;
   }
@@ -148,9 +164,7 @@ struct DepthTraits<float>
 
 class SensorDepthCamera {
 public:
-  void initialize(const ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer>& transformer, const std::string& prefix,
-                  const std::string& name);
-  void setScopeTimerLogger(const std::shared_ptr<mrs_lib::ScopeTimerLogger> logger_ptr, const bool enable_scope_timer);
+  void initialize(const ros::NodeHandle& nh, const std::shared_ptr<CommonHandlers_t> common_handlers, const std::string& prefix, const std::string& name);
 
 private:
   template <typename T>
@@ -164,7 +178,6 @@ private:
 
 private:
   bool            initialized = false;
-  bool            _enable_scope_timer;
   ros::NodeHandle _nh;
   ros::Publisher  pub_points;
   ros::Publisher  pub_points_over_max_range;
@@ -172,8 +185,7 @@ private:
   mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
 
-  std::shared_ptr<mrs_lib::Transformer>      _transformer;
-  std::shared_ptr<mrs_lib::ScopeTimerLogger> _scope_time_logger;
+  std::shared_ptr<CommonHandlers_t> _common_handlers;
 
 private:
   std::string depth_in, depth_camera_info_in, points_out, points_over_max_range_out;
@@ -191,7 +203,7 @@ private:
   float focal_length;
   float focal_length_inverse;
 
-  // Filters parameters
+// Filters parameters
 private:
   int downsample_step_col;
   int downsample_step_row;
@@ -227,7 +239,6 @@ public:
 
 private:
   bool is_initialized = false;
-  bool _enable_scope_timer;
 
   ros::Subscriber _sub_lidar3d;
   ros::Subscriber _sub_depth;
@@ -241,9 +252,6 @@ private:
   ros::Publisher _pub_depth;
   ros::Publisher _pub_depth_over_max_range;
   ros::Publisher _pub_rplidar;
-
-  std::shared_ptr<mrs_lib::Transformer>      _transformer;
-  std::shared_ptr<mrs_lib::ScopeTimerLogger> _scope_time_logger;
 
   boost::recursive_mutex                               config_mutex_;
   typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;
@@ -282,6 +290,7 @@ private:
   vec4_t       _lidar3d_cropbox_max;
   unsigned int _lidar3d_dynamic_row_selection_offset = 0;
 
+  std::shared_ptr<CommonHandlers_t> _common_handlers;
 
   /* Depth camera */
   std::vector<std::shared_ptr<SensorDepthCamera>> _sensors_depth_cameras;

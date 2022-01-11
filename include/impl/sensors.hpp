@@ -2,43 +2,45 @@
 /* class SensorDepthCamera */
 
 /*//{ initialize() */
-void SensorDepthCamera::initialize(const ros::NodeHandle& nh, mrs_lib::ParamLoader& pl, const std::shared_ptr<mrs_lib::Transformer>& transformer,
-                                   const std::string& prefix, const std::string& name) {
+void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_ptr<CommonHandlers_t> common_handlers, const std::string& prefix,
+                                   const std::string& name) {
 
-  _nh          = nh;
-  _transformer = transformer;
-  sensor_name  = name;
+  _nh              = nh;
+  _common_handlers = common_handlers;
+  sensor_name      = name;
 
-  pl.loadParam("depth/" + sensor_name + "/filter/downsample/step/col", downsample_step_col, 1);
-  pl.loadParam("depth/" + sensor_name + "/filter/downsample/step/row", downsample_step_row, 1);
-  if (downsample_step_col < 1)
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/downsample/step/col", downsample_step_col, 1);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/downsample/step/row", downsample_step_row, 1);
+  if (downsample_step_col < 1) {
     downsample_step_col = 1;
-  if (downsample_step_row < 1)
+  }
+  if (downsample_step_row < 1) {
     downsample_step_row = 1;
+  }
 
-  pl.loadParam("depth/" + sensor_name + "/filter/range_clip/min", range_clip_min, 0.0f);
-  pl.loadParam("depth/" + sensor_name + "/filter/range_clip/max", range_clip_max, std::numeric_limits<float>::max());
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/range_clip/min", range_clip_min, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/range_clip/max", range_clip_max, std::numeric_limits<float>::max());
   range_clip_use    = range_clip_max > 0.0f && range_clip_max > range_clip_min;
   replace_nan_depth = range_clip_use ? 10.0f * range_clip_max : 1000.0f;
 
-  pl.loadParam("depth/" + sensor_name + "/filter/voxel_grid/resolution", voxel_grid_resolution, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/voxel_grid/resolution", voxel_grid_resolution, 0.0f);
   voxel_grid_use = voxel_grid_resolution > 0.0f;
 
-  pl.loadParam("depth/" + sensor_name + "/filter/radius_outlier/radius", radius_outlier_radius, 0.0f);
-  pl.loadParam("depth/" + sensor_name + "/filter/radius_outlier/neighbors", radius_outlier_neighbors, 0);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/radius_outlier/radius", radius_outlier_radius, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/radius_outlier/neighbors", radius_outlier_neighbors, 0);
   radius_outlier_use = radius_outlier_radius > 0.0f && radius_outlier_neighbors > 0;
 
-  pl.loadParam("depth/" + sensor_name + "/filter/minimum_grid/resolution", minimum_grid_resolution, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/minimum_grid/resolution", minimum_grid_resolution, 0.0f);
   minimum_grid_use = minimum_grid_resolution > 0.0f;
 
-  pl.loadParam("depth/" + sensor_name + "/filter/bilateral/sigma_S", bilateral_sigma_S, 0.0f);
-  pl.loadParam("depth/" + sensor_name + "/filter/bilateral/sigma_R", bilateral_sigma_R, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/bilateral/sigma_S", bilateral_sigma_S, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/bilateral/sigma_R", bilateral_sigma_R, 0.0f);
   bilateral_use = bilateral_sigma_S > 0.0f && bilateral_sigma_R > 0.0f;
 
-  pl.loadParam("depth/" + sensor_name + "/topic/depth_in", depth_in);
-  pl.loadParam("depth/" + sensor_name + "/topic/depth_camera_info_in", depth_camera_info_in);
-  pl.loadParam("depth/" + sensor_name + "/topic/points_out", points_out);
-  pl.loadParam("depth/" + sensor_name + "/topic/points_over_max_range_out", points_over_max_range_out, std::string(""));
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/depth_in", depth_in);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/depth_camera_info_in", depth_camera_info_in);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/points_out", points_out);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/points_over_max_range_out", points_over_max_range_out, std::string(""));
 
   publish_over_max_range = points_over_max_range_out.size() > 0 && range_clip_use;
 
@@ -48,8 +50,9 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, mrs_lib::ParamLoad
     depth_camera_info_in = "/" + prefix + "/" + depth_camera_info_in;
     points_out           = "/" + prefix + "/" + points_out;
 
-    if (publish_over_max_range)
+    if (publish_over_max_range) {
       points_over_max_range_out = "/" + prefix + "/" + points_over_max_range_out;
+    }
   }
 
   // Start subscribe handler for depth camera info
@@ -60,13 +63,6 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, mrs_lib::ParamLoad
   mrs_lib::construct_object(sh_camera_info, shopts, depth_camera_info_in, ros::Duration(20.0), &SensorDepthCamera::process_camera_info_msg, this);
 
   initialized = true;
-}
-/*//}*/
-
-/*//{ setScopeTimerLogger() */
-void SensorDepthCamera::setScopeTimerLogger(const std::shared_ptr<mrs_lib::ScopeTimerLogger> logger_ptr, const bool enable_scope_timer) {
-  _enable_scope_timer = enable_scope_timer;
-  _scope_time_logger  = logger_ptr;
 }
 /*//}*/
 
@@ -156,7 +152,7 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
     return;
 
   const std::string   scope_label = "PCLFiltration::process_depth_msg::" + sensor_name;
-  mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _scope_time_logger, _enable_scope_timer);
+  mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
   PC::Ptr     cloud, cloud_over_max_range;
   const auto& depth_msg = sh.getMsg();

@@ -8,16 +8,6 @@
 namespace mrs_pcl_tools
 {
 
-/*//{ isFinite() */
-template <typename pc_t>
-inline bool isfinite(const pc_t& pc) {
-  for (const auto& pt : pc.points)
-    if (!pcl::isFinite(pt))
-      return false;
-  return true;
-}
-/*//}*/
-
 /*//{ getFieldOffset() */
 template <typename pt_t>
 std::tuple<bool, std::size_t> getFieldOffset(const std::string& field_name) {
@@ -51,32 +41,41 @@ void PCLFiltration::onInit() {
   // Set PCL verbosity level to errors and higher
   /* pcl::console::setVerbosityLevel(pcl::console::L_ERROR); */
 
-  // Get parameters from config file
-  mrs_lib::ParamLoader param_loader(nh, "PCLFiltration");
+  /*//{ Common handlers */
+  _common_handlers = std::make_shared<CommonHandlers_t>();
 
-  const auto uav_name = param_loader.loadParam2<std::string>("uav_name");
-  // setup transformer
-  _transformer = std::make_shared<mrs_lib::Transformer>("PCLFiltration", uav_name);
+  // Param loader
+  _common_handlers->param_loader = std::make_shared<mrs_lib::ParamLoader>(nh, "PCLFilter");
 
-  param_loader.loadParam("scope_timer/enable", _enable_scope_timer, false);
-  const std::string time_logger_filepath = param_loader.loadParam2("scope_timer/log_filename", std::string(""));
+  // Transformer
+  const auto uav_name           = _common_handlers->param_loader->loadParam2<std::string>("uav_name");
+  _common_handlers->transformer = std::make_shared<mrs_lib::Transformer>("PCLFilter", uav_name);
+
+  // Scope timer
+  _common_handlers->param_loader->loadParam("scope_timer/enable", _common_handlers->scope_timer_enabled, false);
+  const std::string time_logger_filepath = _common_handlers->param_loader->loadParam2("scope_timer/log_filename", std::string(""));
+  _common_handlers->scope_timer_logger = std::make_shared<mrs_lib::ScopeTimerLogger>(time_logger_filepath, _common_handlers->scope_timer_enabled);
+
+  // Diagnostics message
+  _common_handlers->pub_diagnostics = nh.advertise<mrs_msgs::PclToolsDiagnostics>("diagnostics_out", 1);
+  /*//}*/
 
   /* 3D LIDAR */
-  param_loader.loadParam("lidar3d/keep_organized", _lidar3d_keep_organized, true);
-  param_loader.loadParam("lidar3d/republish", _lidar3d_republish, false);
-  param_loader.loadParam("lidar3d/invalid_value", _lidar3d_invalid_value, std::numeric_limits<float>::quiet_NaN());
-  param_loader.loadParam("lidar3d/range_clip/use", _lidar3d_rangeclip_use, false);
-  param_loader.loadParam("lidar3d/range_clip/min", _lidar3d_rangeclip_min_sq, 0.4f);
-  param_loader.loadParam("lidar3d/range_clip/max", _lidar3d_rangeclip_max_sq, 100.0f);
+  _common_handlers->param_loader->loadParam("lidar3d/keep_organized", _lidar3d_keep_organized, true);
+  _common_handlers->param_loader->loadParam("lidar3d/republish", _lidar3d_republish, false);
+  _common_handlers->param_loader->loadParam("lidar3d/invalid_value", _lidar3d_invalid_value, std::numeric_limits<float>::quiet_NaN());
+  _common_handlers->param_loader->loadParam("lidar3d/clip/range/use", _lidar3d_rangeclip_use, false);
+  _common_handlers->param_loader->loadParam("lidar3d/clip/range/min", _lidar3d_rangeclip_min_sq, 0.4f);
+  _common_handlers->param_loader->loadParam("lidar3d/clip/range/max", _lidar3d_rangeclip_max_sq, 100.0f);
   _lidar3d_rangeclip_min_mm = _lidar3d_rangeclip_min_sq * 1000;
   _lidar3d_rangeclip_max_mm = _lidar3d_rangeclip_max_sq * 1000;
   _lidar3d_rangeclip_min_sq *= _lidar3d_rangeclip_min_sq;
   _lidar3d_rangeclip_max_sq *= _lidar3d_rangeclip_max_sq;
 
   // load downsampling parameters
-  param_loader.loadParam("lidar3d/downsampling/dynamic_row_selection", _lidar3d_dynamic_row_selection_enabled, false);
-  param_loader.loadParam("lidar3d/downsampling/row_step", _lidar3d_row_step, 1);
-  param_loader.loadParam("lidar3d/downsampling/col_step", _lidar3d_col_step, 1);
+  _common_handlers->param_loader->loadParam("lidar3d/downsampling/dynamic_row_selection", _lidar3d_dynamic_row_selection_enabled, false);
+  _common_handlers->param_loader->loadParam("lidar3d/downsampling/row_step", _lidar3d_row_step, 1);
+  _common_handlers->param_loader->loadParam("lidar3d/downsampling/col_step", _lidar3d_col_step, 1);
 
   // load dynamic row selection
   if (_lidar3d_dynamic_row_selection_enabled && _lidar3d_row_step > 1 && _lidar3d_row_step % 2 != 0) {
@@ -92,58 +91,52 @@ void PCLFiltration::onInit() {
     NODELET_INFO("[PCLFiltration] Downsampling of input lidar data is disabled.");
 
   // load ground removal parameters
-  const bool use_ground_removal = param_loader.loadParam2<bool>("lidar3d/ground_removal/use", false);
+  const bool use_ground_removal = _common_handlers->param_loader->loadParam2<bool>("lidar3d/ground_removal/use", false);
   if (use_ground_removal) {
-    param_loader.setPrefix("lidar3d/");
-    _filter_removeBelowGround.initialize(nh, param_loader, _transformer, true);
-    param_loader.setPrefix("");
+    _common_handlers->param_loader->setPrefix("lidar3d/");
+    _filter_removeBelowGround.initialize(nh, _common_handlers, true);
+    _common_handlers->param_loader->setPrefix("");
   }
 
   // load cropbox parameters
-  param_loader.loadParam("lidar3d/cropbox/frame_id", _lidar3d_cropbox_frame_id, {});
-  _lidar3d_cropbox_frame_id = _transformer->resolveFrameName(_lidar3d_cropbox_frame_id);
-  param_loader.loadParam("lidar3d/cropbox/min/x", _lidar3d_cropbox_min.x(), -std::numeric_limits<float>::infinity());
-  param_loader.loadParam("lidar3d/cropbox/min/y", _lidar3d_cropbox_min.y(), -std::numeric_limits<float>::infinity());
-  param_loader.loadParam("lidar3d/cropbox/min/z", _lidar3d_cropbox_min.z(), -std::numeric_limits<float>::infinity());
+  _common_handlers->param_loader->loadParam("lidar3d/cropbox/frame_id", _lidar3d_cropbox_frame_id, {});
+  _lidar3d_cropbox_frame_id = _common_handlers->transformer->resolveFrameName(_lidar3d_cropbox_frame_id);
+  _common_handlers->param_loader->loadParam("lidar3d/cropbox/min/x", _lidar3d_cropbox_min.x(), -std::numeric_limits<float>::infinity());
+  _common_handlers->param_loader->loadParam("lidar3d/cropbox/min/y", _lidar3d_cropbox_min.y(), -std::numeric_limits<float>::infinity());
+  _common_handlers->param_loader->loadParam("lidar3d/cropbox/min/z", _lidar3d_cropbox_min.z(), -std::numeric_limits<float>::infinity());
   _lidar3d_cropbox_min.w() = -std::numeric_limits<float>::infinity();
 
-  param_loader.loadParam("lidar3d/cropbox/max/x", _lidar3d_cropbox_max.x(), std::numeric_limits<float>::infinity());
-  param_loader.loadParam("lidar3d/cropbox/max/y", _lidar3d_cropbox_max.y(), std::numeric_limits<float>::infinity());
-  param_loader.loadParam("lidar3d/cropbox/max/z", _lidar3d_cropbox_max.z(), std::numeric_limits<float>::infinity());
+  _common_handlers->param_loader->loadParam("lidar3d/cropbox/max/x", _lidar3d_cropbox_max.x(), std::numeric_limits<float>::infinity());
+  _common_handlers->param_loader->loadParam("lidar3d/cropbox/max/y", _lidar3d_cropbox_max.y(), std::numeric_limits<float>::infinity());
+  _common_handlers->param_loader->loadParam("lidar3d/cropbox/max/z", _lidar3d_cropbox_max.z(), std::numeric_limits<float>::infinity());
   _lidar3d_cropbox_max.w() = std::numeric_limits<float>::infinity();
 
   // by default, use the cropbox filter if any of the crop coordinates is finite
   const bool cbox_use_default = _lidar3d_cropbox_min.array().isFinite().any() || _lidar3d_cropbox_max.array().isFinite().any();
   // the user can override this behavior by setting the "lidar3d/cropbox/use" parameter
-  param_loader.loadParam("lidar3d/cropbox/use", _lidar3d_cropbox_use, cbox_use_default);
+  _common_handlers->param_loader->loadParam("lidar3d/cropbox/use", _lidar3d_cropbox_use, cbox_use_default);
 
-  param_loader.loadParam("lidar3d/filter/intensity/use", _lidar3d_filter_intensity_use, false);
-  param_loader.loadParam("lidar3d/filter/intensity/threshold", _lidar3d_filter_intensity_threshold, std::numeric_limits<int>::max());
-  param_loader.loadParam("lidar3d/filter/intensity/range", _lidar3d_filter_intensity_range_sq, std::numeric_limits<float>::max());
+  _common_handlers->param_loader->loadParam("lidar3d/clip/intensity/use", _lidar3d_filter_intensity_use, false);
+  _common_handlers->param_loader->loadParam("lidar3d/clip/intensity/threshold", _lidar3d_filter_intensity_threshold, std::numeric_limits<int>::max());
+  _common_handlers->param_loader->loadParam("lidar3d/clip/intensity/range", _lidar3d_filter_intensity_range_sq, std::numeric_limits<float>::max());
   _lidar3d_filter_intensity_range_mm = _lidar3d_filter_intensity_range_sq * 1000;
   _lidar3d_filter_intensity_range_sq *= _lidar3d_filter_intensity_range_sq;
 
   /* Depth cameras */
-  const std::vector<std::string> depth_camera_names = param_loader.loadParam2("depth/camera_names", std::vector<std::string>());
+  const std::vector<std::string> depth_camera_names = _common_handlers->param_loader->loadParam2("depth/camera_names", std::vector<std::string>());
   for (const auto& name : depth_camera_names) {
     std::shared_ptr<SensorDepthCamera> cam = std::make_shared<SensorDepthCamera>();
-    cam->initialize(nh, param_loader, _transformer, uav_name, name);
+    cam->initialize(nh, _common_handlers, uav_name, name);
     _sensors_depth_cameras.push_back(cam);
   }
 
   /* RPLidar */
-  param_loader.loadParam("rplidar/republish", _rplidar_republish, false);
-  param_loader.loadParam("rplidar/voxel_resolution", _rplidar_voxel_resolution, 0.0f);
+  _common_handlers->param_loader->loadParam("rplidar/republish", _rplidar_republish, false);
+  _common_handlers->param_loader->loadParam("rplidar/voxel_resolution", _rplidar_voxel_resolution, 0.0f);
 
-  if (!param_loader.loadedSuccessfully()) {
+  if (!_common_handlers->param_loader->loadedSuccessfully()) {
     NODELET_ERROR("[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
     ros::shutdown();
-  }
-
-
-  _scope_time_logger = std::make_shared<mrs_lib::ScopeTimerLogger>(time_logger_filepath, _enable_scope_timer);
-  for (const auto& cam : _sensors_depth_cameras) {
-    cam->setScopeTimerLogger(_scope_time_logger, _enable_scope_timer);
   }
 
   if (_lidar3d_republish) {
@@ -202,7 +195,8 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& ms
     return;
   }
 
-  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("PCLFiltration::lidar3dCallback", _scope_time_logger, _enable_scope_timer);
+  mrs_lib::ScopeTimer timer =
+      mrs_lib::ScopeTimer("PCLFiltration::lidar3dCallback", _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
   const bool is_ouster = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
   if (is_ouster) {
@@ -492,7 +486,7 @@ void PCLFiltration::cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc) {
   if (!_lidar3d_cropbox_frame_id.empty()) {
     ros::Time stamp;
     pcl_conversions::fromPCL(inout_pc->header.stamp, stamp);
-    const auto tf_opt = _transformer->getTransform(inout_pc->header.frame_id, _lidar3d_cropbox_frame_id, stamp);
+    const auto tf_opt = _common_handlers->transformer->getTransform(inout_pc->header.frame_id, _lidar3d_cropbox_frame_id, stamp);
     if (tf_opt.has_value()) {
       const Eigen::Affine3d tf = tf_opt->getTransformEigen();
       cb.setTransform(tf.cast<float>());

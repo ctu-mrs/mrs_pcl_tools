@@ -30,15 +30,17 @@
       <rosparam file="$(find mrs_pcl_tools)/config/pcl_filter.yaml" />
       <rosparam if="$(eval not arg('custom_config') == '')" file="$(arg custom_config)" command="load" />
 
-        <!-- Subscribers -->
+      <!-- Subscribers -->
       <remap from="~lidar3d_in" to="$(arg topic_3d_lidar_in)" />
       <remap from="~rplidar_in" to="rplidar/scan_raw" />
       <remap from="~rangefinder_in" to="mavros/distance_sensor/garmin" />
 
-        <!-- Publishers -->
+      <!-- Publishers -->
       <remap from="~lidar3d_out" to="$(arg topic_3d_lidar_in)_processed" />
       <remap from="~lidar3d_over_max_range_out" to="$(arg topic_3d_lidar_in)_over_max_range" />
-      <remap from="~rplidar_out" to="rplidarscan_processed" />
+      <remap from="~rplidar_out" to="rplidar/scan_processed" />
+      
+      <remap from="~diagnostics_out" to="diagnostics" />
 
     </node>
 
