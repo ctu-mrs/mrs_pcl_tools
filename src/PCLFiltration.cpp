@@ -233,21 +233,21 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& ms
 }
 
 template <typename PC>
-void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr) {
+void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
   TicToc       t;
-  const size_t height_before = pc_ptr->height;
-  const size_t width_before  = pc_ptr->width;
-  const size_t points_before = pc_ptr->size();
+  const size_t height_before = inout_pc_ptr->height;
+  const size_t width_before  = inout_pc_ptr->width;
+  const size_t points_before = inout_pc_ptr->size();
 
   if (_lidar3d_downsample_use) {
     // Try to keep the uppermost row (lower rows often see drone frame, so we want to prevent data loss)
     const size_t row_offset = _lidar3d_dynamic_row_selection_enabled ? _lidar3d_dynamic_row_selection_offset : _lidar3d_row_step - 1;
-    downsample(pc_ptr, _lidar3d_row_step, _lidar3d_col_step, row_offset);
+    downsample(inout_pc_ptr, _lidar3d_row_step, _lidar3d_col_step, row_offset);
   }
 
   if (_filter_removeBelowGround.used()) {
     const bool             publish_removed  = _pub_lidar3d_below_ground.getNumSubscribers() > 0;
-    const typename PC::Ptr pcl_below_ground = _filter_removeBelowGround.applyInPlace(pc_ptr, publish_removed);
+    const typename PC::Ptr pcl_below_ground = _filter_removeBelowGround.applyInPlace(inout_pc_ptr, publish_removed);
     if (publish_removed)
       _pub_lidar3d_below_ground.publish(pcl_below_ground);
   }
@@ -258,11 +258,11 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr) {
 
     if (_lidar3d_filter_intensity_use) {
       const bool             publish_removed_intensity = false;  // if anyone actually needs to publish the removed points, then implement the publisher etc.
-      const typename PC::Ptr pcl_over_max_range        = removeCloseAndFarAndLowIntensity(pc_ptr, false, publish_removed_far, publish_removed_intensity);
+      const typename PC::Ptr pcl_over_max_range        = removeCloseAndFarAndLowIntensity(inout_pc_ptr, false, publish_removed_far, publish_removed_intensity);
       if (publish_removed_far)
         _pub_lidar3d_over_max_range.publish(pcl_over_max_range);
     } else {
-      const typename PC::Ptr pcl_over_max_range = removeCloseAndFar(pc_ptr, false, publish_removed_far);
+      const typename PC::Ptr pcl_over_max_range = removeCloseAndFar(inout_pc_ptr, false, publish_removed_far);
       if (publish_removed_far)
         _pub_lidar3d_over_max_range.publish(pcl_over_max_range);
     }
@@ -270,37 +270,39 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC> pc_ptr) {
   } else if (_lidar3d_filter_intensity_use) {
 
     const bool publish_removed = false;  // if anyone actually needs to publish the removed points, then implement the publisher etc.
-    removeLowIntensity(pc_ptr, publish_removed);
+    removeLowIntensity(inout_pc_ptr, publish_removed);
   }
 
-  if (_lidar3d_cropbox_use)
-    cropBoxPointCloud(pc_ptr);
+  if (_lidar3d_cropbox_use) {
+    cropBoxPointCloud(inout_pc_ptr);
+  }
 
   // make sure that no infinite points remain in the pointcloud
   if (!_lidar3d_keep_organized) {
-    const auto orig_pc = pc_ptr;
-    pc_ptr             = boost::make_shared<PC>();
-    pc_ptr->header     = orig_pc->header;
-    pc_ptr->resize(orig_pc->size());
+    const auto orig_pc   = inout_pc_ptr;
+    inout_pc_ptr         = boost::make_shared<PC>();
+    inout_pc_ptr->header = orig_pc->header;
+    inout_pc_ptr->resize(orig_pc->size());
     size_t it = 0;
     for (const auto& pt : orig_pc->points) {
-      if (pcl::isFinite(pt))
-        pc_ptr->at(it++) = pt;
+      if (pcl::isFinite(pt)) {
+        inout_pc_ptr->at(it++) = pt;
+      }
     }
-    pc_ptr->resize(it);
+    inout_pc_ptr->resize(it);
   }
-  pc_ptr->is_dense = !_lidar3d_keep_organized;
+  inout_pc_ptr->is_dense = !_lidar3d_keep_organized;
 
-  _pub_lidar3d.publish(pc_ptr);
+  _pub_lidar3d.publish(inout_pc_ptr);
 
   if (_lidar3d_dynamic_row_selection_enabled) {
     _lidar3d_dynamic_row_selection_offset++;
     _lidar3d_dynamic_row_selection_offset %= _lidar3d_row_step;
   }
 
-  const size_t height_after = pc_ptr->height;
-  const size_t width_after  = pc_ptr->width;
-  const size_t points_after = pc_ptr->size();
+  const size_t height_after = inout_pc_ptr->height;
+  const size_t width_after  = inout_pc_ptr->width;
+  const size_t points_after = inout_pc_ptr->size();
   NODELET_INFO_THROTTLE(
       5.0,
       "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
@@ -541,8 +543,7 @@ void PCLFiltration::downsample(boost::shared_ptr<PC>& inout_pc_ptr, const size_t
   const size_t height_after  = height_before / scale_row;
   const size_t width_after   = width_before / scale_col;
 
-
-  boost::shared_ptr<PC> pc_out = boost::make_shared<PC>(width_after, height_after);
+  const boost::shared_ptr<PC> pc_out = boost::make_shared<PC>(width_after, height_after);
 
   size_t r = 0;
 

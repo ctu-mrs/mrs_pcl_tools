@@ -333,7 +333,7 @@ private:
 
   /* Functions */
   template <typename PC>
-  void process_msg(typename boost::shared_ptr<PC> pc_ptr);
+  void process_msg(typename boost::shared_ptr<PC>& inout_pc);
 
   template <typename PC>
   void cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc_ptr);
