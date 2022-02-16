@@ -25,25 +25,25 @@ add_definitions(-DCOMPILE_WITH_OUSTER)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-    roscpp
-    nodelet
-    message_generation
-    std_msgs
-    sensor_msgs
-    geometry_msgs
-    visualization_msgs
-    mrs_msgs
-    pcl_ros
-    mrs_lib
-    dynamic_reconfigure
-    ouster_ros
-    eigen_conversions
-)
+  roscpp
+  nodelet
+  message_generation
+  std_msgs
+  sensor_msgs
+  geometry_msgs
+  visualization_msgs
+  mrs_msgs
+  pcl_ros
+  mrs_lib
+  dynamic_reconfigure
+  ouster_ros
+  eigen_conversions
+  )
 
 add_service_files(DIRECTORY srv/registration FILES
   SrvRegisterPointCloudByName.srv
   SrvRegisterPointCloudOffline.srv
-)
+  )
 
 find_package(PCL REQUIRED COMPONENTS)
 
@@ -56,13 +56,13 @@ set(Eigen_LIBRARIES ${Eigen_LIBRARIES})
 find_file(DISTCC_FULL_PATH distcc)
 find_file(DISTCPP_FULL_PATH distg++)
 IF (EXISTS ${DISTCC_FULL_PATH})
- IF (EXISTS ${DISTCPP_FULL_PATH})
-   message("Found distcc and distg++, using distributed compilation")
-   SET(CMAKE_C_COMPILER ${DISTCC_FULL_PATH})
-   SET(CMAKE_CXX_COMPILER ${DISTCPP_FULL_PATH})
- ELSE()
-   message("Found only distcc, but not distg++, not using distributed compilation")
- ENDIF()
+  IF (EXISTS ${DISTCPP_FULL_PATH})
+    message("Found distcc and distg++, using distributed compilation")
+    SET(CMAKE_C_COMPILER ${DISTCC_FULL_PATH})
+    SET(CMAKE_CXX_COMPILER ${DISTCPP_FULL_PATH})
+  ELSE()
+    message("Found only distcc, but not distg++, not using distributed compilation")
+  ENDIF()
 ELSE()
   message("Not found distcc, not using distributed compilation")
 ENDIF()
@@ -70,19 +70,27 @@ ENDIF()
 generate_dynamic_reconfigure_options(
   cfg/pcl_filtration_dynparam.cfg
   cfg/pcl2map_registration_dynparam.cfg
-)
+  )
 generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs visualization_msgs mrs_msgs)
 
 ###################################
 ## catkin specific configuration ##
 ###################################
 
+set(LIBRARIES
+  PCLSupportLib PCLFiltration PCL2MapRegistration
+  )
+
+set(EXECUTABLES
+  estimate_cloud_to_cloud_drift estimate_lidar_slam_drift pcd_estimate_normals
+  )
+
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES PCLSupportLib PCLFiltration PCL2MapRegistration
+  LIBRARIES ${LIBRARIES}
   CATKIN_DEPENDS roscpp message_runtime std_msgs sensor_msgs geometry_msgs visualization_msgs mrs_msgs pcl_ros mrs_lib ouster_ros eigen_conversions
   DEPENDS Eigen
-)
+  )
 
 ###########
 ## Build ##
@@ -96,13 +104,13 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
-)
+  )
 
 
 ## Add link directories
 link_directories(
   ${PCL_LIBRARY_DIRS}
-)
+  )
 
 # This causes adds the -march=native gcc flag that prevents ditributed compilation
 add_definitions(
@@ -122,7 +130,7 @@ add_library(PCLSupportLib
   )
 target_link_libraries(
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
-)
+  )
 
 # Nodelet library PCLFiltration
 add_library(PCLFiltration
@@ -131,7 +139,7 @@ add_library(PCLFiltration
 add_dependencies(PCLFiltration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
 target_link_libraries(
   PCLFiltration PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
-)
+  )
 target_include_directories(PCLFiltration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
 # Nodelet library PCL2MapRegistration
@@ -141,7 +149,7 @@ add_library(PCL2MapRegistration
 add_dependencies(PCL2MapRegistration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
 target_link_libraries(
   PCL2MapRegistration PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
-)
+  )
 target_include_directories(PCL2MapRegistration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
 # Nodelet library PCLPublishPCDToNetwork
@@ -150,21 +158,44 @@ add_library(PCLPublishPCDToNetwork
   )
 target_link_libraries(
   PCLPublishPCDToNetwork PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
-)
+  )
 target_include_directories(PCLPublishPCDToNetwork SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
 # ### EXECUTABLES
 add_executable(estimate_cloud_to_cloud_drift src/executables/EstimateCloudToCloudDrift.cpp)
 target_link_libraries(estimate_cloud_to_cloud_drift
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
-)
+  )
 
 add_executable(estimate_lidar_slam_drift src/executables/EstimateLidarSlamDrift.cpp)
 target_link_libraries(estimate_lidar_slam_drift
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
-)
+  )
 
 add_executable(pcd_estimate_normals src/executables/PcdEstimateNormals.cpp)
 target_link_libraries(pcd_estimate_normals
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES}
-)
+  )
+
+## --------------------------------------------------------------
+## |                            Build                           |
+## --------------------------------------------------------------
+
+install(TARGETS ${LIBRARIES}
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+  )
+
+install(TARGETS ${EXECUTABLES}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+  )
+
+install(DIRECTORY launch rviz config
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+  )
+
+install(DIRECTORY ./
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+  FILES_MATCHING PATTERN "*.xml"
+  )
