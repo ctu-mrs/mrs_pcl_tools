@@ -38,6 +38,7 @@ struct ARGUMENTS
   float                    traj_step_dist   = 0.0f;
   double                   traj_step_time   = 0.0f;
   double                   start_time       = 0.0;
+  double                   end_time         = std::numeric_limits<double>::max();
   double                   cloud_buffer_sec = 5.0;
   geometry_msgs::Transform tf_target_in_map_origin;
   bool                     invert_tf_target_in_map_origin = false;
@@ -58,6 +59,7 @@ struct ARGUMENTS
       ROS_INFO("Trajectory distance step: %0.2f; time step: %0.2f", traj_step_dist, traj_step_time);
       ROS_INFO("Point cloud buffer: %0.2f s", cloud_buffer_sec);
       ROS_INFO("Start time offset: %0.2f", start_time);
+      ROS_INFO("End time offset: %0.2f", end_time);
     }
   }
 };
@@ -129,7 +131,7 @@ void printHelp() {
 
   ROS_ERROR("Usage:");
   ROS_ERROR(
-      "   rosrun mrs_pcl_tools estimate_cloud_to_cloud_drift rosbag.bag topic_cloud mapping_origin tf_map_in_target.txt target.pcd trajectory_odom_out.txt "
+      "   rosrun mrs_pcl_tools estimate_lidar_slam_drift rosbag.bag topic_cloud mapping_origin tf_map_in_target.mat target.pcd trajectory_odom_out.txt "
       "trajectory_gt_out.txt [...]");
 
   ROS_ERROR("Arguments:");
@@ -137,7 +139,7 @@ void printHelp() {
   ROS_ERROR(" topic_cloud:             point cloud topic (supported types: sensor_msgs/PointCloud2)");
   ROS_ERROR(" mapping_origin:          mapping origin (string)");
   ROS_ERROR(
-      " tf_map_in_target.txt:    transformation from the target cloud to the mapping origin (expected format: 4x4 matrix (4 rows, cols separated by space))");
+      " tf_map_in_target.mat:    transformation from the target cloud to the mapping origin (expected format: 4x4 matrix (4 rows, cols separated by space))");
   ROS_ERROR(" target.pcd:              target point cloud (ground truth)");
   ROS_ERROR(" trajectory_odom_out.txt: robot estimated trajectory (from the rosbag)");
   ROS_ERROR(" trajectory_gt_out.txt:   corrected (real) trajectory of the robot");
@@ -147,6 +149,7 @@ void printHelp() {
   ROS_ERROR(" --traj-step-time:      sampling of trajectory by time, used if greater than 0.0 (default: 0.0 s)");
   ROS_ERROR(" --cloud-buffer:        buffer length of cloud data in seconds (default: 5.0 s)");
   ROS_ERROR(" --start-time:          start time offset of the rosbag (default: 0.0 s)");
+  ROS_ERROR(" --end-time:            end time offset of the rosbag (default: full duration)");
   ROS_ERROR(" --invert-transform:    if the initial map in target transformation should be inverted (default: false)");
 }
 /*//}*/
@@ -276,6 +279,8 @@ bool parseArguments(int argc, char **argv, ARGUMENTS &args) {
       args.traj_step_time = std::atof(argv[i + 1]);
     } else if (option == "--start-time") {
       args.start_time = std::atof(argv[i + 1]);
+    } else if (option == "--end-time") {
+      args.end_time = std::atof(argv[i + 1]);
     } else if (option == "--cloud-buffer") {
       args.cloud_buffer_sec = std::atof(argv[i + 1]);
     } else if (option == "--invert-transform") {
@@ -337,6 +342,7 @@ std::unique_ptr<tf2_ros::Buffer>            tf_buffer;
 std::unique_ptr<tf2_ros::TransformListener> tf_listener;
 
 ros::Time rosbag_start_time;
+ros::Time rosbag_end_time;
 
 
 /* -------------------- Functions -------------------- */
@@ -477,7 +483,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
 
     // Filter msgs before specified start time of reading
     const ros::Time stamp = cloud_msg->header.stamp;
-    if (stamp < rosbag_start_time) {
+    if (stamp < rosbag_start_time || stamp > rosbag_end_time) {
       continue;
     }
     ROS_INFO_ONCE("Found atleast one valid message with valid time.");
@@ -520,7 +526,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
     else {
       const float  d_position = (position - position_prev).norm();
       const double d_time     = (stamp - stamp_prev).toSec();
-      perform_registration    = d_time > args.traj_step_time && d_position > args.traj_step_dist;
+      perform_registration    = d_time > args.traj_step_time || d_position > args.traj_step_dist;
       trajectory_length += d_position;
     }
 
@@ -678,11 +684,14 @@ int main(int argc, char **argv) {
   rosbag::View tf_dynamic = rosbag::View(bag, rosbag::TopicQuery(std::vector<std::string>{"/tf"}));
   rosbag::View tf_static  = rosbag::View(bag, rosbag::TopicQuery(std::vector<std::string>{"/tf_static"}));
 
-  const double rosbag_start_time_sec = tf_dynamic.getBeginTime().toSec() + args.start_time;
-  rosbag_start_time.fromSec(rosbag_start_time_sec);
-  const ros::Duration bag_duration = tf_dynamic.getEndTime() - rosbag_start_time;
+  const double        rosbag_start_time_sec = tf_dynamic.getBeginTime().toSec() + args.start_time;
+  const ros::Duration bag_duration          = tf_dynamic.getEndTime() - tf_dynamic.getBeginTime();
+  const double        rosbag_end_time_sec   = tf_dynamic.getBeginTime().toSec() + std::fmin(bag_duration.toSec(), args.end_time);
 
-  tf_buffer   = std::make_unique<tf2_ros::Buffer>(ros::Duration(1.0 * bag_duration.toSec()));
+  rosbag_start_time.fromSec(rosbag_start_time_sec);
+  rosbag_end_time.fromSec(rosbag_end_time_sec);
+
+  tf_buffer   = std::make_unique<tf2_ros::Buffer>(ros::Duration(bag_duration.toSec()));
   tf_listener = std::make_unique<tf2_ros::TransformListener>(*tf_buffer);
 
   // Read static tfs
@@ -707,6 +716,10 @@ int main(int argc, char **argv) {
     if (!ros::ok()) {
       ros::shutdown();
       return -1;
+    }
+
+    if (msg.getTime() < rosbag_start_time || msg.getTime() > rosbag_end_time) {
+      continue;
     }
 
     const tf2_msgs::TFMessage::ConstPtr tf_msg = msg.instantiate<tf2_msgs::TFMessage>();
