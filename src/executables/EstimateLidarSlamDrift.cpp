@@ -35,11 +35,12 @@ struct ARGUMENTS
   std::string              pcd_target;
   std::string              txt_trajectory_odom;
   std::string              txt_trajectory_gt;
-  float                    traj_step_dist   = 0.0f;
-  double                   traj_step_time   = 0.0f;
-  double                   start_time       = 0.0;
-  double                   end_time         = std::numeric_limits<double>::max();
-  double                   cloud_buffer_sec = 5.0;
+  float                    traj_step_dist             = 0.0f;
+  double                   traj_step_time             = 0.0f;
+  double                   start_time                 = 0.0;
+  double                   end_time                   = std::numeric_limits<double>::max();
+  double                   cloud_buffer_sec           = 5.0;
+  double                   post_registration_delay_sec = 0.0;
   geometry_msgs::Transform tf_target_in_map_origin;
   bool                     invert_tf_target_in_map_origin = false;
 
@@ -58,6 +59,7 @@ struct ARGUMENTS
       ROS_INFO("Trajectory gt out: %s", txt_trajectory_gt.c_str());
       ROS_INFO("Trajectory distance step: %0.2f; time step: %0.2f", traj_step_dist, traj_step_time);
       ROS_INFO("Point cloud buffer: %0.2f s", cloud_buffer_sec);
+      ROS_INFO("Post-registration delay: %0.2f s", post_registration_delay_sec);
       ROS_INFO("Start time offset: %0.2f", start_time);
       ROS_INFO("End time offset: %0.2f", end_time);
     }
@@ -283,6 +285,8 @@ bool parseArguments(int argc, char **argv, ARGUMENTS &args) {
       args.end_time = std::atof(argv[i + 1]);
     } else if (option == "--cloud-buffer") {
       args.cloud_buffer_sec = std::atof(argv[i + 1]);
+    } else if (option == "--post-registration-delay") {
+      args.post_registration_delay_sec = std::atof(argv[i + 1]);
     } else if (option == "--invert-transform") {
       args.invert_tf_target_in_map_origin = true;
       i_inc                               = 1;
@@ -449,9 +453,9 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
   const float resolution = 0.2f;
   _icp.setMaxCorrespondenceDistance(15.0);
   _icp.setMaximumIterations(5000);
-  _icp.setTransformationEpsilon(0.03);
-  _icp.setEuclideanFitnessEpsilon(0.03);
-  _icp.setRANSACIterations(500);
+  _icp.setTransformationEpsilon(0.01);
+  _icp.setEuclideanFitnessEpsilon(0.01);
+  _icp.setRANSACIterations(1000);
   _icp.setRANSACOutlierRejectionThreshold(0.8);
   _icp.setUseReciprocalCorrespondences(false);
 
@@ -526,7 +530,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
     else {
       const float  d_position = (position - position_prev).norm();
       const double d_time     = (stamp - stamp_prev).toSec();
-      perform_registration    = d_time > args.traj_step_time || d_position > args.traj_step_dist;
+      perform_registration    = d_time > args.traj_step_time && d_position > args.traj_step_dist;
       trajectory_length += d_position;
     }
 
@@ -627,6 +631,10 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
 
       stamp_prev    = stamp;
       position_prev = position;
+
+      if (args.post_registration_delay_sec > 0.0) {
+        ros::Duration(args.post_registration_delay_sec).sleep();
+      }
     }
     /*//}*/
   }
