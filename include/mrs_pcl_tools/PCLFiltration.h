@@ -32,6 +32,8 @@
 #include <boost/smart_ptr/make_shared_array.hpp>
 #include <limits>
 
+#include <tf2_eigen//tf2_eigen.h>
+
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
 /* #include <pcl/pcl_base.h> */
@@ -101,7 +103,8 @@ public:
       common_handlers->param_loader->setPrefix("");
       const std::string uav_name = common_handlers->param_loader->loadParamReusable<std::string>("uav_name");
       common_handlers->param_loader->setPrefix(pfx);
-      this->transformer = std::make_shared<mrs_lib::Transformer>("RemoveBelowGroundFilter", uav_name);
+      this->transformer = std::make_shared<mrs_lib::Transformer>("RemoveBelowGroundFilter");
+      this->transformer->setDefaultPrefix(uav_name);
     } else {
       this->transformer = common_handlers->transformer;
     }
