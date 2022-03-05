@@ -175,7 +175,7 @@ typename boost::shared_ptr<PC> RemoveBelowGroundFilter::applyInPlace(typename bo
       const auto tf_opt = transformer->getTransform(range_msg->header.frame_id, inout_pc->header.frame_id, range_msg->header.stamp);
       if (tf_opt.has_value())
       {
-        ground_point = tf_opt->getTransformEigen().template cast<float>()*range_vec;
+        ground_point = tf2::transformToEigen(tf_opt.value().transform).template cast<float>()*range_vec;
         range_meas_used = true;
       }
       else
@@ -203,7 +203,7 @@ typename boost::shared_ptr<PC> RemoveBelowGroundFilter::applyInPlace(typename bo
   const auto tf_opt = transformer->getTransform(static_frame_id, inout_pc->header.frame_id, stamp);
   if (tf_opt.has_value())
   {
-    const Eigen::Affine3f tf = tf_opt->getTransformEigen().template cast<float>();
+    const Eigen::Affine3f tf = tf2::transformToEigen(tf_opt.value().transform).template cast<float>();
     ground_normal = tf.rotation()*vec3_t(0, 0, 1);
     // if the range measurement is not used for estimation of the ground point, assume that the static frame starts at ground level
     if (!range_meas_used)
