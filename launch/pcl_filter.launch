@@ -7,6 +7,7 @@
   <arg name="custom_config" default="" />
   <arg name="name_suffix" default="" />
   <arg name="topic_3d_lidar_in" default="" />
+  <arg name="topic_3d_lidar_out" default="$(arg topic_3d_lidar_in)_processed" />
 
   <arg     if="$(arg debug)" name="launch_prefix" value="debug_roslaunch" />
   <arg unless="$(arg debug)" name="launch_prefix" value="" />
@@ -36,8 +37,8 @@
       <remap from="~rangefinder_in" to="mavros/distance_sensor/garmin" />
 
       <!-- Publishers -->
-      <remap from="~lidar3d_out" to="$(arg topic_3d_lidar_in)_processed" />
-      <remap from="~lidar3d_over_max_range_out" to="$(arg topic_3d_lidar_in)_over_max_range" />
+      <remap from="~lidar3d_out" to="$(arg topic_3d_lidar_out)" />
+      <remap from="~lidar3d_over_max_range_out" to="$(arg topic_3d_lidar_out)_over_max_range" />
       <remap from="~rplidar_out" to="rplidar/scan_processed" />
 
       <remap from="~diagnostics_out" to="~diagnostics" />
