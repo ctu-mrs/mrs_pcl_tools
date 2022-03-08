@@ -44,8 +44,7 @@ void PCLFiltration::onInit() {
 
   // Transformer
   const auto uav_name           = _common_handlers->param_loader->loadParam2<std::string>("uav_name");
-  _common_handlers->transformer = std::make_shared<mrs_lib::Transformer>("PCLFilter");
-  _common_handlers->transformer->setDefaultPrefix(uav_name);
+  _common_handlers->transformer = std::make_shared<mrs_lib::Transformer>("PCLFilter", uav_name);
 
   // Scope timer
   _common_handlers->param_loader->loadParam("scope_timer/enable", _common_handlers->scope_timer_enabled, false);
@@ -101,7 +100,7 @@ void PCLFiltration::onInit() {
 
   // load cropbox parameters
   _common_handlers->param_loader->loadParam("lidar3d/cropbox/frame_id", _lidar3d_cropbox_frame_id, {});
-  _lidar3d_cropbox_frame_id = _common_handlers->transformer->resolveFrame(_lidar3d_cropbox_frame_id);
+  _lidar3d_cropbox_frame_id = _common_handlers->transformer->resolveFrameName(_lidar3d_cropbox_frame_id);
   _common_handlers->param_loader->loadParam("lidar3d/cropbox/min/x", _lidar3d_cropbox_min.x(), -std::numeric_limits<float>::infinity());
   _common_handlers->param_loader->loadParam("lidar3d/cropbox/min/y", _lidar3d_cropbox_min.y(), -std::numeric_limits<float>::infinity());
   _common_handlers->param_loader->loadParam("lidar3d/cropbox/min/z", _lidar3d_cropbox_min.z(), -std::numeric_limits<float>::infinity());
@@ -511,7 +510,7 @@ void PCLFiltration::cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc) {
     pcl_conversions::fromPCL(inout_pc->header.stamp, stamp);
     const auto tf_opt = _common_handlers->transformer->getTransform(inout_pc->header.frame_id, _lidar3d_cropbox_frame_id, stamp);
     if (tf_opt.has_value()) {
-      const Eigen::Affine3d tf = tf2::transformToEigen(tf_opt.value().transform);
+      const Eigen::Affine3d tf = tf_opt->getTransformEigen();
       cb.setTransform(tf.cast<float>());
     } else {
       ROS_WARN_STREAM_THROTTLE(1.0, "[PCLFiltration]: Could not find pointcloud transformation (from \""
