@@ -105,6 +105,7 @@ public:
       common_handlers->param_loader->setPrefix(pfx);
       this->transformer = std::make_shared<mrs_lib::Transformer>("RemoveBelowGroundFilter");
       this->transformer->setDefaultPrefix(uav_name);
+      this->transformer->retryLookupNewest(true);
     } else {
       this->transformer = common_handlers->transformer;
     }

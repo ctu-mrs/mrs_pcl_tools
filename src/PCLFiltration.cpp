@@ -46,6 +46,7 @@ void PCLFiltration::onInit() {
   const auto uav_name           = _common_handlers->param_loader->loadParam2<std::string>("uav_name");
   _common_handlers->transformer = std::make_shared<mrs_lib::Transformer>("PCLFilter");
   _common_handlers->transformer->setDefaultPrefix(uav_name);
+  _common_handlers->transformer->retryLookupNewest(true);
 
   // Scope timer
   _common_handlers->param_loader->loadParam("scope_timer/enable", _common_handlers->scope_timer_enabled, false);
