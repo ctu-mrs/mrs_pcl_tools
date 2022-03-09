@@ -35,11 +35,11 @@ struct ARGUMENTS
   std::string              pcd_target;
   std::string              txt_trajectory_odom;
   std::string              txt_trajectory_gt;
-  float                    traj_step_dist             = 0.0f;
-  double                   traj_step_time             = 0.0f;
-  double                   start_time                 = 0.0;
-  double                   end_time                   = std::numeric_limits<double>::max();
-  double                   cloud_buffer_sec           = 5.0;
+  float                    traj_step_dist              = 0.0f;
+  double                   traj_step_time              = 0.0f;
+  double                   start_time                  = 0.0;
+  double                   end_time                    = std::numeric_limits<double>::max();
+  double                   cloud_buffer_sec            = 5.0;
   double                   post_registration_delay_sec = 0.0;
   geometry_msgs::Transform tf_target_in_map_origin;
   bool                     invert_tf_target_in_map_origin = false;
@@ -89,7 +89,13 @@ public:
 
   void insertCloud(const ros::Time &stamp, const PC::Ptr &cloud) {
 
-    if (!clouds.empty()) {
+    const bool buffer = buffer_size_secs.toSec() > 0.0;
+
+    if (!buffer) {
+
+      clouds.clear();
+
+    } else if (!clouds.empty()) {
 
       const ros::Time stamp_latest = clouds.back().first;
 
