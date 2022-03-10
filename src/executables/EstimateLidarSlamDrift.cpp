@@ -41,6 +41,7 @@ struct ARGUMENTS
   double                   end_time                    = std::numeric_limits<double>::max();
   double                   cloud_buffer_sec            = 5.0;
   double                   post_registration_delay_sec = 0.0;
+  double                   min_points_dist_from_origin = 0.0;
   geometry_msgs::Transform tf_target_in_map_origin;
   bool                     invert_tf_target_in_map_origin = false;
 
@@ -60,6 +61,7 @@ struct ARGUMENTS
       ROS_INFO("Trajectory distance step: %0.2f; time step: %0.2f", traj_step_dist, traj_step_time);
       ROS_INFO("Point cloud buffer: %0.2f s", cloud_buffer_sec);
       ROS_INFO("Post-registration delay: %0.2f s", post_registration_delay_sec);
+      ROS_INFO("Minimum distance of points from their origin: %0.2f m", min_points_dist_from_origin);
       ROS_INFO("Start time offset: %0.2f", start_time);
       ROS_INFO("End time offset: %0.2f", end_time);
     }
@@ -153,12 +155,14 @@ void printHelp() {
   ROS_ERROR(" trajectory_gt_out.txt:   corrected (real) trajectory of the robot");
 
   ROS_ERROR("Optional arguments:");
-  ROS_ERROR(" --traj-step-dist:      sampling of trajectory by distance, used if greater than 0.0 (default: 0.0 m)");
-  ROS_ERROR(" --traj-step-time:      sampling of trajectory by time, used if greater than 0.0 (default: 0.0 s)");
-  ROS_ERROR(" --cloud-buffer:        buffer length of cloud data in seconds (default: 5.0 s)");
-  ROS_ERROR(" --start-time:          start time offset of the rosbag (default: 0.0 s)");
-  ROS_ERROR(" --end-time:            end time offset of the rosbag (default: full duration)");
-  ROS_ERROR(" --invert-transform:    if the initial map in target transformation should be inverted (default: false)");
+  ROS_ERROR(" --traj-step-dist:               sampling of trajectory by distance, used if greater than 0.0 (default: 0.0 m)");
+  ROS_ERROR(" --traj-step-time:               sampling of trajectory by time, used if greater than 0.0 (default: 0.0 s)");
+  ROS_ERROR(" --cloud-buffer:                 buffer length of cloud data in seconds (default: 5.0 s)");
+  ROS_ERROR(" --start-time:                   start time offset of the rosbag (default: 0.0 s)");
+  ROS_ERROR(" --end-time:                     end time offset of the rosbag (default: full duration)");
+  ROS_ERROR(" --invert-transform:             if the initial map in target transformation should be inverted (default: false)");
+  ROS_ERROR(" --post-registration-delay:      delay before processing next scan sample (default: 0.0 s)");
+  ROS_ERROR(" --min-points-dist-from-origin:  minimal distance of points from their origin (default: 0.0 m)");
 }
 /*//}*/
 
@@ -293,6 +297,8 @@ bool parseArguments(int argc, char **argv, ARGUMENTS &args) {
       args.cloud_buffer_sec = std::atof(argv[i + 1]);
     } else if (option == "--post-registration-delay") {
       args.post_registration_delay_sec = std::atof(argv[i + 1]);
+    } else if (option == "--min-points-dist-from-origin") {
+      args.min_points_dist_from_origin = std::atof(argv[i + 1]);
     } else if (option == "--invert-transform") {
       args.invert_tf_target_in_map_origin = true;
       i_inc                               = 1;
@@ -426,6 +432,25 @@ std::optional<std::tuple<Eigen::Matrix4f, PC::Ptr>> registerClouds(const PC::Ptr
 }
 /*//}*/
 
+/*//{ clipCloud() */
+PC::Ptr clipCloud(const PC::Ptr &cloud_in, const double min_dist) {
+  const PC::Ptr cloud_out = boost::make_shared<PC>();
+
+  // Copy points in given range
+  for (const auto &p : cloud_in->points) {
+    if (std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z) > min_dist) {
+      cloud_out->points.push_back(p);
+    }
+  }
+
+  cloud_out->header   = cloud_in->header;
+  cloud_out->height   = 1;
+  cloud_out->width    = cloud_out->points.size();
+  cloud_out->is_dense = true;
+  return cloud_out;
+}
+/*//}*/
+
 /*//{ estimateGroundTruthTrajectoryFromRosbag() */
 std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosbag::Bag &bag, const PC::Ptr &pc_target, const ARGUMENTS &args) {
 
@@ -510,8 +535,13 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
     ROS_INFO_ONCE("Found atleast one valid transformation of lidar in world.");
 
     // Convert msg to PCL
-    const PC::Ptr cloud = boost::make_shared<PC>();
+    PC::Ptr cloud = boost::make_shared<PC>();
     pcl::fromROSMsg(*cloud_msg, *cloud);
+
+    // Clip range of the clouds
+    if (args.min_points_dist_from_origin > 0.0) {
+      cloud = clipCloud(cloud, args.min_points_dist_from_origin);
+    }
 
     // Transform lidar to world
     Eigen::Affine3d lidar_in_world_eigen = Eigen::Affine3d::Identity();
