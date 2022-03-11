@@ -3,6 +3,7 @@
 #include "common_includes_and_typedefs.h"
 
 #include <pcl/io/pcd_io.h>
+#include <pcl/io/ply_io.h>
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/PointIndices.h>
 #include <pcl/common/pca.h>
@@ -21,6 +22,38 @@ namespace mrs_pcl_tools
 
 std::optional<PC::Ptr>      loadPcXYZ(const std::string &pcd_file);
 std::optional<PC_NORM::Ptr> loadPcNormals(const std::string &pcd_file);
+
+/*//{ loadCloud() */
+template <typename PC_t>
+bool loadCloud(const std::string &filepath, typename boost::shared_ptr<PC_t> const &cloud, const bool verbose = true) {
+
+  bool success = false;
+
+  if (filepath.length() >= 3) {
+
+    if (0 == filepath.compare(filepath.length() - 3, 3, "pcd")) {
+
+      ROS_INFO_COND(verbose, "[PCLSupportLibrary] Reading PCD file from path %s", filepath.c_str());
+      success = pcl::io::loadPCDFile<typename PC_t::PointType>(filepath, *cloud) == 0;
+
+    } else if (0 == filepath.compare(filepath.length() - 3, 3, "ply")) {
+
+      ROS_INFO_COND(verbose, "[PCLSupportLibrary] Reading PLY file from path %s", filepath.c_str());
+      success = pcl::io::loadPLYFile<typename PC_t::PointType>(filepath, *cloud) == 0;
+
+    } else {
+      ROS_ERROR_COND(verbose, "[PCLSupportLibrary] Unknown format of cloud file: %s", filepath.c_str());
+    }
+
+  } else {
+    ROS_ERROR_COND(verbose, "[PCLSupportLibrary] Could not read cloud from file. Path not given in valid format: %s", filepath.c_str());
+  }
+
+  ROS_INFO_COND(success && verbose, "[PCLSupportLibrary] Loaded point cloud with %ld points.", cloud->points.size());
+
+  return success;
+}
+/*//}*/
 
 void savePCD(const std::string &pcd_file, const sensor_msgs::PointCloud2::Ptr &cloud, const bool &binary = true);
 

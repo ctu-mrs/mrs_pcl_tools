@@ -152,14 +152,14 @@ target_link_libraries(
   )
 target_include_directories(PCL2MapRegistration SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
-# Nodelet library PCLPublishPCDToNetwork
-add_library(PCLPublishPCDToNetwork
-  src/PCLPublishPCDToNetwork.cpp
+# Nodelet library PCLPublishCloudFileToNetwork
+add_library(PCLPublishCloudFileToNetwork
+  src/PCLPublishCloudFileToNetwork.cpp
   )
 target_link_libraries(
-  PCLPublishPCDToNetwork PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+  PCLPublishCloudFileToNetwork PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
   )
-target_include_directories(PCLPublishPCDToNetwork SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
+target_include_directories(PCLPublishCloudFileToNetwork SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
 # ### EXECUTABLES
 add_executable(estimate_cloud_to_cloud_drift src/executables/EstimateCloudToCloudDrift.cpp)
