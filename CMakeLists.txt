@@ -82,7 +82,7 @@ set(LIBRARIES
   )
 
 set(EXECUTABLES
-  estimate_cloud_to_cloud_drift estimate_lidar_slam_drift pcd_estimate_normals
+  estimate_cloud_to_cloud_drift estimate_lidar_slam_drift pcd_estimate_normals concatenate_lidar_scans
   )
 
 catkin_package(
@@ -175,6 +175,11 @@ target_link_libraries(estimate_lidar_slam_drift
 add_executable(pcd_estimate_normals src/executables/PcdEstimateNormals.cpp)
 target_link_libraries(pcd_estimate_normals
   PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES}
+  )
+
+add_executable(concatenate_lidar_scans src/executables/ConcatenateLidarScans.cpp)
+target_link_libraries(concatenate_lidar_scans
+  PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
   )
 
 ## --------------------------------------------------------------
