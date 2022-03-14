@@ -9,12 +9,13 @@
   <arg name="frame_id" default="$(arg UAV_NAME)/global_origin" />
   <arg name="load_colors" default="false" />
 
+  <arg name="name_postfix" default="" />
   <arg name="nodelet" default="standalone" />
   <arg name="nodelet_manager" default="" />
   <arg name="launch_prefix" default=""/>
 
   <group ns="$(arg UAV_NAME)">
-    <node pkg="nodelet" type="nodelet" name="pcd_to_ros_network" args="$(arg nodelet) mrs_pcl_tools/PCLPublishCloudFileToNetwork $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
+    <node pkg="nodelet" type="nodelet" name="pcd_to_ros_network$(arg name_postfix)" args="$(arg nodelet) mrs_pcl_tools/PCLPublishCloudFileToNetwork $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" >
 
       <!-- Parameters -->
       <param name="file_cloud" type="string" value="$(arg cloud_file)" />
@@ -23,7 +24,7 @@
       <param name="load_colors" type="bool" value="$(arg load_colors)" />
 
       <!-- Remap -->
-      <remap from="~cloud_out" to="pcd2ros/cloud" />
+      <remap from="~cloud_out" to="pcd2ros$(arg name_postfix)/cloud" />
       
     </node>
   </group>
