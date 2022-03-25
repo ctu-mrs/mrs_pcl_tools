@@ -24,7 +24,7 @@
 
   <group ns="$(arg UAV_NAME)">
 
-    <node pkg="nodelet" type="nodelet" name="$(arg node_name)_$(arg name_suffix)" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)" respawn="true">
+    <node pkg="nodelet" type="nodelet" name="$(arg node_name)_$(arg name_suffix)" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)">
 
       <!-- Parameters -->
       <param name="uav_name" type="string" value="$(arg UAV_NAME)" />
