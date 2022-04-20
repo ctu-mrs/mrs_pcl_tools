@@ -60,9 +60,12 @@ void PCL2MapRegistration::onInit() {
     ros::shutdown();
     return;
   } else if (_cloud_correlation_method == "polyline_barycenter") {
-    param_loader.loadParam("cloud_correlation/polyline_barycenter/concave/alpha", _cloud_correlation_poly_bary_alpha);
     const std::string hull_type               = param_loader.loadParam2("cloud_correlation/polyline_barycenter/hull", std::string("concave"));
     _cloud_correlation_poly_bary_hull_concave = hull_type == "concave";
+
+    if (_cloud_correlation_poly_bary_hull_concave) {
+      param_loader.loadParam("cloud_correlation/polyline_barycenter/concave/alpha", _cloud_correlation_poly_bary_alpha);
+    }
   }
 
   if (!param_loader.loadedSuccessfully()) {
