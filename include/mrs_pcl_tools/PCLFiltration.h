@@ -32,7 +32,7 @@
 #include <boost/smart_ptr/make_shared_array.hpp>
 #include <limits>
 
-#include <tf2_eigen//tf2_eigen.h>
+#include <tf2_eigen/tf2_eigen.h>
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
@@ -315,9 +315,15 @@ private:
   bool     _lidar3d_filter_intensity_use;
   float    _lidar3d_filter_intensity_range_sq;
   uint32_t _lidar3d_filter_intensity_range_mm;
-  int      _lidar3d_filter_intensity_threshold;
-  int      _lidar3d_row_step;
-  int      _lidar3d_col_step;
+  float    _lidar3d_filter_intensity_threshold;
+
+  bool     _lidar3d_filter_reflectivity_use;
+  float    _lidar3d_filter_reflectivity_range_sq;
+  uint32_t _lidar3d_filter_reflectivity_range_mm;
+  uint16_t _lidar3d_filter_reflectivity_threshold;
+
+  int _lidar3d_row_step;
+  int _lidar3d_col_step;
 
   bool         _lidar3d_cropbox_use;
   std::string  _lidar3d_cropbox_frame_id;
@@ -347,11 +353,11 @@ private:
                                                    const bool return_removed_far = false);
 
   template <typename PC>
-  typename boost::shared_ptr<PC> removeLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
+  typename boost::shared_ptr<PC> removeLowFields(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
 
   template <typename PC>
-  typename boost::shared_ptr<PC> removeCloseAndFarAndLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool clip_return_removed_close = false,
-                                                                  const bool clip_return_removed_far = false, const bool intensity_return_removed = false);
+  typename boost::shared_ptr<PC> removeCloseAndFarAndLowFields(typename boost::shared_ptr<PC>& inout_pc, const bool clip_return_removed_close = false,
+                                                               const bool clip_return_removed_far = false, const bool intensity_return_removed = false);
 
   template <typename PC>
   void downsample(boost::shared_ptr<PC>& inout_pc_ptr, const size_t scale_row, const size_t scale_col, const size_t row_offset = 0);

@@ -19,6 +19,10 @@ lidar3d:
       use: false
       threshold: 35
       range: 5.0
+    reflectivity:
+      use: false
+      threshold: 25
+      range: 5.0
 
   ground_removal:
     use: false

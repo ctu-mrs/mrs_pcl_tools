@@ -119,10 +119,18 @@ void PCLFiltration::onInit() {
   _common_handlers->param_loader->loadParam("lidar3d/cropbox/use", _lidar3d_cropbox_use, cbox_use_default);
 
   _common_handlers->param_loader->loadParam("lidar3d/clip/intensity/use", _lidar3d_filter_intensity_use, false);
-  _common_handlers->param_loader->loadParam("lidar3d/clip/intensity/threshold", _lidar3d_filter_intensity_threshold, std::numeric_limits<int>::max());
+  _common_handlers->param_loader->loadParam("lidar3d/clip/intensity/threshold", _lidar3d_filter_intensity_threshold, std::numeric_limits<float>::max());
   _common_handlers->param_loader->loadParam("lidar3d/clip/intensity/range", _lidar3d_filter_intensity_range_sq, std::numeric_limits<float>::max());
   _lidar3d_filter_intensity_range_mm = _lidar3d_filter_intensity_range_sq * 1000;
   _lidar3d_filter_intensity_range_sq *= _lidar3d_filter_intensity_range_sq;
+
+  _common_handlers->param_loader->loadParam("lidar3d/clip/reflectivity/use", _lidar3d_filter_reflectivity_use, false);
+  _common_handlers->param_loader->loadParam("lidar3d/clip/reflectivity/range", _lidar3d_filter_reflectivity_range_sq, std::numeric_limits<float>::max());
+  const int lidar3d_filter_reflectivity_threshold =
+      _common_handlers->param_loader->loadParam2("lidar3d/clip/reflectivity/threshold", static_cast<int>(std::numeric_limits<uint16_t>::max()));
+  _lidar3d_filter_reflectivity_threshold = static_cast<uint16_t>(lidar3d_filter_reflectivity_threshold);
+  _lidar3d_filter_reflectivity_range_mm  = _lidar3d_filter_reflectivity_range_sq * 1000;
+  _lidar3d_filter_reflectivity_range_sq *= _lidar3d_filter_reflectivity_range_sq;
 
   /* Depth cameras */
   const std::vector<std::string> depth_camera_names = _common_handlers->param_loader->loadParam2("depth/camera_names", std::vector<std::string>());
@@ -258,21 +266,23 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
 
     const bool publish_removed_far = _pub_lidar3d_over_max_range.getNumSubscribers() > 0;
 
-    if (_lidar3d_filter_intensity_use) {
-      const bool             publish_removed_intensity = false;  // if anyone actually needs to publish the removed points, then implement the publisher etc.
-      const typename PC::Ptr pcl_over_max_range        = removeCloseAndFarAndLowIntensity(inout_pc_ptr, false, publish_removed_far, publish_removed_intensity);
-      if (publish_removed_far)
+    if (_lidar3d_filter_intensity_use || _lidar3d_filter_reflectivity_use) {
+      const bool             publish_removed_fields = false;  // if anyone actually needs to publish the removed points, then implement the publisher etc.
+      const typename PC::Ptr pcl_over_max_range     = removeCloseAndFarAndLowFields(inout_pc_ptr, false, publish_removed_far, publish_removed_fields);
+      if (publish_removed_far) {
         _pub_lidar3d_over_max_range.publish(pcl_over_max_range);
+      }
     } else {
       const typename PC::Ptr pcl_over_max_range = removeCloseAndFar(inout_pc_ptr, false, publish_removed_far);
-      if (publish_removed_far)
+      if (publish_removed_far) {
         _pub_lidar3d_over_max_range.publish(pcl_over_max_range);
+      }
     }
 
-  } else if (_lidar3d_filter_intensity_use) {
+  } else if (_lidar3d_filter_intensity_use || _lidar3d_filter_reflectivity_use) {
 
     const bool publish_removed = false;  // if anyone actually needs to publish the removed points, then implement the publisher etc.
-    removeLowIntensity(inout_pc_ptr, publish_removed);
+    removeLowFields(inout_pc_ptr, publish_removed);
   }
 
   if (_lidar3d_cropbox_use) {
@@ -372,40 +382,48 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFar(typename boost::
 }
 /*//}*/
 
-/*//{ removeCloseAndFarAndLowIntensity() */
+/*//{ removeCloseAndFarAndLowFields() */
 template <typename PC>
-typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool clip_return_removed_close,
-                                                                               const bool clip_return_removed_far, const bool intensity_return_removed) {
+typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowFields(typename boost::shared_ptr<PC>& inout_pc, const bool clip_return_removed_close,
+                                                                            const bool clip_return_removed_far, const bool return_removed_fields) {
   using pt_t = typename PC::PointType;
 
   // Prepare pointcloud of removed points
   typename PC::Ptr removed_pc = boost::make_shared<PC>();
   removed_pc->header          = inout_pc->header;
-  if (clip_return_removed_close || clip_return_removed_far || intensity_return_removed)
+  if (clip_return_removed_close || clip_return_removed_far || return_removed_fields)
     removed_pc->resize(inout_pc->size());
   size_t removed_it = 0;
 
-  // Attempt to get the intensity field name's index
-  const auto [intensity_exists, intensity_offset] = getFieldOffset<pt_t>("intensity");
-  if (!intensity_exists) {
-    ROS_WARN("[PCLFiltration] Unable to find field name \"intensity\" in point type.");
-    return removeCloseAndFar(inout_pc, clip_return_removed_close, clip_return_removed_far);
+  bool filter_intensity    = _lidar3d_filter_intensity_use;
+  bool filter_reflectivity = _lidar3d_filter_reflectivity_use;
+
+  std::size_t intensity_offset;
+  std::size_t reflectivity_offset;
+
+  // Attempt to get the fields' name indices
+  if (filter_intensity) {
+    ROS_INFO_ONCE("[PCLFiltration] Found field name \"intensity\" in point type, will be using intensity for filtering.");
+    std::tie(filter_intensity, intensity_offset) = getFieldOffset<pt_t>("intensity");
+  }
+  if (filter_reflectivity) {
+    ROS_INFO_ONCE("[PCLFiltration] Found field name \"reflectivity\" in point type, will be using reflectivity for filtering.");
+    std::tie(filter_reflectivity, reflectivity_offset) = getFieldOffset<pt_t>("reflectivity");
   }
 
   // Attempt to get the range field name's index
   const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
-  if (range_exists)
+  if (range_exists) {
     ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
-  else
+  } else {
     ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
+  }
 
   for (auto& point : inout_pc->points) {
-    // Get the intensity
-    const auto intensity = getFieldValue<float>(point, intensity_offset);
 
     bool invalid_range_close = false;
     bool invalid_range_far   = false;
-    bool invalid_intensity   = false;
+    bool invalid_field       = false;
 
     // if the range field is available, use it
     if (range_exists)  // nevermind this condition inside a loop - the branch predictor will optimize this out easily
@@ -413,7 +431,17 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
       const auto range    = getFieldValue<uint32_t>(point, range_offset);
       invalid_range_close = range < _lidar3d_rangeclip_min_mm;
       invalid_range_far   = range > _lidar3d_rangeclip_max_mm;
-      invalid_intensity   = intensity < _lidar3d_filter_intensity_threshold && range < _lidar3d_filter_intensity_range_mm;
+
+      // Filter by field values
+      if (filter_intensity) {
+        const float intensity = getFieldValue<float>(point, intensity_offset);
+        invalid_field         = intensity < _lidar3d_filter_intensity_threshold && range < _lidar3d_filter_intensity_range_mm;
+      }
+      if (!invalid_field && filter_reflectivity) {
+        const uint16_t reflectivity = getFieldValue<uint16_t>(point, reflectivity_offset);
+        invalid_field               = reflectivity < _lidar3d_filter_reflectivity_threshold && range < _lidar3d_filter_reflectivity_range_mm;
+      }
+
     }
     // otherwise, just calculate the range as the norm
     else {
@@ -421,15 +449,23 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
       const float  range_sq = pt.squaredNorm();
       invalid_range_close   = range_sq < _lidar3d_rangeclip_min_sq;
       invalid_range_far     = range_sq > _lidar3d_rangeclip_max_sq;
-      invalid_intensity     = intensity < _lidar3d_filter_intensity_threshold && range_sq < _lidar3d_filter_intensity_range_sq;
+
+      // Filter by field values
+      if (filter_intensity) {
+        const float intensity = getFieldValue<float>(point, intensity_offset);
+        invalid_field         = intensity < _lidar3d_filter_intensity_threshold && range_sq < _lidar3d_filter_intensity_range_sq;
+      }
+      if (!invalid_field && filter_reflectivity) {
+        const uint16_t reflectivity = getFieldValue<uint16_t>(point, reflectivity_offset);
+        invalid_field               = reflectivity < _lidar3d_filter_reflectivity_threshold && range_sq < _lidar3d_filter_reflectivity_range_sq;
+      }
     }
 
     // check the invalidation condition
-    if (invalid_range_close || invalid_range_far || invalid_intensity) {
+    if (invalid_range_close || invalid_range_far || invalid_field) {
 
       // check the removal condition
-      if ((clip_return_removed_far && invalid_range_far) || (clip_return_removed_close && invalid_range_close) ||
-          (intensity_return_removed && invalid_intensity)) {
+      if ((clip_return_removed_far && invalid_range_far) || (clip_return_removed_close && invalid_range_close) || (return_removed_fields && invalid_field)) {
         removed_pc->at(removed_it++) = point;
       }
 
@@ -442,54 +478,91 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowIntensity(t
 }
 /*//}*/
 
-/*//{ removeLowIntensity() */
+/*//{ removeLowFields() */
 template <typename PC>
-typename boost::shared_ptr<PC> PCLFiltration::removeLowIntensity(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed) {
+typename boost::shared_ptr<PC> PCLFiltration::removeLowFields(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed) {
   using pt_t = typename PC::PointType;
 
   // Prepare pointcloud of removed points
   typename PC::Ptr removed_pc = boost::make_shared<PC>();
   removed_pc->header          = inout_pc->header;
-  if (return_removed)
+  if (return_removed) {
     removed_pc->resize(inout_pc->size());
+  }
   size_t removed_it = 0;
 
-  // Attempt to get the intensity field name's index
-  const auto [intensity_exists, intensity_offset] = getFieldOffset<pt_t>("intensity");
-  if (!intensity_exists) {
-    ROS_WARN("[PCLFiltration] Unable to find field name \"intensity\" in point type.");
-    return removed_pc;
+  bool filter_intensity    = _lidar3d_filter_intensity_use;
+  bool filter_reflectivity = _lidar3d_filter_reflectivity_use;
+
+  std::size_t intensity_offset;
+  std::size_t reflectivity_offset;
+
+  // Attempt to get the fields' name indices
+  if (filter_intensity) {
+    ROS_INFO_ONCE("[PCLFiltration] Found field name \"intensity\" in point type, will be using intensity for filtering.");
+    std::tie(filter_intensity, intensity_offset) = getFieldOffset<pt_t>("intensity");
+  }
+  if (filter_reflectivity) {
+    ROS_INFO_ONCE("[PCLFiltration] Found field name \"reflectivity\" in point type, will be using reflectivity for filtering.");
+    std::tie(filter_reflectivity, reflectivity_offset) = getFieldOffset<pt_t>("reflectivity");
   }
 
   // Attempt to get the range field name's index
   const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
-  if (range_exists)
+  if (range_exists) {
     ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
-  else
+  } else {
     ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
+  }
 
   for (auto& point : inout_pc->points) {
-    const auto intensity = getFieldValue<float>(point, intensity_offset);
+
+    bool invalid = false;
+
+    // Filter by field values
+    if (filter_intensity) {
+      const float intensity = getFieldValue<float>(point, intensity_offset);
+      invalid               = intensity < _lidar3d_filter_intensity_threshold;
+    }
+    if (!invalid && filter_reflectivity) {
+      const uint16_t reflectivity = getFieldValue<uint16_t>(point, reflectivity_offset);
+      invalid                     = reflectivity < _lidar3d_filter_reflectivity_threshold;
+    }
+
     // check the removal condition
-    if (intensity < _lidar3d_filter_intensity_threshold) {
-      bool invalid = false;
+    if (invalid) {
 
       // if the range field is available, use it
       if (range_exists) {
         // Get the range (in millimeters)
         const auto range = getFieldValue<uint32_t>(point, range_offset);
-        invalid          = range < _lidar3d_filter_intensity_range_mm;
+
+        if (filter_intensity) {
+          invalid = range < _lidar3d_filter_intensity_range_mm;
+        }
+        if (!invalid && filter_reflectivity) {
+          invalid = range < _lidar3d_filter_reflectivity_range_mm;
+        }
       }
       // otherwise, just calculate the range as the norm
       else {
         const vec3_t pt       = point.getArray3fMap();
         const float  range_sq = pt.squaredNorm();
-        invalid               = range_sq < _lidar3d_filter_intensity_range_sq;
+
+        if (filter_intensity) {
+          invalid = range_sq < _lidar3d_filter_intensity_range_sq;
+        }
+        if (!invalid && filter_reflectivity) {
+          invalid = range_sq < _lidar3d_filter_reflectivity_range_sq;
+        }
       }
 
       if (invalid) {
-        if (return_removed)
+
+        if (return_removed) {
           removed_pc->at(removed_it++) = point;
+        }
+
         invalidatePoint(point);
       }
     }
