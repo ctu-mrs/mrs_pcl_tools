@@ -26,6 +26,8 @@
 #include "mrs_pcl_tools/SrvRegisterPointCloudByName.h"
 #include "mrs_pcl_tools/SrvRegisterPointCloudOffline.h"
 
+#include <mrs_lib/scope_timer.h>
+
 typedef pcl::FPFHSignature33       feat_FPFH;
 typedef pcl::PointCloud<feat_FPFH> PC_FPFH;
 //}

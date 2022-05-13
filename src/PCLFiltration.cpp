@@ -244,7 +244,9 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& ms
 
 template <typename PC>
 void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
-  TicToc       t;
+
+  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("PCLFiltration::process_msg", _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
+
   const size_t height_before = inout_pc_ptr->height;
   const size_t width_before  = inout_pc_ptr->width;
   const size_t points_before = inout_pc_ptr->size();
@@ -317,8 +319,8 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
   const size_t points_after = inout_pc_ptr->size();
   NODELET_INFO_THROTTLE(
       5.0,
-      "[PCLFiltration] Processed 3D LIDAR data (run time: %0.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
-      t.toc(), points_before, points_after, width_before, height_before, width_after, height_after);
+      "[PCLFiltration] Processed 3D LIDAR data (run time: %ld ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
+      timer.getLifetime(), points_before, points_after, width_before, height_before, width_after, height_after);
 }
 //}
 
