@@ -156,19 +156,18 @@ void PCLFiltration::onInit() {
       ros::shutdown();
     }
 
-    _sub_lidar3d                = nh.subscribe("lidar3d_in", 1, &PCLFiltration::lidar3dCallback, this, ros::TransportHints().tcpNoDelay());
+
+    mrs_lib::SubscribeHandlerOptions shopts(nh);
+    shopts.node_name = "PCLFiltration";
+    shopts.no_message_timeout = ros::Duration(5.0);
+    _sub_lidar3d = mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>(shopts, "lidar3d_in", std::bind(&PCLFiltration::lidar3dCallback, this, std::placeholders::_1));
     _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 1);
     _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 1);
     if (_filter_removeBelowGround.used())
       _pub_lidar3d_below_ground = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_below_ground_out", 1);
   }
 
-  if (_rplidar_republish) {
-    _sub_rplidar = nh.subscribe("rplidar_in", 1, &PCLFiltration::rplidarCallback, this, ros::TransportHints().tcpNoDelay());
-    _pub_rplidar = nh.advertise<sensor_msgs::LaserScan>("rplidar_out", 10);
-  }
-
-  reconfigure_server_.reset(new ReconfigureServer(config_mutex_, nh));
+  reconfigure_server_ = boost::make_shared<ReconfigureServer>(config_mutex_, nh);
   /* reconfigure_server_->updateConfig(last_drs_config); */
   ReconfigureServer::CallbackType f = boost::bind(&PCLFiltration::callbackReconfigure, this, _1, _2);
   reconfigure_server_->setCallback(f);
@@ -193,7 +192,9 @@ void PCLFiltration::callbackReconfigure(Config& config, [[maybe_unused]] uint32_
 //}
 
 /* lidar3dCallback() //{ */
-void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
+void PCLFiltration::lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>& sh)
+{
+  const auto msg = sh.getMsg();
 
   if (!is_initialized || !_lidar3d_republish) {
     return;
@@ -321,15 +322,6 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
       5.0,
       "[PCLFiltration] Processed 3D LIDAR data (run time: %ld ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
       timer.getLifetime(), points_before, points_after, width_before, height_before, width_after, height_after);
-}
-//}
-
-/* rplidarCallback() //{ */
-void PCLFiltration::rplidarCallback([[maybe_unused]] const sensor_msgs::LaserScan::ConstPtr msg) {
-  if (is_initialized && _rplidar_republish) {
-    NODELET_INFO_ONCE("[PCLFiltration] Received first RPLidar message.");
-    NODELET_WARN_THROTTLE(2.0, "[PCLFiltration] rplidarCallback() not implemented!");
-  }
 }
 //}
 

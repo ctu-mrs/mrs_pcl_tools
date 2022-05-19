@@ -273,18 +273,13 @@ public:
 private:
   bool is_initialized = false;
 
-  ros::Subscriber _sub_lidar3d;
-  ros::Subscriber _sub_depth;
-  ros::Subscriber _sub_rplidar;
+  mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2> _sub_lidar3d;
 
   ros::Publisher _pub_lidar3d;
   ros::Publisher _pub_lidar3d_over_max_range;
   ros::Publisher _pub_lidar3d_below_ground;
   ros::Publisher _pub_fitted_plane;
   ros::Publisher _pub_ground_point;
-  ros::Publisher _pub_depth;
-  ros::Publisher _pub_depth_over_max_range;
-  ros::Publisher _pub_rplidar;
 
   boost::recursive_mutex                               config_mutex_;
   typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;
@@ -297,7 +292,7 @@ private:
   void callbackReconfigure(mrs_pcl_tools::pcl_filtration_dynparamConfig& config, uint32_t level);
 
   /* 3D LIDAR */
-  void  lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+  void  lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>& sh);
   float _lidar3d_frequency;
   float _lidar3d_vfov;
   bool  _lidar3d_keep_organized;
