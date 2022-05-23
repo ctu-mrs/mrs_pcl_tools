@@ -54,7 +54,7 @@ struct Diagnostics_t
     _pub_diagnostics = nh.advertise<mrs_msgs::PclToolsDiagnostics>("diagnostics_out", 10);
   }
 
-  void const publish(const mrs_msgs::PclToolsDiagnosticsConstPtr& msg) {
+  void publish(const mrs_msgs::PclToolsDiagnosticsConstPtr& msg) const {
     if (_pub_diagnostics.getNumSubscribers() > 0) {
       try {
         _pub_diagnostics.publish(msg);
