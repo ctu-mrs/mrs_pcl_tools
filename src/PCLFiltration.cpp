@@ -158,9 +158,10 @@ void PCLFiltration::onInit() {
 
 
     mrs_lib::SubscribeHandlerOptions shopts(nh);
-    shopts.node_name = "PCLFiltration";
+    shopts.node_name          = "PCLFiltration";
     shopts.no_message_timeout = ros::Duration(5.0);
-    _sub_lidar3d = mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>(shopts, "lidar3d_in", std::bind(&PCLFiltration::lidar3dCallback, this, std::placeholders::_1));
+    _sub_lidar3d =
+        mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>(shopts, "lidar3d_in", std::bind(&PCLFiltration::lidar3dCallback, this, std::placeholders::_1));
     _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 1);
     _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 1);
     if (_filter_removeBelowGround.used())
@@ -192,13 +193,13 @@ void PCLFiltration::callbackReconfigure(Config& config, [[maybe_unused]] uint32_
 //}
 
 /* lidar3dCallback() //{ */
-void PCLFiltration::lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>& sh)
-{
-  const auto msg = sh.getMsg();
+void PCLFiltration::lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>& sh) {
 
   if (!is_initialized || !_lidar3d_republish) {
     return;
   }
+
+  const auto msg = sh.getMsg();
 
   if (msg->width % _lidar3d_col_step != 0 || msg->height % _lidar3d_row_step != 0) {
     NODELET_WARN(
@@ -319,8 +320,7 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
   const size_t width_after  = inout_pc_ptr->width;
   const size_t points_after = inout_pc_ptr->size();
   NODELET_INFO_THROTTLE(
-      5.0,
-      "[PCLFiltration] Processed 3D LIDAR data (run time: %ld ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
+      5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
       timer.getLifetime(), points_before, points_after, width_before, height_before, width_after, height_after);
 }
 //}

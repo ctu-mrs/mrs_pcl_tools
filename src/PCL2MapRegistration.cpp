@@ -548,7 +548,7 @@ RegistrationOutput PCL2MapRegistration::pcl2map_ndt(RegistrationInput &input) {
     ndt.align(*output.cloud_aligned, input.T_guess);
   }
 
-  ROS_INFO("[PCL2MapRegistration] NDT registration run time: %ld ms", timer.getLifetime());
+  ROS_INFO("[PCL2MapRegistration] NDT registration run time: %.1f ms", timer.getLifetime());
 
   output.converged      = ndt.hasConverged();
   output.fitness_score  = ndt.getFitnessScore();
@@ -601,7 +601,7 @@ RegistrationOutput PCL2MapRegistration::pcl2map_fpfh(RegistrationInput &input) {
     align.align(*output.cloud_aligned, input.T_guess);
   }
 
-  ROS_INFO("[PCL2MapRegistration] FPFH registration run time: %ld ms", timer.getLifetime());
+  ROS_INFO("[PCL2MapRegistration] FPFH registration run time: %.1f ms", timer.getLifetime());
 
   output.converged      = align.hasConverged();
   output.fitness_score  = align.getFitnessScore();
@@ -640,7 +640,7 @@ RegistrationOutput PCL2MapRegistration::pcl2map_gicp(RegistrationInput &input) {
     gicp.align(*output.cloud_aligned, input.T_guess);
   }
 
-  ROS_INFO("[PCL2MapRegistration] GICP registration run time: %ld ms", timer.getLifetime());
+  ROS_INFO("[PCL2MapRegistration] GICP registration run time: %.1f ms", timer.getLifetime());
 
   output.converged      = gicp.hasConverged();
   output.fitness_score  = gicp.getFitnessScore();
@@ -678,7 +678,7 @@ RegistrationOutput PCL2MapRegistration::pcl2map_icpn(RegistrationInput &input) {
     icpn.align(*output.cloud_aligned, input.T_guess);
   }
 
-  ROS_INFO("[PCL2MapRegistration] ICPN registration run time: %ld ms", timer.getLifetime());
+  ROS_INFO("[PCL2MapRegistration] ICPN registration run time: %.1f ms", timer.getLifetime());
 
   output.converged      = icpn.hasConverged();
   output.fitness_score  = icpn.getFitnessScore();
@@ -766,7 +766,7 @@ RegistrationOutput PCL2MapRegistration::pcl2map_sicpn(RegistrationInput &input) 
     NODELET_ERROR("[PCL2MapRegistration] Registration (SICPN) did not converge -- try to change registration (SICPN) parameters.");
   }
 
-  ROS_INFO("[PCL2MapRegistration] SICPN registration run time: %ld ms", timer.getLifetime());
+  ROS_INFO("[PCL2MapRegistration] SICPN registration run time: %.1f ms", timer.getLifetime());
 
   return output;
 }
