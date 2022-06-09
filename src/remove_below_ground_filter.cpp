@@ -16,13 +16,14 @@ namespace mrs_pcl_tools
       common_handlers->param_loader->setPrefix(pfx);
       this->transformer = std::make_shared<mrs_lib::Transformer>("RemoveBelowGroundFilter");
       this->transformer->setDefaultPrefix(uav_name);
+      this->transformer->setLookupTimeout(ros::Duration(0.3));
       this->transformer->retryLookupNewest(true);
     } else
     {
       this->transformer = common_handlers->transformer;
     }
 
-    m_ground_detector.initialize(nh, GroundplaneDetector::groundplane_detection_config_t(*common_handlers->param_loader, pfx+"ground_removal"));
+    m_ground_detector.initialize(nh, this->transformer, GroundplaneDetector::groundplane_detection_config_t(*common_handlers->param_loader, pfx+"ground_removal/"));
 
     initialized = true;
   }

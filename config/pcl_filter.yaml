@@ -33,6 +33,7 @@ lidar3d:
     ransac:
       max_inlier_distance: 0.5
     offset: 1.0
+    publish_plane_marker: true
 
   downsampling:
     dynamic_row_selection: false
