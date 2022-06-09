@@ -7,10 +7,10 @@ namespace mrs_pcl_tools
   {
     keep_organized = common_handlers->param_loader->loadParamReusable<bool>("keep_organized", false);
     common_handlers->param_loader->loadParam("ground_removal/plane_offset", plane_offset, 1.0);
+    const auto pfx = common_handlers->param_loader->getPrefix();
 
     if (common_handlers->transformer == nullptr)
     {
-      const auto pfx = common_handlers->param_loader->getPrefix();
       common_handlers->param_loader->setPrefix("");
       const std::string uav_name = common_handlers->param_loader->loadParamReusable<std::string>("uav_name");
       common_handlers->param_loader->setPrefix(pfx);
@@ -22,7 +22,7 @@ namespace mrs_pcl_tools
       this->transformer = common_handlers->transformer;
     }
 
-    m_ground_detector.initialize(nh, GroundplaneDetector::groundplane_detection_config_t(*common_handlers->param_loader, "ground_removal"));
+    m_ground_detector.initialize(nh, GroundplaneDetector::groundplane_detection_config_t(*common_handlers->param_loader, pfx+"ground_removal"));
 
     initialized = true;
   }

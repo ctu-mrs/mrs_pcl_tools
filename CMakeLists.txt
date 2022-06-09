@@ -78,7 +78,7 @@ generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs visualization_
 ###################################
 
 set(LIBRARIES
-  PCLSupportLib PCLFiltration PCL2MapRegistration
+  PCLSupportLib PCLFiltration PCL2MapRegistration GroundplaneDetector RemoveBelowGroundFilter
   )
 
 set(EXECUTABLES
@@ -135,6 +135,8 @@ target_link_libraries(
 # Nodelet library PCLFiltration
 add_library(PCLFiltration
   src/PCLFiltration.cpp
+  src/groundplane_detector.cpp
+  src/remove_below_ground_filter.cpp
   )
 add_dependencies(PCLFiltration mrs_pcl_tools_gencfg mrs_pcl_tools_generate_messages)
 target_link_libraries(
@@ -160,6 +162,24 @@ target_link_libraries(
   PCLPublishCloudFileToNetwork PCLSupportLib ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
   )
 target_include_directories(PCLPublishCloudFileToNetwork SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
+
+# library for ground plane detection
+add_library(GroundplaneDetector
+  src/groundplane_detector.cpp
+  )
+target_link_libraries(
+  GroundplaneDetector ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+  )
+target_include_directories(GroundplaneDetector SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
+
+# library for ground plane detection
+add_library(RemoveBelowGroundFilter
+  src/remove_below_ground_filter.cpp
+  )
+target_link_libraries(
+  RemoveBelowGroundFilter ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen_LIBRARIES}
+  )
+target_include_directories(RemoveBelowGroundFilter SYSTEM PRIVATE ${PCL_INCLUDE_DIRS})
 
 # ### EXECUTABLES
 add_executable(estimate_cloud_to_cloud_drift src/executables/EstimateCloudToCloudDrift.cpp)

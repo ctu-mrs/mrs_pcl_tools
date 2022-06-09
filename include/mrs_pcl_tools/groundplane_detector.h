@@ -66,6 +66,7 @@ namespace mrs_pcl_tools
       double max_inlier_dist = 3.0;                     // metres
       bool publish_plane_marker = false;
 
+      groundplane_detection_config_t() = default;
       groundplane_detection_config_t(mrs_lib::ParamLoader& pl, const std::string& param_prefix);
       void loadParams(mrs_lib::ParamLoader& pl, const std::string& param_prefix);
     } m_cfg;
@@ -84,9 +85,11 @@ namespace mrs_pcl_tools
     std::shared_ptr<mrs_lib::Transformer> m_tfr = nullptr;
     std::optional<ros::Publisher> m_pub_detected_plane = std::nullopt;
     mrs_lib::SubscribeHandler<sensor_msgs::Range> m_sh_range;
+
+    visualization_msgs::MarkerArray plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::Header& header);
   };
 
-#include <impl/GroundplaneDetector.hpp>
+#include <impl/groundplane_detector.hpp>
 
   //}
 

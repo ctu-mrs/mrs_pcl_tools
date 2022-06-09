@@ -33,8 +33,8 @@
 
 #include <tf2_eigen/tf2_eigen.h>
 
-#include "mrs_pcl_tools/PCLFiltration.h"
-#include "mrs_pcl_tools/GroundplaneDetector.h"
+#include "mrs_pcl_tools/common_includes_and_typedefs.h"
+#include "mrs_pcl_tools/groundplane_detector.h"
 
 //}
 
@@ -43,6 +43,8 @@ namespace mrs_pcl_tools
   using vec3_t = Eigen::Vector3f;
   using vec4_t = Eigen::Vector4f;
   using quat_t = Eigen::Quaternionf;
+
+  struct CommonHandlers_t;
 
   /* class RemoveBelowGroundFilter //{ */
 
@@ -65,8 +67,6 @@ namespace mrs_pcl_tools
     GroundplaneDetector m_ground_detector;
 
     std::shared_ptr<mrs_lib::Transformer> transformer = nullptr;
-    std::optional<ros::Publisher> pub_fitted_plane = std::nullopt;
-    mrs_lib::SubscribeHandler<sensor_msgs::Range> sh_range;
 
     bool keep_organized = false;
     double plane_offset = 1.0;  // metres

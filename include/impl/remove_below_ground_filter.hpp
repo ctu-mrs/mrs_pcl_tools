@@ -13,7 +13,8 @@ typename boost::shared_ptr<PC> RemoveBelowGroundFilter::applyInPlace(const typen
 
   using pt_t = typename PC::PointType;
   
-  const auto plane_opt = m_ground_detector.detectGroundplane(inout_pc);
+  const typename boost::shared_ptr<const PC> const_pc(inout_pc);
+  const auto plane_opt = m_ground_detector.detectGroundplane(const_pc);
   if (!plane_opt.has_value())
   {
     ROS_ERROR("[RemoveBelowGroundFilter]: failed to find ground plane, skipping.");

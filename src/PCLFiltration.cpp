@@ -96,7 +96,7 @@ void PCLFiltration::onInit() {
   const bool use_ground_removal = _common_handlers->param_loader->loadParam2<bool>("lidar3d/ground_removal/use", false);
   if (use_ground_removal) {
     _common_handlers->param_loader->setPrefix("lidar3d/");
-    _filter_removeBelowGround.initialize(nh, _common_handlers, true);
+    _filter_removeBelowGround.initialize(nh, _common_handlers);
     _common_handlers->param_loader->setPrefix("");
   }
 

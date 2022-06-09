@@ -36,7 +36,7 @@
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
-#include "mrs_pcl_tools/RemoveBelowGroundFilter.h"
+#include "mrs_pcl_tools/remove_below_ground_filter.h"
 
 //}
 
@@ -45,42 +45,6 @@ namespace mrs_pcl_tools
 using vec3_t = Eigen::Vector3f;
 using vec4_t = Eigen::Vector4f;
 using quat_t = Eigen::Quaternionf;
-
-/*//{ struct Diagnostics_t */
-struct Diagnostics_t
-{
-  Diagnostics_t(ros::NodeHandle& nh) {
-    _pub_diagnostics = nh.advertise<mrs_msgs::PclToolsDiagnostics>("diagnostics_out", 10);
-  }
-
-  void publish(const mrs_msgs::PclToolsDiagnosticsConstPtr& msg) const {
-    if (_pub_diagnostics.getNumSubscribers() > 0) {
-      try {
-        _pub_diagnostics.publish(msg);
-      }
-      catch (...) {
-        ROS_ERROR("[PCLFiltration] Failed to publish msg on topic (%s).", _pub_diagnostics.getTopic().c_str());
-      }
-    }
-  }
-
-private:
-  ros::Publisher _pub_diagnostics;
-};
-/*//}*/
-
-/*//{ struct CommonHandlers_t */
-struct CommonHandlers_t
-{
-  std::shared_ptr<mrs_lib::ParamLoader> param_loader;
-  std::shared_ptr<mrs_lib::Transformer> transformer;
-
-  bool                                       scope_timer_enabled;
-  std::shared_ptr<mrs_lib::ScopeTimerLogger> scope_timer_logger;
-
-  std::shared_ptr<Diagnostics_t> diagnostics;
-};
-/*//}*/
 
 /* class SensorDepthCamera //{ */
 
@@ -192,6 +156,8 @@ private:
 #include "impl/sensors.hpp"
 
 //}
+
+class RemoveBelowGroundFilter;
 
 /* class PCLFiltration //{ */
 class PCLFiltration : public nodelet::Nodelet {

@@ -30,9 +30,14 @@
 // mrs_lib
 #include <mrs_lib/param_loader.h>
 #include <mrs_lib/attitude_converter.h>
+#include <mrs_lib/transformer.h>
+#include <mrs_lib/subscribe_handler.h>
+#include <mrs_lib/scope_timer.h>
 
 // dynamic reconfigure
 #include <dynamic_reconfigure/server.h>
+
+#include <mrs_msgs/PclToolsDiagnostics.h>
 
 #ifdef COMPILE_WITH_OUSTER
 // point types
@@ -55,3 +60,45 @@ typedef pcl::PointCloud<pt_XYZRGB> PC_RGB;
 typedef pcl::PointCloud<pt_NORM>   PC_NORM;
 
 //}
+
+namespace mrs_pcl_tools
+{
+
+  /*//{ struct Diagnostics_t */
+  struct Diagnostics_t
+  {
+    Diagnostics_t(ros::NodeHandle& nh) {
+      _pub_diagnostics = nh.advertise<mrs_msgs::PclToolsDiagnostics>("diagnostics_out", 10);
+    }
+
+    void publish(const mrs_msgs::PclToolsDiagnosticsConstPtr& msg) const {
+      if (_pub_diagnostics.getNumSubscribers() > 0) {
+        try {
+          _pub_diagnostics.publish(msg);
+        }
+        catch (...) {
+          ROS_ERROR("[PCLFiltration] Failed to publish msg on topic (%s).", _pub_diagnostics.getTopic().c_str());
+        }
+      }
+    }
+
+  private:
+    ros::Publisher _pub_diagnostics;
+  };
+  /*//}*/
+
+  /*//{ struct CommonHandlers_t */
+  struct CommonHandlers_t
+  {
+    std::shared_ptr<mrs_lib::ParamLoader> param_loader;
+    std::shared_ptr<mrs_lib::Transformer> transformer;
+
+    bool                                       scope_timer_enabled;
+    std::shared_ptr<mrs_lib::ScopeTimerLogger> scope_timer_logger;
+
+    std::shared_ptr<Diagnostics_t> diagnostics;
+  };
+  /*//}*/
+
+
+}
