@@ -36,8 +36,7 @@
 
 #include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
 
-/* #include <pcl/pcl_base.h> */
-/* #include <pcl/point_traits.h> */
+#include "mrs_pcl_tools/RemoveBelowGroundFilter.h"
 
 //}
 
@@ -82,76 +81,6 @@ struct CommonHandlers_t
   std::shared_ptr<Diagnostics_t> diagnostics;
 };
 /*//}*/
-
-/* class RemoveBelowGroundFilter //{ */
-
-class RemoveBelowGroundFilter {
-public:
-  void initialize(ros::NodeHandle& nh, const std::shared_ptr<CommonHandlers_t> common_handlers, const bool publish_plane_marker = false) {
-    keep_organized = common_handlers->param_loader->loadParamReusable<bool>("keep_organized", false);
-    common_handlers->param_loader->loadParam("ground_removal/range/use", range_use, false);
-    common_handlers->param_loader->loadParam("ground_removal/range/max_difference", range_max_diff, 1.0);
-    common_handlers->param_loader->loadParam("ground_removal/range/max_difference_without_rangefinder", range_max_diff_without_rangefinder, 1.5);
-    common_handlers->param_loader->loadParam("ground_removal/static_frame_id", static_frame_id);
-    common_handlers->param_loader->loadParam("ground_removal/max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
-    common_handlers->param_loader->loadParam("ground_removal/ransac/max_inlier_distance", max_inlier_dist, 3.0);
-    common_handlers->param_loader->loadParam("ground_removal/ransac/max_angle_difference", max_angle_diff, 15.0 / 180.0 * M_PI);
-    common_handlers->param_loader->loadParam("ground_removal/plane_offset", plane_offset, 1.0);
-
-    if (common_handlers->transformer == nullptr) {
-      const auto pfx = common_handlers->param_loader->getPrefix();
-      common_handlers->param_loader->setPrefix("");
-      const std::string uav_name = common_handlers->param_loader->loadParamReusable<std::string>("uav_name");
-      common_handlers->param_loader->setPrefix(pfx);
-      this->transformer = std::make_shared<mrs_lib::Transformer>("RemoveBelowGroundFilter");
-      this->transformer->setDefaultPrefix(uav_name);
-      this->transformer->retryLookupNewest(true);
-    } else {
-      this->transformer = common_handlers->transformer;
-    }
-
-    if (range_use) {
-      mrs_lib::SubscribeHandlerOptions shopts(nh);
-      shopts.node_name          = "RemoveBelowGroundFilter";
-      shopts.no_message_timeout = ros::Duration(5.0);
-      mrs_lib::construct_object(sh_range, shopts, "rangefinder_in");
-    }
-
-    if (publish_plane_marker) {
-      pub_fitted_plane = nh.advertise<visualization_msgs::MarkerArray>("lidar3d_fitted_plane", 10);
-    }
-
-    initialized = true;
-  }
-
-  bool used() const {
-    return initialized;
-  }
-
-  template <typename PC>
-  typename boost::shared_ptr<PC> applyInPlace(typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
-
-private:
-  bool initialized = false;
-
-  std::shared_ptr<mrs_lib::Transformer>         transformer      = nullptr;
-  std::optional<ros::Publisher>                 pub_fitted_plane = std::nullopt;
-  mrs_lib::SubscribeHandler<sensor_msgs::Range> sh_range;
-
-  bool        keep_organized                     = false;
-  bool        range_use                          = false;
-  std::string static_frame_id                    = "";
-  double      max_precrop_height                 = 1.0;                  // metres
-  double      max_angle_diff                     = 15.0 / 180.0 * M_PI;  // 15 degrees
-  double      max_inlier_dist                    = 3.0;                  // metres
-  double      plane_offset                       = 1.0;                  // metres
-  double      range_max_diff                     = 1.0;                  // metres
-  double      range_max_diff_without_rangefinder = 1.5;                  // metres
-};
-
-#include <impl/remove_below_ground_filter.hpp>
-
-//}
 
 /* class SensorDepthCamera //{ */
 
