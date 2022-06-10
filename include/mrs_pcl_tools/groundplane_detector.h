@@ -76,7 +76,7 @@ namespace mrs_pcl_tools
     void initialize(ros::NodeHandle& nh, const groundplane_detection_config_t& cfg);
     
     template <typename PC>
-    std::optional<plane_t> detectGroundplane(const typename boost::shared_ptr<const PC>& pc);
+    [[nodiscard]] std::optional<plane_t> detectGroundplane(const typename boost::shared_ptr<const PC>& pc) const;
 
   private:
     const std::string NODE_NAME = "GroundplaneDetector";
@@ -86,7 +86,7 @@ namespace mrs_pcl_tools
     std::optional<ros::Publisher> m_pub_detected_plane = std::nullopt;
     mrs_lib::SubscribeHandler<sensor_msgs::Range> m_sh_range;
 
-    visualization_msgs::MarkerArray plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::Header& header);
+    visualization_msgs::MarkerArray plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::Header& header) const;
   };
 
 #include <impl/groundplane_detector.hpp>

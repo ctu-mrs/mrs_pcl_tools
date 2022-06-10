@@ -3,7 +3,7 @@
 namespace mrs_pcl_tools
 {
   /* plane_visualization //{ */
-  visualization_msgs::MarkerArray GroundplaneDetector::plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::Header& header)
+  visualization_msgs::MarkerArray GroundplaneDetector::plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::Header& header) const
   {
     visualization_msgs::MarkerArray ret;
 

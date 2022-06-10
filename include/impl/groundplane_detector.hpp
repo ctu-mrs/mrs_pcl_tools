@@ -1,7 +1,7 @@
 /* detectGroundplane() //{ */
 
 template <typename PC>
-std::optional<plane_t> GroundplaneDetector::detectGroundplane(const typename boost::shared_ptr<const PC>& pc)
+std::optional<plane_t> GroundplaneDetector::detectGroundplane(const typename boost::shared_ptr<const PC>& pc) const
 {
   if (!initialized)
   {
@@ -17,7 +17,7 @@ std::optional<plane_t> GroundplaneDetector::detectGroundplane(const typename boo
   bool range_meas_used = false;
   if (m_cfg.range_use && m_sh_range.hasMsg())
   {
-    const auto range_msg = m_sh_range.getMsg();
+    const auto range_msg = m_sh_range.peekMsg();
     if (range_msg->range > range_msg->min_range && range_msg->range < range_msg->max_range)
     {
       const vec3_t range_vec(range_msg->range, 0,0);
