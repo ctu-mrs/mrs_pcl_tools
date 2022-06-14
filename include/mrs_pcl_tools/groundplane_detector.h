@@ -48,6 +48,7 @@ namespace mrs_pcl_tools
   {
     vec3_t normal;
     float distance;
+    plane_t(const vec3_t& normal, const float distance);
   };
 
   /* class GroundplaneDetector //{ */
@@ -84,6 +85,7 @@ namespace mrs_pcl_tools
 
     std::shared_ptr<mrs_lib::Transformer> m_tfr = nullptr;
     std::optional<ros::Publisher> m_pub_detected_plane = std::nullopt;
+    std::optional<ros::Publisher> m_pub_inlier_points = std::nullopt;
     mrs_lib::SubscribeHandler<sensor_msgs::Range> m_sh_range;
 
     visualization_msgs::MarkerArray plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::Header& header) const;

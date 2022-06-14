@@ -118,6 +118,14 @@ std::optional<plane_t> GroundplaneDetector::detectGroundplane(const typename boo
     m_pub_detected_plane->publish(plane_msg);
   }
 
+  if (m_pub_inlier_points.has_value() && m_pub_inlier_points->getNumSubscribers() > 0)
+  {
+    pcl::Indices in_inds;
+    ransac.getInliers(in_inds);
+    const typename PC::ConstPtr pub_pc = boost::make_shared<PC>(*pc, in_inds);
+    m_pub_inlier_points->publish(pub_pc);
+  }
+
   return plane_t({fit_n, fit_d});
 }
 

@@ -150,6 +150,11 @@ namespace mrs_pcl_tools
   }
   //}
 
+  plane_t::plane_t(const vec3_t& normal, const float distance)
+    : normal(normal.normalized()), distance(distance/normal.norm())
+  {
+  }
+
   GroundplaneDetector::groundplane_detection_config_t::groundplane_detection_config_t(mrs_lib::ParamLoader& pl, const std::string& param_prefix)
   {
     loadParams(pl, param_prefix);
@@ -184,7 +189,10 @@ namespace mrs_pcl_tools
     }
 
     if (cfg.publish_plane_marker)
+    {
       m_pub_detected_plane = nh.advertise<visualization_msgs::MarkerArray>("detected_groundplane", 10);
+      m_pub_inlier_points = nh.advertise<sensor_msgs::PointCloud2>("groundplane_inliers", 10);
+    }
 
     initialized = true;
   }
