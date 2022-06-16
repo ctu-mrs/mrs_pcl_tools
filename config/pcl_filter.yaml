@@ -24,6 +24,13 @@ lidar3d:
       threshold: 25
       range: 5.0
 
+  cropbox:
+    use: false
+    crop_inside: false # if true, points inside the box will be cropped, otherwise points outside will be cropped
+    frame_id: rtk_origin
+    min: [-32.0, -35.0, 6.0]
+    max: [35.0, 5.0, 19.0]
+
   ground_removal:
     use: false
     range:

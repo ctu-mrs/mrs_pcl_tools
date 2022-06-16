@@ -202,6 +202,10 @@ private:
   uint32_t _lidar3d_rangeclip_min_mm;
   uint32_t _lidar3d_rangeclip_max_mm;
 
+  bool     _lidar3d_inertclip_use;
+  vec4_t   _lidar3d_inertclip_min;
+  vec4_t   _lidar3d_inertclip_max;
+
   bool     _lidar3d_filter_intensity_use;
   float    _lidar3d_filter_intensity_range_sq;
   uint32_t _lidar3d_filter_intensity_range_mm;
@@ -216,9 +220,10 @@ private:
   int _lidar3d_col_step;
 
   bool         _lidar3d_cropbox_use;
+  bool         _lidar3d_cropbox_cropinside;
   std::string  _lidar3d_cropbox_frame_id;
-  vec4_t       _lidar3d_cropbox_min;
-  vec4_t       _lidar3d_cropbox_max;
+  vec3_t       _lidar3d_cropbox_min;
+  vec3_t       _lidar3d_cropbox_max;
   unsigned int _lidar3d_dynamic_row_selection_offset = 0;
 
   std::shared_ptr<CommonHandlers_t> _common_handlers;

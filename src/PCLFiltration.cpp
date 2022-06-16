@@ -46,7 +46,8 @@ void PCLFiltration::onInit() {
   const auto uav_name           = _common_handlers->param_loader->loadParam2<std::string>("uav_name");
   _common_handlers->transformer = std::make_shared<mrs_lib::Transformer>("PCLFilter");
   _common_handlers->transformer->setDefaultPrefix(uav_name);
-  _common_handlers->transformer->retryLookupNewest(true);
+  _common_handlers->transformer->setLookupTimeout(ros::Duration(0.05));
+  _common_handlers->transformer->retryLookupNewest(false);
 
   // Scope timer
   _common_handlers->param_loader->loadParam("scope_timer/enable", _common_handlers->scope_timer_enabled, false);
@@ -101,17 +102,11 @@ void PCLFiltration::onInit() {
   }
 
   // load cropbox parameters
+  _common_handlers->param_loader->loadParam("lidar3d/cropbox/crop_inside", _lidar3d_cropbox_cropinside);
   _common_handlers->param_loader->loadParam("lidar3d/cropbox/frame_id", _lidar3d_cropbox_frame_id, {});
   _lidar3d_cropbox_frame_id = _common_handlers->transformer->resolveFrame(_lidar3d_cropbox_frame_id);
-  _common_handlers->param_loader->loadParam("lidar3d/cropbox/min/x", _lidar3d_cropbox_min.x(), -std::numeric_limits<float>::infinity());
-  _common_handlers->param_loader->loadParam("lidar3d/cropbox/min/y", _lidar3d_cropbox_min.y(), -std::numeric_limits<float>::infinity());
-  _common_handlers->param_loader->loadParam("lidar3d/cropbox/min/z", _lidar3d_cropbox_min.z(), -std::numeric_limits<float>::infinity());
-  _lidar3d_cropbox_min.w() = -std::numeric_limits<float>::infinity();
-
-  _common_handlers->param_loader->loadParam("lidar3d/cropbox/max/x", _lidar3d_cropbox_max.x(), std::numeric_limits<float>::infinity());
-  _common_handlers->param_loader->loadParam("lidar3d/cropbox/max/y", _lidar3d_cropbox_max.y(), std::numeric_limits<float>::infinity());
-  _common_handlers->param_loader->loadParam("lidar3d/cropbox/max/z", _lidar3d_cropbox_max.z(), std::numeric_limits<float>::infinity());
-  _lidar3d_cropbox_max.w() = std::numeric_limits<float>::infinity();
+  _common_handlers->param_loader->loadMatrixStatic("lidar3d/cropbox/min", _lidar3d_cropbox_min, -std::numeric_limits<float>::infinity()*vec3_t::Ones());
+  _common_handlers->param_loader->loadMatrixStatic("lidar3d/cropbox/max", _lidar3d_cropbox_max, std::numeric_limits<float>::infinity()*vec3_t::Ones());
 
   // by default, use the cropbox filter if any of the crop coordinates is finite
   const bool cbox_use_default = _lidar3d_cropbox_min.array().isFinite().any() || _lidar3d_cropbox_max.array().isFinite().any();
@@ -318,7 +313,15 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
 
   const size_t height_after = inout_pc_ptr->height;
   const size_t width_after  = inout_pc_ptr->width;
-  const size_t points_after = inout_pc_ptr->size();
+  size_t points_after = 0;
+  if (_lidar3d_keep_organized)
+  {
+    for (const auto& pt : *inout_pc_ptr)
+      if (pcl::isFinite(pt))
+        points_after++;
+  }
+  else
+    points_after = inout_pc_ptr->size();
   NODELET_INFO_THROTTLE(
       5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
       timer.getLifetime(), points_before, points_after, width_before, height_before, width_after, height_after);
@@ -588,10 +591,19 @@ void PCLFiltration::cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc) {
     }
   }
 
+  vec4_t cb_min;
+  cb_min.head<3>() = _lidar3d_cropbox_min;
+  cb_min.w() = -std::numeric_limits<float>::infinity();
+
+  vec4_t cb_max;
+  cb_max.head<3>() = _lidar3d_cropbox_max;
+  cb_max.w() = std::numeric_limits<float>::infinity();
+
   cb.setKeepOrganized(_lidar3d_keep_organized);
-  cb.setNegative(false);
-  cb.setMin(_lidar3d_cropbox_min);
-  cb.setMax(_lidar3d_cropbox_max);
+  cb.setNegative(_lidar3d_cropbox_cropinside);
+
+  cb.setMin(cb_min);
+  cb.setMax(cb_max);
   cb.setInputCloud(inout_pc);
   cb.filter(*inout_pc);
 }
