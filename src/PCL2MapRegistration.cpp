@@ -217,7 +217,7 @@ bool PCL2MapRegistration::callbackSrvRegisterPointCloud(mrs_pcl_tools::SrvRegist
   // Catch the latest msg and store it as source cloud
   PC_NORM::Ptr      pc_src;
   const std::string topic   = std::string("/") + req.uav_name + std::string("/") + _topic_pc2;
-  auto              msg_ret = subscribeSinglePointCloudMsg(topic);
+  const auto        msg_ret = subscribeSinglePointCloudMsg(topic);
 
   if (msg_ret) {
     pc_src = msg_ret.value();
@@ -1200,7 +1200,7 @@ PC_NORM::Ptr PCL2MapRegistration::loadPcWithNormals(const std::string &pcd_file)
 
 /*//{ subscribeSinglePointCloudMsg() */
 std::optional<PC_NORM::Ptr> PCL2MapRegistration::subscribeSinglePointCloudMsg(const std::string &topic) {
-  sensor_msgs::PointCloud2::ConstPtr cloud_msg = ros::topic::waitForMessage<sensor_msgs::PointCloud2>(topic, _nh, _SUBSCRIBE_MSG_TIMEOUT);
+  const sensor_msgs::PointCloud2::ConstPtr cloud_msg = ros::topic::waitForMessage<sensor_msgs::PointCloud2>(topic, _nh, _SUBSCRIBE_MSG_TIMEOUT);
 
   if (cloud_msg) {
 
@@ -1603,7 +1603,7 @@ void PCL2MapRegistration::translateEigenVector(Eigen::Vector3f &vec, const Eigen
 }
 /*//}*/
 
-/*//{ checkNans */
+/*//{ checkNans() */
 bool PCL2MapRegistration::checkNans(const PC_NORM::Ptr cloud, const std::string &ns) {
   size_t xyz_invalid_count  = 0;
   size_t norm_invalid_count = 0;
@@ -1634,7 +1634,7 @@ bool PCL2MapRegistration::checkNans(const PC_NORM::Ptr cloud, const std::string 
 }
 /*//}*/
 
-/*//{ print */
+/*//{ print() */
 void PCL2MapRegistration::print(const EigenVectors &eigenvectors, const std::string &ns) {
 
   if (!ns.empty()) {
@@ -1648,7 +1648,7 @@ void PCL2MapRegistration::print(const EigenVectors &eigenvectors, const std::str
 }
 /*//}*/
 
-/*//{ toGeometryMsg */
+/*//{ toGeometryMsg() */
 geometry_msgs::Point PCL2MapRegistration::toGeometryMsg(const Eigen::Vector3f &point) {
   geometry_msgs::Point geom_point;
   geom_point.x = point.x();
@@ -1658,7 +1658,7 @@ geometry_msgs::Point PCL2MapRegistration::toGeometryMsg(const Eigen::Vector3f &p
 }
 /*//}*/
 
-/*//{ toColorMsg */
+/*//{ toColorMsg() */
 std_msgs::ColorRGBA PCL2MapRegistration::toColorMsg(const Eigen::Vector3f &rgb, const float alpha) {
   std_msgs::ColorRGBA color_msg;
   color_msg.r = rgb.x();
