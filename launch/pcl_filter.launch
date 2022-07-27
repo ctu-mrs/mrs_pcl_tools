@@ -8,7 +8,7 @@
   <arg name="node_name" default="pcl_filter" />
   <arg name="name_suffix" default="" />
   <arg name="topic_3d_lidar_in" default="os_cloud_nodelet/points" />
-  <arg name="topic_3d_lidar_out" default="$(arg topic_3d_lidar_in)_processed" />
+  <arg name="topic_3d_lidar_out" default="~points_processed" />
 
   <arg     if="$(arg debug)" name="launch_prefix" value="debug_roslaunch" />
   <arg unless="$(arg debug)" name="launch_prefix" value="" />
