@@ -1,6 +1,6 @@
 <launch>
 
-  <arg name="UAV_NAME" default="$(env UAV_NAME)" />
+  <arg name="UAV_NAME" default="$(optenv UAV_NAME)" />
   <arg name="map_frame" default="global_origin" />
 
   <arg name="target_pcd" default="$(find naki_gazebo_resources)/models/olomouc_marie_snezna/pcd/olomouc_marie_snezna_normals.pcd" />
@@ -10,7 +10,7 @@
   <arg name="nodelet" default="standalone" />
   <arg name="nodelet_manager" default="" />
   <arg name="launch_prefix" default=""/>
-  
+
   <arg name="default_config" default="$(find mrs_pcl_tools)/config/pcl2map_registration_default.yaml" />
   <arg name="custom_config" default="" />
 

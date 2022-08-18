@@ -1,7 +1,7 @@
 <launch>
 
   <!-- Filtration parameters -->
-  <arg name="UAV_NAME" default="$(env UAV_NAME)" />
+  <arg name="UAV_NAME" default="$(optenv UAV_NAME)" />
 
   <!-- <arg name="cloud_file" default="$(find naki_gazebo_resources)/pcd/stara_voda.pcd" /> -->
   <arg name="cloud_file" default="/home/mrs/git/darpa_core/data/pcd/byci_skala/byci_skala_drone.pcd" />
@@ -25,7 +25,8 @@
 
       <!-- Remap -->
       <remap from="~cloud_out" to="pcd2ros$(arg name_postfix)/cloud" />
-      
+
     </node>
   </group>
+
 </launch>
