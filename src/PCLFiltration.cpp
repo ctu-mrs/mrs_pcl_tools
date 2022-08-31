@@ -60,6 +60,7 @@ void PCLFiltration::onInit() {
   /*//}*/
 
   /* 3D LIDAR */
+  _common_handlers->param_loader->loadParam("lidar3d/name", _lidar3d_name, std::string("ouster"));
   _common_handlers->param_loader->loadParam("lidar3d/frequency", _lidar3d_frequency);
   _common_handlers->param_loader->loadParam("lidar3d/vfov", _lidar3d_vfov);
 
@@ -105,8 +106,8 @@ void PCLFiltration::onInit() {
   _common_handlers->param_loader->loadParam("lidar3d/cropbox/crop_inside", _lidar3d_cropbox_cropinside);
   _common_handlers->param_loader->loadParam("lidar3d/cropbox/frame_id", _lidar3d_cropbox_frame_id, {});
   _lidar3d_cropbox_frame_id = _common_handlers->transformer->resolveFrame(_lidar3d_cropbox_frame_id);
-  _common_handlers->param_loader->loadMatrixStatic("lidar3d/cropbox/min", _lidar3d_cropbox_min, -std::numeric_limits<float>::infinity()*vec3_t::Ones());
-  _common_handlers->param_loader->loadMatrixStatic("lidar3d/cropbox/max", _lidar3d_cropbox_max, std::numeric_limits<float>::infinity()*vec3_t::Ones());
+  _common_handlers->param_loader->loadMatrixStatic("lidar3d/cropbox/min", _lidar3d_cropbox_min, -std::numeric_limits<float>::infinity() * vec3_t::Ones());
+  _common_handlers->param_loader->loadMatrixStatic("lidar3d/cropbox/max", _lidar3d_cropbox_max, std::numeric_limits<float>::infinity() * vec3_t::Ones());
 
   // by default, use the cropbox filter if any of the crop coordinates is finite
   const bool cbox_use_default = _lidar3d_cropbox_min.array().isFinite().any() || _lidar3d_cropbox_max.array().isFinite().any();
@@ -205,7 +206,7 @@ void PCLFiltration::lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::Point
   }
 
   const mrs_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_msgs::PclToolsDiagnostics>();
-  diag_msg->sensor_name                             = "ouster";
+  diag_msg->sensor_name                             = _lidar3d_name;
   diag_msg->stamp                                   = msg->header.stamp;
   diag_msg->sensor_type                             = mrs_msgs::PclToolsDiagnostics::SENSOR_TYPE_LIDAR_3D;
   diag_msg->cols_before                             = msg->width;
@@ -216,8 +217,8 @@ void PCLFiltration::lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::Point
   const mrs_lib::ScopeTimer timer =
       mrs_lib::ScopeTimer("PCLFiltration::lidar3dCallback", _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
-  const bool is_ouster = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
-  if (is_ouster) {
+  const bool is_ouster_type = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
+  if (is_ouster_type) {
 
     NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: ouster_ros::Point.");
     PC_OS::Ptr cloud = boost::make_shared<PC_OS>();
@@ -313,17 +314,16 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
 
   const size_t height_after = inout_pc_ptr->height;
   const size_t width_after  = inout_pc_ptr->width;
-  size_t points_after = 0;
-  if (_lidar3d_keep_organized)
-  {
+  size_t       points_after = 0;
+  if (_lidar3d_keep_organized) {
     for (const auto& pt : *inout_pc_ptr)
       if (pcl::isFinite(pt))
         points_after++;
-  }
-  else
+  } else
     points_after = inout_pc_ptr->size();
   NODELET_INFO_THROTTLE(
-      5.0, "[PCLFiltration] Processed 3D LIDAR data (run time: %.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
+      5.0,
+      "[PCLFiltration] Processed 3D LIDAR data (run time: %.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
       timer.getLifetime(), points_before, points_after, width_before, height_before, width_after, height_after);
 }
 //}
@@ -593,11 +593,11 @@ void PCLFiltration::cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc) {
 
   vec4_t cb_min;
   cb_min.head<3>() = _lidar3d_cropbox_min;
-  cb_min.w() = -std::numeric_limits<float>::infinity();
+  cb_min.w()       = -std::numeric_limits<float>::infinity();
 
   vec4_t cb_max;
   cb_max.head<3>() = _lidar3d_cropbox_max;
-  cb_max.w() = std::numeric_limits<float>::infinity();
+  cb_max.w()       = std::numeric_limits<float>::infinity();
 
   cb.setKeepOrganized(_lidar3d_keep_organized);
   cb.setNegative(_lidar3d_cropbox_cropinside);

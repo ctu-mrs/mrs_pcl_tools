@@ -187,14 +187,15 @@ private:
   void callbackReconfigure(mrs_pcl_tools::pcl_filtration_dynparamConfig& config, uint32_t level);
 
   /* 3D LIDAR */
-  void  lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>& sh);
-  float _lidar3d_frequency;
-  float _lidar3d_vfov;
-  bool  _lidar3d_keep_organized;
-  bool  _lidar3d_republish;
-  float _lidar3d_invalid_value;
-  bool  _lidar3d_dynamic_row_selection_enabled;
-  bool  _lidar3d_downsample_use;
+  void        lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>& sh);
+  std::string _lidar3d_name;
+  float       _lidar3d_frequency;
+  float       _lidar3d_vfov;
+  bool        _lidar3d_keep_organized;
+  bool        _lidar3d_republish;
+  float       _lidar3d_invalid_value;
+  bool        _lidar3d_dynamic_row_selection_enabled;
+  bool        _lidar3d_downsample_use;
 
   bool     _lidar3d_rangeclip_use;
   float    _lidar3d_rangeclip_min_sq;
@@ -202,9 +203,9 @@ private:
   uint32_t _lidar3d_rangeclip_min_mm;
   uint32_t _lidar3d_rangeclip_max_mm;
 
-  bool     _lidar3d_inertclip_use;
-  vec4_t   _lidar3d_inertclip_min;
-  vec4_t   _lidar3d_inertclip_max;
+  bool   _lidar3d_inertclip_use;
+  vec4_t _lidar3d_inertclip_min;
+  vec4_t _lidar3d_inertclip_max;
 
   bool     _lidar3d_filter_intensity_use;
   float    _lidar3d_filter_intensity_range_sq;

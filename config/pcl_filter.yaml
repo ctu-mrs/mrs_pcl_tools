@@ -4,8 +4,9 @@ scope_timer:
 
 lidar3d:
 
-  frequency: 10 # [Hz]
-  vfov: 90      # [deg]
+  name:      "ouster"
+  frequency: 10       # [Hz]
+  vfov:      90       # [deg]
 
   republish: true
   keep_organized: true
