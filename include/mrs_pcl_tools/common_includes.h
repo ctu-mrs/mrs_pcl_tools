@@ -13,8 +13,6 @@
 #include <chrono>
 
 // pcl
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
 #include <pcl/pcl_base.h>
 #include <pcl/impl/pcl_base.hpp>
 #include <pcl/common/common.h>
@@ -39,27 +37,7 @@
 
 #include <mrs_msgs/PclToolsDiagnostics.h>
 
-#ifdef COMPILE_WITH_OUSTER
-// point types
-#include <ouster_ros/point.h>
-typedef ouster_ros::Point          pt_OS;
-typedef pcl::PointCloud<pt_OS>     PC_OS;
-#endif
-
-//}
-
-/*//{ typedefs */
-
-typedef pcl::PointXYZ              pt_XYZ;
-typedef pcl::PointXYZI             pt_XYZI;
-typedef pcl::PointXYZRGB           pt_XYZRGB;
-typedef pcl::PointNormal           pt_NORM;
-typedef pcl::PointCloud<pt_XYZ>    PC;
-typedef pcl::PointCloud<pt_XYZI>   PC_I;
-typedef pcl::PointCloud<pt_XYZRGB> PC_RGB;
-typedef pcl::PointCloud<pt_NORM>   PC_NORM;
-
-//}
+#include "mrs_pcl_tools/typedefs.h"
 
 namespace mrs_pcl_tools
 {
@@ -99,6 +77,5 @@ namespace mrs_pcl_tools
     std::shared_ptr<Diagnostics_t> diagnostics;
   };
   /*//}*/
-
 
 }

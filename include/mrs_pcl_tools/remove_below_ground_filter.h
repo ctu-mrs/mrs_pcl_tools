@@ -33,7 +33,7 @@
 
 #include <tf2_eigen/tf2_eigen.h>
 
-#include "mrs_pcl_tools/common_includes_and_typedefs.h"
+#include "mrs_pcl_tools/common_includes.h"
 #include "mrs_pcl_tools/groundplane_detector.h"
 
 //}
