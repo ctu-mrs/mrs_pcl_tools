@@ -62,7 +62,7 @@ struct DepthTraits<uint16_t>
     return depth != 0;
   }
   static inline float toMeters(uint16_t depth) {
-    return depth * 0.001f;
+    return float(depth) * 0.001f;
   }  // originally mm
   static inline uint16_t fromMeters(float depth) {
     return (depth * 1000.0f) + 0.5f;
@@ -92,7 +92,16 @@ public:
 private:
   template <typename T>
   void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& cloud_out, PC::Ptr& cloud_over_max_range_out,
-                           const bool return_removed_close = false, const bool return_removed_far = false, const bool replace_nans = false);
+                           const bool return_removed_close = false, const bool return_removed_far = false, const bool replace_nans = false,
+                           const bool keep_ordered = false);
+
+  template <typename T>
+  void convertDepthToCloudUnordered(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& out_pc, PC::Ptr& removed_pc,
+                                    const bool return_removed_close = false, const bool return_removed_far = false, const bool replace_nans = false);
+
+  template <typename T>
+  void convertDepthToCloudOrdered(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& out_pc, PC::Ptr& removed_pc, const bool return_removed_close = false,
+                                  const bool return_removed_far = false, const bool replace_nans = false);
 
   void imagePointToCloudPoint(const int x, const int y, const float depth, pt_XYZ& point);
 
@@ -118,6 +127,7 @@ private:
   float vfov;
 
   bool has_camera_info = false;
+  bool keep_ordered;
   bool publish_over_max_range;
 
   unsigned int image_width;

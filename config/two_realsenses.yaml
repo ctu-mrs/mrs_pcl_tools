@@ -5,6 +5,7 @@ depth:
 
     frequency: 30 # [Hz]
     vfov: 60      # [deg]
+    keep_ordered: false
 
     topic:
       depth_in: "up_rgbd/depth/image_rect_raw"
@@ -35,6 +36,7 @@ depth:
 
     frequency: 30 # [Hz]
     vfov: 60      # [deg]
+    keep_ordered: false
 
     topic:
       depth_in: "down_rgbd/depth/image_rect_raw"

@@ -11,6 +11,7 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
 
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/frequency", frequency);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/vfov", vfov);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/keep_ordered", keep_ordered);
 
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/downsample/step/col", downsample_step_col, 1);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/downsample/step/row", downsample_step_row, 1);
@@ -74,16 +75,33 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
 // https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
 template <typename T>
 void SensorDepthCamera::convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& out_pc, PC::Ptr& removed_pc,
-                                            const bool return_removed_close, const bool return_removed_far, const bool replace_nans) {
+                                            const bool return_removed_close, const bool return_removed_far, const bool replace_nans, const bool keep_ordered) {
 
-  // TODO: keep ordered
+  if (keep_ordered) {
+
+    convertDepthToCloudOrdered<T>(depth_msg, out_pc, removed_pc, return_removed_close, return_removed_far, replace_nans);
+
+  } else {
+
+    convertDepthToCloudUnordered<T>(depth_msg, out_pc, removed_pc, return_removed_close, return_removed_far, replace_nans);
+  }
+}
+/*//}*/
+
+/*//{ convertDepthToCloudUnordered() */
+// Depth conversion inspired by:
+// https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
+template <typename T>
+void SensorDepthCamera::convertDepthToCloudUnordered(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& out_pc, PC::Ptr& removed_pc,
+                                                     const bool return_removed_close, const bool return_removed_far, const bool replace_nans) {
 
   const unsigned int max_points_count = (image_height / downsample_step_row) * (image_width / downsample_step_col);
 
   out_pc = boost::make_shared<PC>();
   out_pc->resize(max_points_count);
-  if (return_removed_close || return_removed_far)
+  if (return_removed_close || return_removed_far) {
     removed_pc = boost::make_shared<PC>();
+  }
   removed_pc->resize(max_points_count);
 
   const T*  depth_row = reinterpret_cast<const T*>(&depth_msg->data[0]);
@@ -98,8 +116,11 @@ void SensorDepthCamera::convertDepthToCloud(const sensor_msgs::Image::ConstPtr& 
       const bool valid     = DepthTraits<T>::valid(depth_raw);
 
       if (!valid) {
-        if (replace_nans)
+
+        if (replace_nans) {
           imagePointToCloudPoint(u, v, replace_nan_depth, removed_pc->points.at(removed_it++));
+        }
+
         continue;
       }
 
@@ -137,6 +158,75 @@ void SensorDepthCamera::convertDepthToCloud(const sensor_msgs::Image::ConstPtr& 
 }
 /*//}*/
 
+/*//{ convertDepthToCloudOrdered() */
+// Depth conversion inspired by:
+// https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
+template <typename T>
+void SensorDepthCamera::convertDepthToCloudOrdered(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& out_pc, PC::Ptr& removed_pc,
+                                                   const bool return_removed_close, const bool return_removed_far, const bool replace_nans) {
+
+  const bool         return_removed = return_removed_close || return_removed_far;
+  const unsigned int W              = image_width / downsample_step_col;
+  const unsigned int H              = image_height / downsample_step_row;
+
+  out_pc           = boost::make_shared<PC>(W, H);
+  out_pc->width    = W;
+  out_pc->height   = H;
+  out_pc->is_dense = false;
+  pcl_conversions::toPCL(depth_msg->header, out_pc->header);
+
+  if (return_removed) {
+    removed_pc = boost::make_shared<PC>();
+  }
+  removed_pc->resize(W * H);
+
+  const T*  depth_row = reinterpret_cast<const T*>(&depth_msg->data[0]);
+  const int row_step  = downsample_step_row * depth_msg->step / sizeof(T);
+
+  size_t removed_it = 0;
+
+  unsigned int row = 0;
+
+  for (int v = 0; v < (int)depth_msg->height; v += downsample_step_row, depth_row += row_step) {
+
+    unsigned int col = 0;
+
+    for (int u = 0; u < (int)depth_msg->width; u += downsample_step_col) {
+
+      const auto depth_raw = depth_row[u];
+      const bool valid     = DepthTraits<T>::valid(depth_raw);
+      float      depth     = DepthTraits<T>::toMeters(depth_raw);
+
+      const bool invalid_close = depth < range_clip_min;
+      const bool invalid_far   = depth > range_clip_max;
+
+      // Convert to point cloud points and optionally clip range
+      if (valid && range_clip_use && (invalid_close || invalid_far)) {
+        depth = 0.0f;
+      }
+      imagePointToCloudPoint(u, v, depth, out_pc->at(col, row));
+
+      if (range_clip_use && ((return_removed_close && invalid_close) || (return_removed_far && invalid_far))) {
+        imagePointToCloudPoint(u, v, depth, removed_pc->points.at(removed_it++));
+      }
+
+      col++;
+    }
+
+    row++;
+  }
+
+  // Fill headers
+  if (return_removed) {
+    removed_pc->width    = removed_it;
+    removed_pc->height   = removed_it > 0 ? 1 : 0;
+    removed_pc->is_dense = true;
+    removed_pc->header   = out_pc->header;
+    removed_pc->points.resize(removed_it);
+  }
+}
+/*//}*/
+
 /*//{ imagePointToCloudPoint() */
 void SensorDepthCamera::imagePointToCloudPoint(const int x, const int y, const float depth, pt_XYZ& point) {
 
@@ -162,9 +252,9 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
   const auto& depth_msg = sh.getMsg();
 
   if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1 || depth_msg->encoding == sensor_msgs::image_encodings::MONO16) {
-    convertDepthToCloud<uint16_t>(depth_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false);
+    convertDepthToCloud<uint16_t>(depth_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false, keep_ordered);
   } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-    convertDepthToCloud<float>(depth_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false);
+    convertDepthToCloud<float>(depth_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false, keep_ordered);
   } else {
     ROS_ERROR_THROTTLE(5.0, "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
     return;
