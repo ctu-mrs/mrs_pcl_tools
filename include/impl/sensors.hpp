@@ -203,6 +203,11 @@ void SensorDepthCamera::convertDepthToCloudOrdered(const sensor_msgs::Image::Con
       // Convert to point cloud points and optionally clip range
       if (valid && range_clip_use && (invalid_close || invalid_far)) {
         depth = 0.0f;
+      } 
+
+      if (!valid) 
+      {
+        depth = -1.0;
       }
       imagePointToCloudPoint(u, v, depth, out_pc->at(col, row));
 
