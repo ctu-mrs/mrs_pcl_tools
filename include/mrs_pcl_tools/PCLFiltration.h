@@ -177,6 +177,7 @@ private:
 
   bool  filter_close_use;
   float filter_close_min;
+  float filter_far_max;
 
   bool  radius_outlier_use;
   float radius_outlier_radius;

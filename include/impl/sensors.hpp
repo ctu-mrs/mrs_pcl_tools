@@ -33,6 +33,7 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
 
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/close", filter_close_use, true);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/close_min", filter_close_min, 0.2f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/far_max", filter_far_max, 6.0f);
 
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/radius_outlier/radius", radius_outlier_radius, 0.0f);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/radius_outlier/neighbors", radius_outlier_neighbors, 0);
@@ -287,7 +288,7 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
     for (auto& point : cloud->points) {
       if (range_exists) {
         const auto range = getFieldValue<uint32_t>(point, range_offset);
-        if (range < filter_close_min) {
+        if (range < filter_close_min  || range > filter_far_max) {
           point.x = std::numeric_limits<float>::quiet_NaN();
           point.y = std::numeric_limits<float>::quiet_NaN();
           point.z = std::numeric_limits<float>::quiet_NaN();
@@ -295,7 +296,7 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
       } else {
         const vec3_t pt       = point.getArray3fMap();
         const float  range_sq = pt.squaredNorm();
-        if (range_sq < filter_close_min) {
+        if (range_sq < filter_close_min || range_sq > filter_far_max) {
           point.x = std::numeric_limits<float>::quiet_NaN();
           point.y = std::numeric_limits<float>::quiet_NaN();
           point.z = std::numeric_limits<float>::quiet_NaN();
