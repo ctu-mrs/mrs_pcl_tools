@@ -205,19 +205,23 @@ void SensorDepthCamera::convertDepthToCloudOrdered(const sensor_msgs::Image::Con
       const bool invalid_close = depth < range_clip_min;
       const bool invalid_far   = depth > range_clip_max;
 
-      // Convert to point cloud points and optionally clip range
-      if (valid && range_clip_use && (invalid_close || invalid_far)) {
-        depth = 0.0f;
-      }
-
-      /* if (!valid) */
-      /* { */
-      /*   depth = -1.0; */
-      /* } */
-      imagePointToCloudPoint(u, v, depth, out_pc->at(col, row));
-
-      if (range_clip_use && ((return_removed_close && invalid_close) || (return_removed_far && invalid_far))) {
-        imagePointToCloudPoint(u, v, depth, removed_pc->points.at(removed_it++));
+      if (!valid) {
+        // fill invalid points with NaN
+        out_pc->at(col, row).x = std::numeric_limits<float>::quiet_NaN();
+        out_pc->at(col, row).y = std::numeric_limits<float>::quiet_NaN();
+        out_pc->at(col, row).z = std::numeric_limits<float>::quiet_NaN();
+      } else if (range_clip_use && (invalid_close || invalid_far)) {
+        // fill clipped points with NaN
+        out_pc->at(col, row).x = std::numeric_limits<float>::quiet_NaN();
+        out_pc->at(col, row).y = std::numeric_limits<float>::quiet_NaN();
+        out_pc->at(col, row).z = std::numeric_limits<float>::quiet_NaN();
+        // return removed points in a separate pointcloud
+        if ((return_removed_close && invalid_close) || (return_removed_far && invalid_far)) {
+          imagePointToCloudPoint(u, v, depth, removed_pc->points.at(removed_it++));
+        }
+      } else {
+        // fill valid points
+        imagePointToCloudPoint(u, v, depth, out_pc->at(col, row));
       }
 
       col++;
@@ -288,14 +292,14 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
     for (auto& point : cloud->points) {
       if (range_exists) {
         const auto range = getFieldValue<uint32_t>(point, range_offset);
-        if (range < filter_close_min  || range > filter_far_max) {
+        if (range < filter_close_min || range > filter_far_max) {
           point.x = std::numeric_limits<float>::quiet_NaN();
           point.y = std::numeric_limits<float>::quiet_NaN();
           point.z = std::numeric_limits<float>::quiet_NaN();
         }
       } else {
         const vec3_t pt       = point.getArray3fMap();
-        const float  range_sq = pt.squaredNorm();
+        const float  range_sq = pt.norm();
         if (range_sq < filter_close_min || range_sq > filter_far_max) {
           point.x = std::numeric_limits<float>::quiet_NaN();
           point.y = std::numeric_limits<float>::quiet_NaN();
