@@ -512,6 +512,7 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
     // Read point cloud topic
     const sensor_msgs::PointCloud2::Ptr cloud_msg = msg.instantiate<sensor_msgs::PointCloud2>();
     if (!cloud_msg) {
+      ROS_WARN("Skipping msg: could not instantiate it to a sensor_msgs::PointCloud2.");
       continue;
     }
     ROS_INFO_ONCE("Found atleast one valid message of type (%s).", msg.getDataType().c_str());
@@ -519,6 +520,8 @@ std::vector<TRAJECTORY_POINT> estimateGroundTruthTrajectoryFromRosbag(const rosb
     // Filter msgs before specified start time of reading
     const ros::Time stamp = cloud_msg->header.stamp;
     if (stamp < rosbag_start_time || stamp > rosbag_end_time) {
+      ROS_INFO("Skipping msg: timestamp (%.2f) is out of the area of interest (%.2f, %.2f).", stamp.toSec(), rosbag_start_time.toSec(),
+               rosbag_end_time.toSec());
       continue;
     }
     ROS_INFO_ONCE("Found atleast one valid message with valid time.");
@@ -728,9 +731,12 @@ int main(int argc, char **argv) {
   rosbag::View tf_dynamic = rosbag::View(bag, rosbag::TopicQuery(std::vector<std::string>{"/tf"}));
   rosbag::View tf_static  = rosbag::View(bag, rosbag::TopicQuery(std::vector<std::string>{"/tf_static"}));
 
-  const double        rosbag_start_time_sec = tf_dynamic.getBeginTime().toSec() + args.start_time;
-  const ros::Duration bag_duration          = tf_dynamic.getEndTime() - tf_dynamic.getBeginTime();
-  const double        rosbag_end_time_sec   = tf_dynamic.getBeginTime().toSec() + std::fmin(bag_duration.toSec(), args.end_time);
+  rosbag::View        view(bag);
+  const ros::Time     bag_begin_time        = view.getBeginTime();
+  const double        rosbag_start_time_sec = bag_begin_time.toSec() + args.start_time;
+  const ros::Time     bag_end_time          = view.getEndTime();
+  const ros::Duration bag_duration          = bag_end_time - bag_begin_time;
+  const double        rosbag_end_time_sec   = bag_begin_time.toSec() + std::fmin(bag_duration.toSec(), args.end_time);
 
   rosbag_start_time.fromSec(rosbag_start_time_sec);
   rosbag_end_time.fromSec(rosbag_end_time_sec);
