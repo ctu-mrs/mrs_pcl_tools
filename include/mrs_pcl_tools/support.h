@@ -23,6 +23,27 @@ namespace mrs_pcl_tools
 std::optional<PC::Ptr>      loadPcXYZ(const std::string &pcd_file);
 std::optional<PC_NORM::Ptr> loadPcNormals(const std::string &pcd_file);
 
+void savePCD(const std::string &pcd_file, const sensor_msgs::PointCloud2::Ptr &cloud, const bool &binary = true);
+
+PC_NORM::Ptr estimateNormals(const PC::Ptr &cloud, const float &normal_est_radius);
+
+bool hasNormals(const std::vector<sensor_msgs::PointField> &fields);
+bool hasNormals(const std::string &pcd_file);
+bool hasNormals(const sensor_msgs::PointCloud2::ConstPtr &cloud);
+bool hasField(const std::string &field, const sensor_msgs::PointCloud2::ConstPtr &msg);
+
+template <typename T>
+void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> &cloud);
+
+void publishCloudMsg(const ros::Publisher &pub, const sensor_msgs::PointCloud2::ConstPtr &cloud_msg);
+
+void printEigenMatrix(const Eigen::Matrix4f &mat, const std::string &prefix = "");
+
+// math functions
+Eigen::Matrix4f getRotationMatrixAroundPoint(const Eigen::Matrix3f &rotation, const Eigen::Vector4f &point);
+
+// | ------------------- Templated functions ------------------ |
+
 /*//{ loadCloud() */
 template <typename PC_t>
 bool loadCloud(const std::string &filepath, typename boost::shared_ptr<PC_t> const &cloud, const bool verbose = true) {
@@ -55,24 +76,30 @@ bool loadCloud(const std::string &filepath, typename boost::shared_ptr<PC_t> con
 }
 /*//}*/
 
-void savePCD(const std::string &pcd_file, const sensor_msgs::PointCloud2::Ptr &cloud, const bool &binary = true);
+/*//{ getFieldOffset() */
+template <typename pt_t>
+std::tuple<bool, std::size_t> getFieldOffset(const std::string &field_name) {
+  std::vector<pcl::PCLPointField> fields;
+  const int                       field_idx = pcl::getFieldIndex<pt_t>(field_name, fields);
 
-PC_NORM::Ptr estimateNormals(const PC::Ptr &cloud, const float &normal_est_radius);
+  if (field_idx == -1) {
+    return {false, 0};
+  }
 
-bool hasNormals(const std::vector<sensor_msgs::PointField> &fields);
-bool hasNormals(const std::string &pcd_file);
-bool hasNormals(const sensor_msgs::PointCloud2::ConstPtr &cloud);
-bool hasField(const std::string &field, const sensor_msgs::PointCloud2::ConstPtr &msg);
+  const std::size_t field_offset = fields.at(field_idx).offset;
+  return {true, field_offset};
+}
+/*//}*/
 
-template <typename T>
-void publishCloud(const ros::Publisher &pub, const pcl::PointCloud<T> &cloud);
-
-void publishCloudMsg(const ros::Publisher &pub, const sensor_msgs::PointCloud2::ConstPtr &cloud_msg);
-
-void printEigenMatrix(const Eigen::Matrix4f &mat, const std::string &prefix = "");
-
-// math functions
-Eigen::Matrix4f getRotationMatrixAroundPoint(const Eigen::Matrix3f &rotation, const Eigen::Vector4f &point);
+/*//{ getFieldValue() */
+template <typename T, typename pt_t>
+T getFieldValue(const pt_t &point, std::size_t field_offset) {
+  const std::uint8_t *pt_data     = reinterpret_cast<const std::uint8_t *>(&(point));
+  T                   field_value = 0;
+  memcpy(&field_value, pt_data + field_offset, sizeof(T));
+  return field_value;
+}
+/*//}*/
 
 namespace filters
 {
