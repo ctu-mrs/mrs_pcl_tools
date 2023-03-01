@@ -31,10 +31,6 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/voxel_grid/resolution", voxel_grid_resolution, 0.0f);
   voxel_grid_use = voxel_grid_resolution > 0.0f;
 
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/close", filter_close_use, true);
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/close_min", filter_close_min, 0.2f);
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/far_max", filter_far_max, 6.0f);
-
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/radius_outlier/radius", radius_outlier_radius, 0.0f);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/radius_outlier/neighbors", radius_outlier_neighbors, 0);
   radius_outlier_use = radius_outlier_radius > 0.0f && radius_outlier_neighbors > 0;
@@ -284,31 +280,6 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
   diag_msg->vfov                                    = vfov;
 
   // Apply filters to the original cloud (beware, the filters are applied in sequential order: no parallelization)
-  if (filter_close_use) {
-    // filtering out close
-    using pt_t                              = typename PC::PointType;
-    const auto [range_exists, range_offset] = mrs_pcl_tools::getFieldOffset<pt_t>("range");
-
-    for (auto& point : cloud->points) {
-      if (range_exists) {
-        const auto range = getFieldValue<uint32_t>(point, range_offset);
-        if (range < filter_close_min || range > filter_far_max) {
-          point.x = std::numeric_limits<float>::quiet_NaN();
-          point.y = std::numeric_limits<float>::quiet_NaN();
-          point.z = std::numeric_limits<float>::quiet_NaN();
-        }
-      } else {
-        const vec3_t pt       = point.getArray3fMap();
-        const float  range_sq = pt.norm();
-        if (range_sq < filter_close_min || range_sq > filter_far_max) {
-          point.x = std::numeric_limits<float>::quiet_NaN();
-          point.y = std::numeric_limits<float>::quiet_NaN();
-          point.z = std::numeric_limits<float>::quiet_NaN();
-        }
-      }
-    }
-  }
-
   if (voxel_grid_use) {
     cloud = mrs_pcl_tools::filters::applyVoxelGridFilter(cloud, voxel_grid_resolution);
   }
