@@ -30,7 +30,7 @@ depth:
         resolution: 0.05 # used if >0, BREAKS ordering even if keep_ordered=true
       bilateral:
         sigma_S: 0.0 # used if both >0, BREAKS ordering even if keep_ordered=true
-        sigma_R: 0.005
+        sigma_R: 0.005 # crashes with bad_alloc error
 
   down_rgbd:
 

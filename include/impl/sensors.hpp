@@ -1,6 +1,5 @@
 
 /* class SensorDepthCamera */
-#include <mrs_pcl_tools/PCLFiltration.h>
 
 /*//{ initialize() */
 void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_ptr<CommonHandlers_t> common_handlers, const std::string& prefix,
