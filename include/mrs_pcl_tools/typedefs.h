@@ -1,7 +1,8 @@
 #pragma once
+#define PCL_NO_PRECOMPILE
 
+#include "mrs_pcl_tools/point_types.h"
 #include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
 
 #ifdef COMPILE_WITH_OUSTER
 // point types

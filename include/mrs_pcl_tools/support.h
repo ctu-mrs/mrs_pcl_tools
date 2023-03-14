@@ -74,7 +74,6 @@ void printEigenMatrix(const Eigen::Matrix4f &mat, const std::string &prefix = ""
 // math functions
 Eigen::Matrix4f getRotationMatrixAroundPoint(const Eigen::Matrix3f &rotation, const Eigen::Vector4f &point);
 
-
 /*//{ getFieldOffset() */
 template <typename pt_t>
 std::tuple<bool, std::size_t> getFieldOffset(const std::string& field_name) {

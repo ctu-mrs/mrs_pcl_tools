@@ -2,6 +2,7 @@
 
 namespace mrs_pcl_tools
 {
+
 /* onInit() //{ */
 void PCLFiltration::onInit() {
 
@@ -192,11 +193,22 @@ void PCLFiltration::lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::Point
   const mrs_lib::ScopeTimer timer =
       mrs_lib::ScopeTimer("PCLFiltration::lidar3dCallback", _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
-  const bool is_ouster_type = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
-  if (is_ouster_type) {
+  // Ouster type
+  if (hasField("range", msg) && hasField("ring", msg) && hasField("t", msg)) {
 
     NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: ouster_ros::Point.");
     PC_OS::Ptr cloud = boost::make_shared<PC_OS>();
+    pcl::fromROSMsg(*msg, *cloud);
+    process_msg(cloud);
+    diag_msg->cols_after = cloud->width;
+    diag_msg->rows_after = cloud->height;
+
+    // Pandar type
+  } else if (hasField("ring", msg) && hasField("intensity", msg) && hasField("timestamp", msg)) {
+
+    NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: pandar_pointcloud::PointXYZIT.");
+
+    pcl::PointCloud<pandar_pointcloud::PointXYZIT>::Ptr cloud = boost::make_shared<pcl::PointCloud<pandar_pointcloud::PointXYZIT>>();
     pcl::fromROSMsg(*msg, *cloud);
     process_msg(cloud);
     diag_msg->cols_after = cloud->width;
@@ -269,14 +281,15 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
     const auto orig_pc   = inout_pc_ptr;
     inout_pc_ptr         = boost::make_shared<PC>();
     inout_pc_ptr->header = orig_pc->header;
-    inout_pc_ptr->resize(orig_pc->size());
-    size_t it = 0;
+    inout_pc_ptr->reserve(orig_pc->size());
+
     for (const auto& pt : orig_pc->points) {
       if (pcl::isFinite(pt)) {
-        inout_pc_ptr->at(it++) = pt;
+        inout_pc_ptr->push_back(pt);
       }
     }
-    inout_pc_ptr->resize(it);
+    inout_pc_ptr->height = 1;
+    inout_pc_ptr->width  = inout_pc_ptr->size();
   }
   inout_pc_ptr->is_dense = !_lidar3d_keep_organized;
 
@@ -291,11 +304,17 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
   const size_t width_after  = inout_pc_ptr->width;
   size_t       points_after = 0;
   if (_lidar3d_keep_organized) {
+
     for (const auto& pt : *inout_pc_ptr)
-      if (pcl::isFinite(pt))
+      if (pcl::isFinite(pt)) {
         points_after++;
-  } else
+      }
+
+  } else {
+
     points_after = inout_pc_ptr->size();
+  }
+
   NODELET_INFO_THROTTLE(
       5.0,
       "[PCLFiltration] Processed 3D LIDAR data (run time: %.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
@@ -312,8 +331,9 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFar(typename boost::
   // Prepare pointcloud of removed points
   typename PC::Ptr removed_pc = boost::make_shared<PC>();
   removed_pc->header          = inout_pc->header;
-  if (return_removed_close || return_removed_far)
+  if (return_removed_close || return_removed_far) {
     removed_pc->resize(inout_pc->size());
+  }
   size_t removed_it = 0;
 
   // Attempt to get the range field name's index
@@ -363,8 +383,10 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowFields(type
   // Prepare pointcloud of removed points
   typename PC::Ptr removed_pc = boost::make_shared<PC>();
   removed_pc->header          = inout_pc->header;
-  if (clip_return_removed_close || clip_return_removed_far || return_removed_fields)
+  if (clip_return_removed_close || clip_return_removed_far || return_removed_fields) {
     removed_pc->resize(inout_pc->size());
+  }
+
   size_t removed_it = 0;
 
   bool filter_intensity    = _lidar3d_filter_intensity_use;
