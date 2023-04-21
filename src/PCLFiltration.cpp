@@ -56,6 +56,18 @@ void PCLFiltration::onInit() {
   _common_handlers->param_loader->loadParam("lidar3d/downsampling/row_step", _lidar3d_row_step, 1);
   _common_handlers->param_loader->loadParam("lidar3d/downsampling/col_step", _lidar3d_col_step, 1);
 
+  // load parameters for publishing lidar data as an image
+  _common_handlers->param_loader->loadParam("lidar3d/publish_range_image", _lidar3d_publish_range_image, false);
+  if (_lidar3d_publish_range_image) {
+    if (!_lidar3d_keep_organized) {
+
+      NODELET_ERROR(
+          "[PCLFiltration]: Publishing of lidar frames as range-images enabled, but that requires `lidar3d/keep_organized` to be true. Will not publish "
+          "images.");
+      _lidar3d_publish_range_image = false;
+    }
+  }
+
   // load dynamic row selection
   if (_lidar3d_dynamic_row_selection_enabled && _lidar3d_row_step > 1 && _lidar3d_row_step % 2 != 0) {
     NODELET_ERROR("[PCLFiltration]: Dynamic selection of lidar rows is enabled, but `lidar_row_step` is not even and/or greater than 1. Ending nodelet.");
@@ -128,16 +140,26 @@ void PCLFiltration::onInit() {
       ros::shutdown();
     }
 
-
+    // Setup subscribers
     mrs_lib::SubscribeHandlerOptions shopts(nh);
     shopts.node_name          = "PCLFiltration";
     shopts.no_message_timeout = ros::Duration(5.0);
     _sub_lidar3d =
         mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>(shopts, "lidar3d_in", std::bind(&PCLFiltration::lidar3dCallback, this, std::placeholders::_1));
+
+    // Setup publishers
     _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 1);
     _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 1);
-    if (_filter_removeBelowGround.used())
+
+    if (_filter_removeBelowGround.used()) {
       _pub_lidar3d_below_ground = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_below_ground_out", 1);
+    }
+
+    if (_lidar3d_publish_range_image) {
+      _sub_ouster_info =
+          mrs_lib::SubscribeHandler<mrs_msgs::OusterInfo>(shopts, "ouster_info_in", std::bind(&PCLFiltration::ousterInfoCallback, this, std::placeholders::_1));
+      _pub_lidar3d_image = nh.advertise<sensor_msgs::Image>("lidar3d_image_out", 1);
+    }
   }
 
   reconfigure_server_ = boost::make_shared<ReconfigureServer>(config_mutex_, nh);
@@ -199,7 +221,8 @@ void PCLFiltration::lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::Point
     NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: ouster_ros::Point.");
     PC_OS::Ptr cloud = boost::make_shared<PC_OS>();
     pcl::fromROSMsg(*msg, *cloud);
-    process_msg(cloud);
+    processMsgAndPublish(cloud);
+    convertToImageAndPublish(cloud);
     diag_msg->cols_after = cloud->width;
     diag_msg->rows_after = cloud->height;
 
@@ -210,7 +233,7 @@ void PCLFiltration::lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::Point
 
     pcl::PointCloud<pandar_pointcloud::PointXYZIT>::Ptr cloud = boost::make_shared<pcl::PointCloud<pandar_pointcloud::PointXYZIT>>();
     pcl::fromROSMsg(*msg, *cloud);
-    process_msg(cloud);
+    processMsgAndPublish(cloud);
     diag_msg->cols_after = cloud->width;
     diag_msg->rows_after = cloud->height;
 
@@ -219,18 +242,42 @@ void PCLFiltration::lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::Point
     NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: pcl::PointXYZI.");
     PC_I::Ptr cloud = boost::make_shared<PC_I>();
     pcl::fromROSMsg(*msg, *cloud);
-    process_msg(cloud);
+    processMsgAndPublish(cloud);
     diag_msg->cols_after = cloud->width;
     diag_msg->rows_after = cloud->height;
   }
 
   _common_handlers->diagnostics->publish(diag_msg);
 }
+//}
 
+/* ousterInfoCallback() //{ */
+void PCLFiltration::ousterInfoCallback(mrs_lib::SubscribeHandler<mrs_msgs::OusterInfo>& sh) {
+
+  if (!is_initialized) {
+    return;
+  }
+
+  NODELET_INFO("[PCLFiltration] Received OusterInfo message, parsing \"pixel_shift_by_row\" variable.");
+
+  const auto msg = sh.getMsg();
+  {
+    std::scoped_lock lock(_ouster_info_mutex);
+    _ouster_pixel_shift_by_row = msg->pixel_shift_by_row;
+    _ouster_info_received      = true;
+
+    // Shutdown SH
+    sh.stop();
+  }
+}
+//}
+
+/*//{ processMsgAndPublish() */
 template <typename PC>
-void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
+void PCLFiltration::processMsgAndPublish(typename boost::shared_ptr<PC>& inout_pc_ptr) {
 
-  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("PCLFiltration::process_msg", _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
+  mrs_lib::ScopeTimer timer =
+      mrs_lib::ScopeTimer("PCLFiltration::processMsgAndPublish", _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
   const size_t height_before = inout_pc_ptr->height;
   const size_t width_before  = inout_pc_ptr->width;
@@ -320,7 +367,79 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
       "[PCLFiltration] Processed 3D LIDAR data (run time: %.1f ms; points before: %lu, after: %lu; dim before: (w: %lu, h: %lu), after: (w: %lu, h: %lu)).",
       timer.getLifetime(), points_before, points_after, width_before, height_before, width_after, height_after);
 }
-//}
+/*//}*/
+
+/*//{ convertToImageAndPublish() */
+template <typename PC>
+void PCLFiltration::convertToImageAndPublish(const typename boost::shared_ptr<PC> cloud) {
+
+  if (!_lidar3d_publish_range_image || _pub_lidar3d_image.getNumSubscribers() == 0) {
+    return;
+  }
+
+  mrs_lib::ScopeTimer timer =
+      mrs_lib::ScopeTimer("PCLFiltration::convertToImageAndPublish", _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
+
+  std::vector<int32_t> pixel_shift_by_row;
+  {
+    std::scoped_lock lock(_ouster_info_mutex);
+    if (_ouster_info_received) {
+      pixel_shift_by_row = _ouster_pixel_shift_by_row;
+    } else {
+      NODELET_WARN_THROTTLE(1.0, "[PCLFiltration] Have not received OusterInfo variable \"pixel_shift_by_row\". Using zero pixel shifts.");
+      pixel_shift_by_row.resize(cloud->height, 0);
+    }
+  }
+
+  using pixel_type                 = uint8_t;
+  constexpr size_t bit_depth       = 8 * sizeof(pixel_type);
+  const size_t     pixel_value_max = std::numeric_limits<pixel_type>::max();
+
+  std::stringstream encoding_ss;
+  encoding_ss << "mono" << bit_depth;
+  const std::string encoding = encoding_ss.str();
+
+  const size_t W = cloud->width;
+  const size_t H = cloud->height;
+
+  sensor_msgs::Image img;
+  img.width           = W;
+  img.height          = H;
+  img.step            = W;
+  img.encoding        = encoding;
+  img.header.frame_id = cloud->header.frame_id;
+  pcl_conversions::fromPCL(cloud->header.stamp, img.header.stamp);
+
+  img.data.resize(cloud->width * cloud->height * bit_depth / (8 * sizeof(*img.data.data())));
+
+  // Find upper bound for range
+  double max_range_mm = 0.0;
+  for (const auto& p : cloud->points) {
+    max_range_mm = std::max(max_range_mm, static_cast<double>(p.range));
+  }
+
+  // Fill image with range data
+  for (size_t u = 0; u < H; u++) {
+    const auto& px_offset = pixel_shift_by_row[u];
+    for (size_t v = 0; v < W; v++) {
+      const size_t vv = (v + W - px_offset) % W;
+      const auto&  pt = cloud->at(vv, u);
+
+      pixel_type val = 0;
+      // Check if valid point (range has not been invalidated during the validation process)
+      if (pt.getArray3fMap().allFinite()) {
+        // Interpolate in interval 0-255
+        val = pixel_value_max - std::round(pixel_value_max * (static_cast<double>(pt.range) / max_range_mm));
+      }
+      reinterpret_cast<pixel_type*>(img.data.data())[u * W + v] = val;
+    }
+  }
+
+  _pub_lidar3d_image.publish(img);
+
+  NODELET_INFO_THROTTLE(5.0, "[PCLFiltration] Published 3D LIDAR data as range-image (run time: %.1f ms).", timer.getLifetime());
+}
+/*//}*/
 
 /*//{ removeCloseAndFar() */
 template <typename PC>
@@ -717,6 +836,11 @@ void PCLFiltration::invalidatePoint(pt_t& point) {
   point.x = _lidar3d_invalid_value;
   point.y = _lidar3d_invalid_value;
   point.z = _lidar3d_invalid_value;
+
+  /* const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range"); */
+  /* if (range_exists) { */
+  /*   pcl::setFieldValue<pt_t, uint32_t>(point, range_offset, 0); */
+  /* } */
 }
 /*//}*/
 

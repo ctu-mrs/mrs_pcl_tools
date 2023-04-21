@@ -9,13 +9,14 @@ lidar3d:
   vfov:      90       # [deg]
 
   republish: true
+  publish_range_image: true
   keep_organized: true
 
   clip:
     range:
       use: true
-      min: 0.7  # [m]
-      max: 40.0 # [m]
+      min: 0.6  # [m]
+      max: 50.0 # [m]
     intensity:
       use: false
       threshold: 35

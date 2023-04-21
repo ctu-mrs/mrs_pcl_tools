@@ -28,6 +28,7 @@
 #include <visualization_msgs/MarkerArray.h>
 
 #include <mrs_msgs/PclToolsDiagnostics.h>
+#include <mrs_msgs/OusterInfo.h>
 
 #include <boost/smart_ptr/make_shared_array.hpp>
 #include <limits>
@@ -53,7 +54,8 @@ using quat_t = Eigen::Quaternionf;
 // Encapsulate differences between processing float and uint16_t depths in RGBD data
 template <typename T>
 struct DepthTraits
-{};
+{
+};
 
 template <>
 struct DepthTraits<uint16_t>
@@ -169,12 +171,14 @@ private:
   bool is_initialized = false;
 
   mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2> _sub_lidar3d;
+  mrs_lib::SubscribeHandler<mrs_msgs::OusterInfo>     _sub_ouster_info;
 
   ros::Publisher _pub_lidar3d;
   ros::Publisher _pub_lidar3d_over_max_range;
   ros::Publisher _pub_lidar3d_below_ground;
   ros::Publisher _pub_fitted_plane;
   ros::Publisher _pub_ground_point;
+  ros::Publisher _pub_lidar3d_image;
 
   boost::recursive_mutex                               config_mutex_;
   typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;
@@ -196,6 +200,11 @@ private:
   float       _lidar3d_invalid_value;
   bool        _lidar3d_dynamic_row_selection_enabled;
   bool        _lidar3d_downsample_use;
+
+  void                 ousterInfoCallback(mrs_lib::SubscribeHandler<mrs_msgs::OusterInfo>& sh);
+  std::mutex           _ouster_info_mutex;
+  bool                 _ouster_info_received = false;
+  std::vector<int32_t> _ouster_pixel_shift_by_row;
 
   bool     _lidar3d_rangeclip_use;
   float    _lidar3d_rangeclip_min_sq;
@@ -227,6 +236,8 @@ private:
   vec3_t       _lidar3d_cropbox_max;
   unsigned int _lidar3d_dynamic_row_selection_offset = 0;
 
+  bool _lidar3d_publish_range_image;
+
   std::shared_ptr<CommonHandlers_t> _common_handlers;
 
   /* Depth camera */
@@ -239,7 +250,10 @@ private:
 
   /* Functions */
   template <typename PC>
-  void process_msg(typename boost::shared_ptr<PC>& inout_pc);
+  void processMsgAndPublish(typename boost::shared_ptr<PC>& inout_pc);
+
+  template <typename PC>
+  void convertToImageAndPublish(const typename boost::shared_ptr<PC> cloud);
 
   template <typename PC>
   void cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc_ptr);

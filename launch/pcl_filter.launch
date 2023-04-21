@@ -7,8 +7,8 @@
   <arg name="custom_config" default="" />
   <arg name="node_name" default="pcl_filter" />
   <arg name="name_suffix" default="" />
-  <arg name="topic_3d_lidar_in" default="os_cloud_nodelet/points" />
-  <arg name="topic_3d_lidar_out" default="~points_processed" />
+  <arg name="topic_3d_lidar_in" default="/$(arg UAV_NAME)/os_cloud_nodelet/points_processed" />
+  <arg name="topic_3d_lidar_out" default="/$(arg UAV_NAME)/os_cloud_nodelet/points_tmp" />
 
   <arg     if="$(arg debug)" name="launch_prefix" value="debug_roslaunch" />
   <arg unless="$(arg debug)" name="launch_prefix" value="" />
@@ -39,10 +39,12 @@
       <remap from="~lidar3d_in" to="$(arg topic_3d_lidar_in)" />
       <remap from="~rplidar_in" to="rplidar/scan_raw" />
       <remap from="~rangefinder_in" to="mavros/distance_sensor/garmin" />
+      <remap from="~ouster_info_in" to="os_nodelet/sensor_info" />
 
       <!-- Publishers -->
       <remap from="~lidar3d_out" to="$(arg topic_3d_lidar_out)" />
       <remap from="~lidar3d_over_max_range_out" to="~points_over_max_range" />
+      <remap from="~lidar3d_image_out" to="~image" />
       <remap from="~rplidar_out" to="rplidar/scan_processed" />
       <remap from="~diagnostics_out" to="~diagnostics" />
 
