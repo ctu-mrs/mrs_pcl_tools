@@ -1,4 +1,4 @@
-#include "mrs_pcl_tools/groundplane_detector.h"
+#include <mrs_pcl_tools/groundplane_detector.h>
 
 namespace mrs_pcl_tools
 {

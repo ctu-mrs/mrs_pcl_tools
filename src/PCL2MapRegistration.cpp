@@ -1,6 +1,7 @@
-#include "mrs_pcl_tools/PCL2MapRegistration.h"
-#include "pcl_conversions/pcl_conversions.h"
-#include "sensor_msgs/PointCloud2.h"
+#include <PCL2MapRegistration.h>
+
+#include <pcl_conversions/pcl_conversions.h>
+#include <sensor_msgs/PointCloud2.h>
 #include <pcl/common/transforms.h>
 #include <pcl/filters/filter.h>
 #include <pcl/filters/filter_indices.h>
@@ -9,6 +10,7 @@ namespace mrs_pcl_tools
 {
 
 /* onInit() //{ */
+
 void PCL2MapRegistration::onInit() {
 
   _nh = nodelet::Nodelet::getMTPrivateNodeHandle();

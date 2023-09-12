@@ -33,47 +33,45 @@
 
 #include <tf2_eigen/tf2_eigen.h>
 
-#include "mrs_pcl_tools/common_includes_and_typedefs.h"
-#include "mrs_pcl_tools/groundplane_detector.h"
+#include <mrs_pcl_tools/common_includes_and_typedefs.h>
+#include <mrs_pcl_tools/groundplane_detector.h>
 
 //}
 
 namespace mrs_pcl_tools
 {
-  using vec3_t = Eigen::Vector3f;
-  using vec4_t = Eigen::Vector4f;
-  using quat_t = Eigen::Quaternionf;
+using vec3_t = Eigen::Vector3f;
+using vec4_t = Eigen::Vector4f;
+using quat_t = Eigen::Quaternionf;
 
-  struct CommonHandlers_t;
+struct CommonHandlers_t;
 
-  /* class RemoveBelowGroundFilter //{ */
+/* class RemoveBelowGroundFilter //{ */
 
-  class RemoveBelowGroundFilter
-  {
-  public:
-    void initialize(ros::NodeHandle& nh, const std::shared_ptr<CommonHandlers_t> common_handlers);
+class RemoveBelowGroundFilter {
+public:
+  void initialize(ros::NodeHandle& nh, const std::shared_ptr<CommonHandlers_t> common_handlers);
 
-    bool used() const
-    {
-      return initialized;
-    }
+  bool used() const {
+    return initialized;
+  }
 
-    template <typename PC>
-    typename boost::shared_ptr<PC> applyInPlace(const typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
+  template <typename PC>
+  typename boost::shared_ptr<PC> applyInPlace(const typename boost::shared_ptr<PC>& inout_pc, const bool return_removed = false);
 
-  private:
-    bool initialized = false;
+private:
+  bool initialized = false;
 
-    GroundplaneDetector m_ground_detector;
+  GroundplaneDetector m_ground_detector;
 
-    std::shared_ptr<mrs_lib::Transformer> transformer = nullptr;
+  std::shared_ptr<mrs_lib::Transformer> transformer = nullptr;
 
-    bool keep_organized = false;
-    double plane_offset = 1.0;  // metres
-  };
+  bool   keep_organized = false;
+  double plane_offset   = 1.0;  // metres
+};
 
-#include <impl/remove_below_ground_filter.hpp>
+#include <mrs_pcl_tools/impl/remove_below_ground_filter.hpp>
 
-  //}
+//}
 
 }  // namespace mrs_pcl_tools

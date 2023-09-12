@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1.2)
+cmake_minimum_required(VERSION 3.5)
 project(mrs_pcl_tools)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -38,7 +38,7 @@ add_service_files(DIRECTORY srv/registration FILES
   SrvRegisterPointCloudOffline.srv
   )
 
-find_package(PCL REQUIRED COMPONENTS)
+find_package(PCL REQUIRED)
 
 # Include Eigen3
 find_package(Eigen3 REQUIRED)
@@ -64,7 +64,13 @@ generate_dynamic_reconfigure_options(
   cfg/pcl_filtration_dynparam.cfg
   cfg/pcl2map_registration_dynparam.cfg
   )
-generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs visualization_msgs mrs_msgs)
+
+generate_messages(DEPENDENCIES
+  std_msgs
+  sensor_msgs
+  geometry_msgs
+  visualization_msgs mrs_msgs
+  )
 
 ###################################
 ## catkin specific configuration ##
@@ -105,6 +111,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
+  ${dynamic_reconfigure_PACKAGE_PATH}/cmake/cfgbuild.cmake
   )
 
 
@@ -298,8 +305,8 @@ install(TARGETS ${LIBRARIES}
   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
   )
 
-install(DIRECTORY include/
-  DESTINATION ${CATKIN_GLOBAL_INCLUDE_DESTINATION}
+install(DIRECTORY include/mrs_pcl_tools/
+  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
   )
 
 install(TARGETS ${EXECUTABLES}

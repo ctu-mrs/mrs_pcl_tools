@@ -1,7 +1,7 @@
 #pragma once
 
 /* includes and typedefs //{ */
-#include "mrs_pcl_tools/support.h"
+#include <mrs_pcl_tools/support.h>
 
 #include <mutex>
 #include <tuple>
@@ -22,9 +22,9 @@
 #include <pcl/surface/concave_hull.h>
 #include <pcl/surface/convex_hull.h>
 
-#include "mrs_pcl_tools/pcl2map_registration_dynparamConfig.h"
-#include "mrs_pcl_tools/SrvRegisterPointCloudByName.h"
-#include "mrs_pcl_tools/SrvRegisterPointCloudOffline.h"
+#include <mrs_pcl_tools/pcl2map_registration_dynparamConfig.h>
+#include <mrs_pcl_tools/SrvRegisterPointCloudByName.h>
+#include <mrs_pcl_tools/SrvRegisterPointCloudOffline.h>
 
 #include <mrs_lib/scope_timer.h>
 

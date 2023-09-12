@@ -1,7 +1,8 @@
 #pragma once
 
 /* includes //{ */
-#include "support.h"
+
+#include <mrs_pcl_tools/support.h>
 
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/extract_indices.h>
@@ -34,9 +35,9 @@
 
 #include <tf2_eigen/tf2_eigen.h>
 
-#include "mrs_pcl_tools/pcl_filtration_dynparamConfig.h"
+#include <mrs_pcl_tools/pcl_filtration_dynparamConfig.h>
 
-#include "mrs_pcl_tools/remove_below_ground_filter.h"
+#include <mrs_pcl_tools/remove_below_ground_filter.h>
 
 //}
 
@@ -163,7 +164,7 @@ private:
   float bilateral_sigma_R;
 };
 
-#include "impl/sensors.hpp"
+#include <mrs_pcl_tools/impl/sensors.hpp>
 
 //}
 

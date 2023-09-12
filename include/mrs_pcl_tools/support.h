@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common_includes_and_typedefs.h"
+#include <mrs_pcl_tools/common_includes_and_typedefs.h>
 
 #include <pcl/io/pcd_io.h>
 #include <pcl/io/ply_io.h>

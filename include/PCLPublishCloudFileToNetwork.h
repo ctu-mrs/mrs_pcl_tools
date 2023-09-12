@@ -1,7 +1,9 @@
 #pragma once
 
 /* includes //{ */
-#include "support.h"
+
+#include <mrs_pcl_tools/support.h>
+
 //}
 
 namespace mrs_pcl_tools
