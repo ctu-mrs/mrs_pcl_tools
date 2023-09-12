@@ -130,10 +130,9 @@ void PCLFiltration::onInit() {
 
 
     mrs_lib::SubscribeHandlerOptions shopts(nh);
-    shopts.node_name          = "PCLFiltration";
-    shopts.no_message_timeout = ros::Duration(5.0);
-    _sub_lidar3d =
-        mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>(shopts, "lidar3d_in", std::bind(&PCLFiltration::lidar3dCallback, this, std::placeholders::_1));
+    shopts.node_name            = "PCLFiltration";
+    shopts.no_message_timeout   = ros::Duration(5.0);
+    _sub_lidar3d                = mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>(shopts, "lidar3d_in", &PCLFiltration::lidar3dCallback, this);
     _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 1);
     _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 1);
     if (_filter_removeBelowGround.used())
@@ -165,13 +164,11 @@ void PCLFiltration::callbackReconfigure(Config& config, [[maybe_unused]] uint32_
 //}
 
 /* lidar3dCallback() //{ */
-void PCLFiltration::lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>& sh) {
+void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr msg) {
 
   if (!is_initialized || !_lidar3d_republish) {
     return;
   }
-
-  const auto msg = sh.getMsg();
 
   if (msg->width % _lidar3d_col_step != 0 || msg->height % _lidar3d_row_step != 0) {
     NODELET_WARN(

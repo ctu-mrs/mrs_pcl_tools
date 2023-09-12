@@ -105,8 +105,8 @@ private:
 
   void imagePointToCloudPoint(const int x, const int y, const float depth, pt_XYZ& point);
 
-  void process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs::Image>& sh);
-  void process_camera_info_msg(mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo>& sh);
+  void process_depth_msg(const sensor_msgs::Image::ConstPtr msg);
+  void process_camera_info_msg(const sensor_msgs::CameraInfo::ConstPtr msg);
 
 private:
   bool            initialized = false;
@@ -197,7 +197,7 @@ private:
   void callbackReconfigure(mrs_pcl_tools::pcl_filtration_dynparamConfig& config, uint32_t level);
 
   /* 3D LIDAR */
-  void        lidar3dCallback(mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>& sh);
+  void        lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr msg);
   std::string _lidar3d_name;
   float       _lidar3d_frequency;
   float       _lidar3d_vfov;

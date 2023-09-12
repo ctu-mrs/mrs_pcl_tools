@@ -248,7 +248,7 @@ void SensorDepthCamera::imagePointToCloudPoint(const int x, const int y, const f
 /*//}*/
 
 /*//{ process_depth_msg() */
-void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs::Image>& sh) {
+void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg) {
 
   if (!initialized) {
     return;
@@ -258,7 +258,7 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
   const mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
   PC::Ptr     cloud, cloud_over_max_range;
-  const auto& depth_msg = sh.getMsg();
+  const auto& depth_msg = msg;
 
   if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1 || depth_msg->encoding == sensor_msgs::image_encodings::MONO16) {
     convertDepthToCloud<uint16_t>(depth_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false, keep_ordered);
@@ -308,12 +308,10 @@ void SensorDepthCamera::process_depth_msg(mrs_lib::SubscribeHandler<sensor_msgs:
 /*//}*/
 
 /*//{ process_camera_info_msg() */
-void SensorDepthCamera::process_camera_info_msg(mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo>& sh) {
+void SensorDepthCamera::process_camera_info_msg(const sensor_msgs::CameraInfo::ConstPtr msg) {
 
   if (!initialized || has_camera_info)
     return;
-
-  const auto msg = sh.getMsg();
 
   // Store data required for 2D -> 3D projection
   image_width    = msg->width;
