@@ -138,12 +138,19 @@ add_library(MrsPclTools_PCLSupportLib
   src/support.cpp
   )
 
-target_link_libraries(
-  MrsPclTools_PCLSupportLib
+add_dependencies(MrsPclTools_PCLSupportLib
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
+  )
+
+target_link_libraries(MrsPclTools_PCLSupportLib
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${Eigen_LIBRARIES}
   )
+
+# PCLFiltration
 
 add_library(MrsPclTools_PCLFiltration
   src/PCLFiltration.cpp
@@ -151,12 +158,13 @@ add_library(MrsPclTools_PCLFiltration
   src/remove_below_ground_filter.cpp
   )
 
-# PCLFiltration
-
 add_dependencies(MrsPclTools_PCLFiltration
   mrs_pcl_tools_gencfg
   mrs_pcl_tools_generate_messages
- )
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
+  )
 
 target_link_libraries(
   MrsPclTools_PCLFiltration
@@ -179,6 +187,9 @@ add_library(MrsPclTools_PCL2MapRegistration
 add_dependencies(MrsPclTools_PCL2MapRegistration
   mrs_pcl_tools_gencfg
   mrs_pcl_tools_generate_messages
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
   )
 
 target_link_libraries(MrsPclTools_PCL2MapRegistration
@@ -196,6 +207,12 @@ target_include_directories(MrsPclTools_PCL2MapRegistration
 
 add_library(MrsPclTools_PCLPublishCloudFileToNetwork
   src/PCLPublishCloudFileToNetwork.cpp
+  )
+
+add_dependencies(MrsPclTools_PCLPublishCloudFileToNetwork
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
   )
 
 target_link_libraries(
@@ -216,6 +233,12 @@ add_library(MrsPclTools_GroundplaneDetector
   src/groundplane_detector.cpp
   )
 
+add_dependencies(MrsPclTools_GroundplaneDetector
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
+  )
+
 target_link_libraries(
   MrsPclTools_GroundplaneDetector
   ${catkin_LIBRARIES}
@@ -231,6 +254,12 @@ target_include_directories(MrsPclTools_GroundplaneDetector SYSTEM PRIVATE
 
 add_library(MrsPclTools_RemoveBelowGroundFilter
   src/remove_below_ground_filter.cpp
+  )
+
+add_dependencies(MrsPclTools_RemoveBelowGroundFilter
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
   )
 
 target_link_libraries(
@@ -250,6 +279,12 @@ add_executable(estimate_cloud_to_cloud_drift
   src/executables/EstimateCloudToCloudDrift.cpp
   )
 
+add_dependencies(estimate_cloud_to_cloud_drift
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
+  )
+
 target_link_libraries(estimate_cloud_to_cloud_drift
   MrsPclTools_PCLSupportLib
   ${catkin_LIBRARIES}
@@ -261,6 +296,12 @@ target_link_libraries(estimate_cloud_to_cloud_drift
 
 add_executable(estimate_lidar_slam_drift
   src/executables/EstimateLidarSlamDrift.cpp
+  )
+
+add_dependencies(estimate_lidar_slam_drift
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
   )
 
 target_link_libraries(estimate_lidar_slam_drift
@@ -276,6 +317,12 @@ add_executable(pcd_estimate_normals
   src/executables/PcdEstimateNormals.cpp
   )
 
+add_dependencies(pcd_estimate_normals
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
+  )
+
 target_link_libraries(pcd_estimate_normals
   MrsPclTools_PCLSupportLib
   ${catkin_LIBRARIES}
@@ -286,6 +333,12 @@ target_link_libraries(pcd_estimate_normals
 
 add_executable(concatenate_lidar_scans
   src/executables/ConcatenateLidarScans.cpp
+  )
+
+add_dependencies(concatenate_lidar_scans
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
   )
 
 target_link_libraries(concatenate_lidar_scans
