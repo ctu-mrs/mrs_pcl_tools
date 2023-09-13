@@ -1,27 +1,23 @@
-<library path="lib/libPCLFiltration">
-
+<library path="lib/libMrsPclTools_PCLFiltration">
   <class name="mrs_pcl_tools/PCLFiltration" type="mrs_pcl_tools::PCLFiltration" base_class_type="nodelet::Nodelet">
     <description>
-        Nodelet for mrs pointcloud filtration. 
+      Nodelet for mrs pointcloud filtration.
     </description>
   </class>
-
 </library>
 
-<library path="lib/libPCL2MapRegistration">
+<library path="lib/libMrsPclTools_PCL2MapRegistration">
   <class name="mrs_pcl_tools/PCL2MapRegistration" type="mrs_pcl_tools::PCL2MapRegistration" base_class_type="nodelet::Nodelet">
     <description>
-        Nodelet for mrs pointcloud registration to a priori map. 
+      Nodelet for mrs pointcloud registration to a priori map.
     </description>
   </class>
-
 </library>
 
-<library path="lib/libPCLPublishCloudFileToNetwork">
+<library path="lib/libMrsPclTools_PCLPublishCloudFileToNetwork">
   <class name="mrs_pcl_tools/PCLPublishCloudFileToNetwork" type="mrs_pcl_tools::PCLPublishCloudFileToNetwork" base_class_type="nodelet::Nodelet">
     <description>
-        Nodelet for publishing a cloud file to the ROS network. 
+      Nodelet for publishing a cloud file to the ROS network.
     </description>
   </class>
-
 </library>
