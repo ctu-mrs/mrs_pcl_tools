@@ -9,6 +9,12 @@ add_definitions(-O3)
 add_definitions(-DCOMPILE_WITH_OUSTER)
 # add_definitions(-g)
 
+# disables anoying googletest warning
+set(CATKIN_ENABLE_TESTING FALSE)
+
+# disables anoying PCL warnings
+set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE INTERNAL "No dev warnings")
+
 set(CATKIN_DEPENDENCIES
   cmake_modules
   dynamic_reconfigure
@@ -29,6 +35,15 @@ set(CATKIN_DEPENDENCIES
   visualization_msgs
   )
 
+find_package(PCL REQUIRED COMPONENTS
+  common
+  )
+
+# Include Eigen3
+find_package(Eigen3 REQUIRED)
+set(Eigen_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIRS})
+set(Eigen_LIBRARIES ${Eigen_LIBRARIES})
+
 find_package(catkin REQUIRED COMPONENTS
   ${CATKIN_DEPENDENCIES}
   )
@@ -37,28 +52,6 @@ add_service_files(DIRECTORY srv/registration FILES
   SrvRegisterPointCloudByName.srv
   SrvRegisterPointCloudOffline.srv
   )
-
-find_package(PCL REQUIRED)
-
-# Include Eigen3
-find_package(Eigen3 REQUIRED)
-set(Eigen_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIRS})
-set(Eigen_LIBRARIES ${Eigen_LIBRARIES})
-
-# Compile with distcc when available (must be after find_package(catkin))
-find_file(DISTCC_FULL_PATH distcc)
-find_file(DISTCPP_FULL_PATH distg++)
-IF (EXISTS ${DISTCC_FULL_PATH})
-  IF (EXISTS ${DISTCPP_FULL_PATH})
-    message("Found distcc and distg++, using distributed compilation")
-    SET(CMAKE_C_COMPILER ${DISTCC_FULL_PATH})
-    SET(CMAKE_CXX_COMPILER ${DISTCPP_FULL_PATH})
-  ELSE()
-    message("Found only distcc, but not distg++, not using distributed compilation")
-  ENDIF()
-ELSE()
-  message("Not found distcc, not using distributed compilation")
-ENDIF()
 
 generate_dynamic_reconfigure_options(
   cfg/pcl_filtration_dynparam.cfg
@@ -124,11 +117,6 @@ link_directories(
 add_definitions(
   ${PCL_DEFINITIONS}
   )
-
-# Binary version of pcl on most of the linux distro is built with -march=native
-# which cause a lot of compatibility problems.
-# Define PCL_NO_PRECOMPILE to disable using binary version
-# add_definitions(-DPCL_NO_PRECOMPILE)
 
 ## | ------------------------ Libraries ----------------------- |
 

@@ -365,10 +365,16 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowFields(type
     removed_pc->resize(inout_pc->size());
   size_t removed_it = 0;
 
+  // Attempt to get the intensity field name's index
+  auto [intensity_exists, intensity_offset] = getFieldOffset<pt_t>("intensity");
+
+  if (!intensity_exists) {
+    return removeCloseAndFar(inout_pc, clip_return_removed_close, clip_return_removed_far);
+  }
+
   bool filter_intensity    = _lidar3d_filter_intensity_use;
   bool filter_reflectivity = _lidar3d_filter_reflectivity_use;
 
-  std::size_t intensity_offset;
   std::size_t reflectivity_offset;
 
   // Attempt to get the fields' name indices
@@ -461,10 +467,16 @@ typename boost::shared_ptr<PC> PCLFiltration::removeLowFields(typename boost::sh
   }
   size_t removed_it = 0;
 
+  // Attempt to get the intensity field name's index
+  auto [intensity_exists, intensity_offset] = getFieldOffset<pt_t>("intensity");
+
+  if (!intensity_exists) {
+    return removed_pc;
+  }
+
   bool filter_intensity    = _lidar3d_filter_intensity_use;
   bool filter_reflectivity = _lidar3d_filter_reflectivity_use;
 
-  std::size_t intensity_offset;
   std::size_t reflectivity_offset;
 
   // Attempt to get the fields' name indices
