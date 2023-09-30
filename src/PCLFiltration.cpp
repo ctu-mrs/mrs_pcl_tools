@@ -178,14 +178,14 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr msg
     return;
   }
 
-  const mrs_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_msgs::PclToolsDiagnostics>();
-  diag_msg->sensor_name                             = _lidar3d_name;
-  diag_msg->stamp                                   = msg->header.stamp;
-  diag_msg->sensor_type                             = mrs_msgs::PclToolsDiagnostics::SENSOR_TYPE_LIDAR_3D;
-  diag_msg->cols_before                             = msg->width;
-  diag_msg->rows_before                             = msg->height;
-  diag_msg->frequency                               = _lidar3d_frequency;
-  diag_msg->vfov                                    = _lidar3d_vfov;
+  const mrs_modules_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_modules_msgs::PclToolsDiagnostics>();
+  diag_msg->sensor_name                                     = _lidar3d_name;
+  diag_msg->stamp                                           = msg->header.stamp;
+  diag_msg->sensor_type                                     = mrs_modules_msgs::PclToolsDiagnostics::SENSOR_TYPE_LIDAR_3D;
+  diag_msg->cols_before                                     = msg->width;
+  diag_msg->rows_before                                     = msg->height;
+  diag_msg->frequency                                       = _lidar3d_frequency;
+  diag_msg->vfov                                            = _lidar3d_vfov;
 
   const mrs_lib::ScopeTimer timer =
       mrs_lib::ScopeTimer("PCLFiltration::lidar3dCallback", _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);

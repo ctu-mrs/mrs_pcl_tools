@@ -269,10 +269,10 @@ void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg
     return;
   }
 
-  const mrs_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_msgs::PclToolsDiagnostics>();
+  const mrs_modules_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_modules_msgs::PclToolsDiagnostics>();
   diag_msg->sensor_name                             = sensor_name;
   diag_msg->stamp                                   = depth_msg->header.stamp;
-  diag_msg->sensor_type                             = mrs_msgs::PclToolsDiagnostics::SENSOR_TYPE_DEPTH_CAMERA;
+  diag_msg->sensor_type                             = mrs_modules_msgs::PclToolsDiagnostics::SENSOR_TYPE_DEPTH_CAMERA;
   diag_msg->cols_before                             = cloud->width;
   diag_msg->rows_before                             = cloud->height;
   diag_msg->frequency                               = frequency;

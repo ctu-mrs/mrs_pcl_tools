@@ -37,7 +37,7 @@
 // dynamic reconfigure
 #include <dynamic_reconfigure/server.h>
 
-#include <mrs_msgs/PclToolsDiagnostics.h>
+#include <mrs_modules_msgs/PclToolsDiagnostics.h>
 
 #ifdef COMPILE_WITH_OUSTER
 // point types
@@ -68,10 +68,10 @@ namespace mrs_pcl_tools
   struct Diagnostics_t
   {
     Diagnostics_t(ros::NodeHandle& nh) {
-      _pub_diagnostics = nh.advertise<mrs_msgs::PclToolsDiagnostics>("diagnostics_out", 10);
+      _pub_diagnostics = nh.advertise<mrs_modules_msgs::PclToolsDiagnostics>("diagnostics_out", 10);
     }
 
-    void publish(const mrs_msgs::PclToolsDiagnosticsConstPtr& msg) const {
+    void publish(const mrs_modules_msgs::PclToolsDiagnosticsConstPtr& msg) const {
       if (_pub_diagnostics.getNumSubscribers() > 0) {
         try {
           _pub_diagnostics.publish(msg);

@@ -24,6 +24,7 @@ set(CATKIN_DEPENDENCIES
   message_runtime
   mrs_lib
   mrs_msgs
+  mrs_modules_msgs
   nodelet
   ouster_ros
   pcl_conversions

@@ -28,7 +28,7 @@
 
 #include <visualization_msgs/MarkerArray.h>
 
-#include <mrs_msgs/PclToolsDiagnostics.h>
+#include <mrs_modules_msgs/PclToolsDiagnostics.h>
 
 #include <boost/smart_ptr/make_shared_array.hpp>
 #include <limits>
