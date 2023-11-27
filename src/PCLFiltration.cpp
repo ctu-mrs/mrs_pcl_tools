@@ -195,7 +195,8 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr msg
 
     NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: ouster_ros::Point.");
     PC_OS::Ptr cloud = boost::make_shared<PC_OS>();
-    pcl::fromROSMsg(*msg, *cloud);
+    pcl_df::fromROSMsg(*msg, *cloud);
+
     process_msg(cloud);
     diag_msg->cols_after = cloud->width;
     diag_msg->rows_after = cloud->height;
@@ -204,7 +205,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr msg
 
     NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: pcl::PointXYZI.");
     PC_I::Ptr cloud = boost::make_shared<PC_I>();
-    pcl::fromROSMsg(*msg, *cloud);
+    pcl_df::fromROSMsg(*msg, *cloud);
     process_msg(cloud);
     diag_msg->cols_after = cloud->width;
     diag_msg->rows_after = cloud->height;
@@ -647,7 +648,7 @@ std::pair<PC::Ptr, PC::Ptr> PCLFiltration::removeCloseAndFarPointCloudXYZ(const 
   // Convert to pcl object
   PC::Ptr cloud                = boost::make_shared<PC>();
   PC::Ptr cloud_over_max_range = boost::make_shared<PC>();
-  pcl::fromROSMsg(*msg, *cloud);
+  pcl_df::fromROSMsg(*msg, *cloud);
 
   unsigned int j          = 0;
   unsigned int k          = 0;

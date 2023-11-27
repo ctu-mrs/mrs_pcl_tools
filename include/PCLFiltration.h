@@ -39,6 +39,8 @@
 
 #include <mrs_pcl_tools/remove_below_ground_filter.h>
 
+#include <rosPointCloud2ToPCL.hpp>
+
 //}
 
 namespace mrs_pcl_tools
