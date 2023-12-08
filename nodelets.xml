@@ -21,3 +21,11 @@
     </description>
   </class>
 </library>
+
+<library path="lib/libFreespacePointcloudCreator">
+  <class name="mrs_pcl_tools/FreespacePointcloudCreator" type="mrs_pcl_tools::FreespacePointcloudCreator" base_class_type="nodelet::Nodelet">
+    <description>
+        Creates a pointcloud with points corresponding to zero or invalid points in an organized input pointcloud with the same direction and max. length to represent free space for mapping purposes.
+    </description>
+  </class>
+</library>

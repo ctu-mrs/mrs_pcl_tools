@@ -1,0 +1,5 @@
+data_row_major: true
+sensor:
+  hfov: !degrees 360
+  vfov: !degrees 45
+  max_range: 20 # metres

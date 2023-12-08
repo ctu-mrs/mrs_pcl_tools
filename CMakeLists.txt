@@ -337,6 +337,28 @@ target_link_libraries(concatenate_lidar_scans
   ${Eigen_LIBRARIES}
   )
 
+# FreespacePointcloudCreator
+
+add_library(FreespacePointcloudCreator
+  src/freespace_pointcloud_creator.cpp
+  )
+
+add_dependencies(FreespacePointcloudCreator
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
+  )
+
+target_link_libraries(FreespacePointcloudCreator
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${Eigen_LIBRARIES}
+  )
+
+target_include_directories(FreespacePointcloudCreator
+  SYSTEM PRIVATE ${PCL_INCLUDE_DIRS}
+  )
+
 ## --------------------------------------------------------------
 ## |                            Build                           |
 ## --------------------------------------------------------------
