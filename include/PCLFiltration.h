@@ -106,22 +106,30 @@ private:
 
   void imagePointToCloudPoint(const int x, const int y, const float depth, pt_XYZ& point);
 
+  sensor_msgs::Image::Ptr applyMask(const sensor_msgs::Image::ConstPtr& depth_msg);
+
   void process_depth_msg(const sensor_msgs::Image::ConstPtr msg);
   void process_camera_info_msg(const sensor_msgs::CameraInfo::ConstPtr msg);
+  void process_mask_msg(const sensor_msgs::Image::ConstPtr msg);
 
 private:
   bool            initialized = false;
   ros::NodeHandle _nh;
   ros::Publisher  pub_points;
   ros::Publisher  pub_points_over_max_range;
+  ros::Publisher  pub_masked_depth;
 
   mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
+  mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_mask;
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
 
   std::shared_ptr<CommonHandlers_t> _common_handlers;
 
+  bool got_mask_msg = false;
+  sensor_msgs::Image::ConstPtr mask_msg;
+
 private:
-  std::string depth_in, depth_camera_info_in, points_out, points_over_max_range_out;
+  std::string depth_in, depth_camera_info_in, mask_in, points_out, points_over_max_range_out, masked_out;
   std::string sensor_name;
 
   float frequency;
@@ -142,6 +150,9 @@ private:
 
   // Filters parameters
 private:
+
+  bool mask_use;
+  
   int downsample_step_col;
   int downsample_step_row;
 

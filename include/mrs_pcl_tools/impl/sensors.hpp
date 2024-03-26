@@ -13,6 +13,12 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/vfov", vfov);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/keep_ordered", keep_ordered);
 
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/mask/enabled", mask_use, false);
+  if (mask_use) {
+    _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/mask/topic/mask_in", mask_in);
+    _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/mask/topic/depth_out", masked_out);
+  }
+
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/downsample/step/col", downsample_step_col, 1);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/downsample/step/row", downsample_step_row, 1);
   if (downsample_step_col < 1) {
@@ -46,6 +52,7 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/points_out", points_out);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/points_over_max_range_out", points_over_max_range_out, std::string(""));
 
+
   publish_over_max_range = points_over_max_range_out.size() > 0 && range_clip_use;
 
   if (prefix.size() > 0) {
@@ -57,6 +64,11 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
     if (publish_over_max_range) {
       points_over_max_range_out = "/" + prefix + "/" + points_over_max_range_out;
     }
+
+    if (mask_use) {
+      mask_in             = "/" + prefix + "/" + mask_in;
+      masked_out             = "/" + prefix + "/" + masked_out;
+    }
   }
 
   // Start subscribe handler for depth camera info
@@ -65,6 +77,11 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
   shopts.threadsafe = true;
   sh_camera_info    = mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo>(shopts, depth_camera_info_in);
   mrs_lib::construct_object(sh_camera_info, shopts, depth_camera_info_in, ros::Duration(20.0), &SensorDepthCamera::process_camera_info_msg, this);
+
+  if (mask_use) {
+    sh_mask    = mrs_lib::SubscribeHandler<sensor_msgs::Image>(shopts, mask_in);
+    mrs_lib::construct_object(sh_mask, shopts, mask_in, ros::Duration(1.0), &SensorDepthCamera::process_mask_msg, this);
+  }
 
   initialized = true;
 }
@@ -254,11 +271,24 @@ void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg
     return;
   }
 
+  if (mask_use && !got_mask_msg) {
+    ROS_WARN_THROTTLE(1.0, "[%s]: waiting for mask image msg", ros::this_node::getName().c_str());
+    return;
+  }
+
   const std::string         scope_label = "PCLFiltration::process_depth_msg::" + sensor_name;
   const mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
   PC::Ptr     cloud, cloud_over_max_range;
-  const auto& depth_msg = msg;
+  const auto& depth_msg_raw = msg;
+
+  sensor_msgs::Image::Ptr masked_msg;
+  if (mask_use) {
+    masked_msg = applyMask(depth_msg_raw); 
+    pub_masked_depth.publish(*masked_msg);
+  }
+  
+  const auto& depth_msg = mask_use ? boost::make_shared<sensor_msgs::Image>(*masked_msg) : depth_msg_raw;
 
   if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1 || depth_msg->encoding == sensor_msgs::image_encodings::MONO16) {
     convertDepthToCloud<uint16_t>(depth_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false, keep_ordered);
@@ -348,5 +378,57 @@ void SensorDepthCamera::process_camera_info_msg(const sensor_msgs::CameraInfo::C
     sh_depth          = mrs_lib::SubscribeHandler<sensor_msgs::Image>(shopts, depth_in);
     mrs_lib::construct_object(sh_depth, shopts, depth_in, ros::Duration(1.0), &SensorDepthCamera::process_depth_msg, this);
   }
+}
+/*//}*/
+
+/*//{ process_mask_msg() */
+void SensorDepthCamera::process_mask_msg(const sensor_msgs::Image::ConstPtr msg) {
+
+  if (!initialized) {
+    return;
+  }
+
+  const std::string         scope_label = "PCLFiltration::process_mask_msg::" + sensor_name;
+  const mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
+
+  mask_msg = msg;
+  got_mask_msg = true;
+
+  pub_masked_depth = _nh.advertise<sensor_msgs::Image>(masked_out, 1);
+
+  sh_mask.stop();
+
+}
+/*//}*/
+
+/*//{ applyMask() */
+sensor_msgs::Image::Ptr SensorDepthCamera::applyMask(const sensor_msgs::Image::ConstPtr& depth_msg) {
+
+  sensor_msgs::Image::Ptr depth_masked = boost::make_shared<sensor_msgs::Image>(*depth_msg);
+
+  const int col_step = depth_msg->step / depth_msg->width;
+  const int row_step  = depth_msg->step;
+
+  const int col_step_mask = mask_msg->step / mask_msg->width;
+  const int row_step_mask  = mask_msg->step;
+
+  for (int v = 0; v < (int)depth_msg->height; v += 1) {
+
+    unsigned int depth_col = 0;
+
+    for (int u = 0; u < (int)depth_msg->width; u += 1) {
+
+      if (mask_msg->data[v*row_step_mask+u*col_step_mask] < 1) {
+
+        for (int b = 0; b < col_step; b++) {
+          depth_masked->data[v*row_step+u*col_step+b] = 0;
+        }
+
+      }
+
+    }
+
+  }
+  return depth_masked;
 }
 /*//}*/
