@@ -9,12 +9,14 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
   _common_handlers = common_handlers;
   sensor_name      = name;
 
+  _filters = PointCloudFilters(common_handlers->param_loader, "depth/" + sensor_name);
+
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/frequency", frequency);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/vfov", vfov);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/keep_ordered", keep_ordered);
 
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/downsample/step/col", downsample_step_col, 1);
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/downsample/step/row", downsample_step_row, 1);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/depth_filter/downsample/step/col", downsample_step_col, 1);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/depth_filter/downsample/step/row", downsample_step_row, 1);
   if (downsample_step_col < 1) {
     downsample_step_col = 1;
   }
@@ -22,23 +24,20 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
     downsample_step_row = 1;
   }
 
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/range_clip/min", range_clip_min, 0.0f);
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/range_clip/max", range_clip_max, std::numeric_limits<float>::max());
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/depth_filter/range_clip/min", range_clip_min, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/depth_filter/range_clip/max", range_clip_max, std::numeric_limits<float>::max());
   range_clip_use    = range_clip_max > 0.0f && range_clip_max > range_clip_min;
   replace_nan_depth = range_clip_use ? 10.0f * range_clip_max : 1000.0f;
 
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/voxel_grid/resolution", voxel_grid_resolution, 0.0f);
-  voxel_grid_use = voxel_grid_resolution > 0.0f;
-
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/radius_outlier/radius", radius_outlier_radius, 0.0f);
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/radius_outlier/neighbors", radius_outlier_neighbors, 0);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/depth_filter/radius_outlier/radius", radius_outlier_radius, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/depth_filter/radius_outlier/neighbors", radius_outlier_neighbors, 0);
   radius_outlier_use = radius_outlier_radius > 0.0f && radius_outlier_neighbors > 0;
 
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/minimum_grid/resolution", minimum_grid_resolution, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/depth_filter/minimum_grid/resolution", minimum_grid_resolution, 0.0f);
   minimum_grid_use = minimum_grid_resolution > 0.0f;
 
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/bilateral/sigma_S", bilateral_sigma_S, 0.0f);
-  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/filter/bilateral/sigma_R", bilateral_sigma_R, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/depth_filter/bilateral/sigma_S", bilateral_sigma_S, 0.0f);
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/depth_filter/bilateral/sigma_R", bilateral_sigma_R, 0.0f);
   bilateral_use = bilateral_sigma_S > 0.0f && bilateral_sigma_R > 0.0f;
 
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/depth_in", depth_in);
@@ -278,10 +277,9 @@ void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg
   diag_msg->frequency                               = frequency;
   diag_msg->vfov                                    = vfov;
 
+  _filters.applyFilters(cloud);
+
   // Apply filters to the original cloud (beware, the filters are applied in sequential order: no parallelization)
-  if (voxel_grid_use) {
-    cloud = mrs_pcl_tools::filters::applyVoxelGridFilter(cloud, voxel_grid_resolution);
-  }
   if (radius_outlier_use) {
     cloud = mrs_pcl_tools::filters::applyRadiusOutlierFilter(cloud, radius_outlier_radius, radius_outlier_neighbors);
   }

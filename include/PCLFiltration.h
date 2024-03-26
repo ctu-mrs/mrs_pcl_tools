@@ -3,6 +3,7 @@
 /* includes //{ */
 
 #include <mrs_pcl_tools/support.h>
+#include <mrs_pcl_tools/filters.h>
 
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/extract_indices.h>
@@ -54,7 +55,8 @@ using quat_t = Eigen::Quaternionf;
 // Encapsulate differences between processing float and uint16_t depths in RGBD data
 template <typename T>
 struct DepthTraits
-{};
+{
+};
 
 template <>
 struct DepthTraits<uint16_t>
@@ -142,15 +144,14 @@ private:
 
   // Filters parameters
 private:
+  PointCloudFilters _filters;
+
   int downsample_step_col;
   int downsample_step_row;
 
   bool  range_clip_use;
   float range_clip_min;
   float range_clip_max;
-
-  bool  voxel_grid_use;
-  float voxel_grid_resolution;
 
   bool  radius_outlier_use;
   float radius_outlier_radius;
@@ -207,6 +208,9 @@ private:
   float       _lidar3d_invalid_value;
   bool        _lidar3d_dynamic_row_selection_enabled;
   bool        _lidar3d_downsample_use;
+
+  // TODO: PointCloudFilters need to be implemented for 3D LiDARs (we need to cope with different point types inside each filter)
+  /* PointCloudFilters _lidar3d_filters; */
 
   bool     _lidar3d_rangeclip_use;
   float    _lidar3d_rangeclip_min_sq;

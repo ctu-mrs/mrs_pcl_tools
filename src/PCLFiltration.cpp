@@ -51,10 +51,14 @@ void PCLFiltration::onInit() {
   _lidar3d_rangeclip_min_sq *= _lidar3d_rangeclip_min_sq;
   _lidar3d_rangeclip_max_sq *= _lidar3d_rangeclip_max_sq;
 
+  // TODO: PointCloudFilters need to be implemented for 3D LiDARs (we need to cope with different point types inside each filter)
+  // load and prepare point cloud filters
+  /* _lidar3d_filters = PointCloudFilters(_common_handlers->param_loader, "lidar3d"); */
+
   // load downsampling parameters
-  _common_handlers->param_loader->loadParam("lidar3d/downsampling/dynamic_row_selection", _lidar3d_dynamic_row_selection_enabled, false);
-  _common_handlers->param_loader->loadParam("lidar3d/downsampling/row_step", _lidar3d_row_step, 1);
-  _common_handlers->param_loader->loadParam("lidar3d/downsampling/col_step", _lidar3d_col_step, 1);
+  _common_handlers->param_loader->loadParam("lidar3d/cloud_filter/downsample/dynamic_row_selection", _lidar3d_dynamic_row_selection_enabled, false);
+  _common_handlers->param_loader->loadParam("lidar3d/cloud_filter/downsample/row_step", _lidar3d_row_step, 1);
+  _common_handlers->param_loader->loadParam("lidar3d/cloud_filter/downsample/col_step", _lidar3d_col_step, 1);
 
   // load dynamic row selection
   if (_lidar3d_dynamic_row_selection_enabled && _lidar3d_row_step > 1 && _lidar3d_row_step % 2 != 0) {
@@ -221,6 +225,9 @@ void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
   const size_t height_before = inout_pc_ptr->height;
   const size_t width_before  = inout_pc_ptr->width;
   const size_t points_before = inout_pc_ptr->size();
+
+  // TODO: PointCloudFilters need to be implemented for 3D LiDARs (we need to cope with different point types inside each filter)
+  /* _lidar3d_filters.applyFilters(inout_pc_ptr); */
 
   if (_lidar3d_downsample_use) {
     // Try to keep the uppermost row (lower rows often see drone frame, so we want to prevent data loss)

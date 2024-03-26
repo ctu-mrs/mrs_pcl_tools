@@ -13,7 +13,7 @@ depth:
       points_out: "up_rgbd/points_processed"
       points_over_max_range_out: "up_rgbd/points_over_max_range" # used if non-empty and range_clip used
 
-    filter:
+    depth_filter:
       downsample:
         step:
           row: 2 # used if >1, maintains ordering if keep_ordered=true
@@ -21,16 +21,26 @@ depth:
       range_clip:
         min: 0.4
         max: 10.0 # used if >0, maintains ordering if keep_ordered=true
-      voxel_grid:
-        resolution: 0.05 # used if >0, BREAKS ordering even if keep_ordered=true
       radius_outlier:
         radius: 0.0 # used if both >0, maintains ordering if keep_ordered=true
         neighbors: 2
       minimum_grid:
         resolution: 0.05 # used if >0, BREAKS ordering even if keep_ordered=true
       bilateral:
-        sigma_S: 0.0 # used if both >0, BREAKS ordering even if keep_ordered=true
-        sigma_R: 0.005 # crashes with bad_alloc error
+        sigma_S: 0.0      # used if both >0, BREAKS ordering even if keep_ordered=true
+        sigma_R: 0.005    # crashes with bad_alloc error
+
+    cloud_filter:
+      sequence: ["voxel_grid"] # sequence of filters to be applied (in this order) | example: ["voxel_grid", "NormS"]
+      voxel_grid:         # uniform sampling (breaks ordering)
+        resolution: 0.05  # (m) | voxel size
+      NormS:              # Rusinkiewicz and Levoy, Efficient Variants of the ICP Algorithm, 2001
+        count: 5000       # <0, max(unsigned int)) | number of points to sample
+        torque_norm: "L1" # {L1, Lavg, Lmax}       | method of torque normalization
+      CoVS:                     # Gelfand et. al, Geometrically stable sampling for the ICP algorithm, 2003
+        resolution:
+          azimuth:   !degrees 5 # (rad)
+          elevation: !degrees 5 # (rad)
 
   down_rgbd:
 
@@ -44,7 +54,7 @@ depth:
       points_out: "down_rgbd/points_processed"
       points_over_max_range_out: "down_rgbd/points_over_max_range" # used if non-empty and range_clip used
 
-    filter:
+    depth_filter:
       downsample:
         step:
           row: 2 # used if >1, maintains ordering if keep_ordered=true
@@ -52,13 +62,23 @@ depth:
       range_clip:
         min: 0.4
         max: 10.0 # used if >0, maintains ordering if keep_ordered=true
-      voxel_grid:
-        resolution: 0.05 # used if >0, BREAKS ordering even if keep_ordered=true
       radius_outlier:
-        radius: 0.0 # used if both >0, BREAKS ordering even if keep_ordered=true
-        neighbors: 5
+        radius: 0.0 # used if both >0, maintains ordering if keep_ordered=true
+        neighbors: 2
       minimum_grid:
         resolution: 0.05 # used if >0, BREAKS ordering even if keep_ordered=true
       bilateral:
-        sigma_S: 0.0 # used if both >0, BREAKS ordering even if keep_ordered=true
-        sigma_R: 0.005
+        sigma_S: 0.0      # used if both >0, BREAKS ordering even if keep_ordered=true
+        sigma_R: 0.005    # crashes with bad_alloc error
+
+    cloud_filter:
+      sequence: ["voxel_grid"] # sequence of filters below to be applied (in this order) | example: ["range_clip", "voxel_grid"]
+      voxel_grid:         # uniform sampling (breaks ordering)
+        resolution: 0.05  # (m) | voxel size
+      NormS:              # Rusinkiewicz and Levoy, Efficient Variants of the ICP Algorithm, 2001 (breaks ordering)
+        resolution:
+          azimuth:   !degrees 5 # (rad)
+          elevation: !degrees 5 # (rad)
+      CovS:                     # Gelfand et. al, Geometrically stable sampling for the ICP algorithm, 2003 (breaks ordering)
+        count: 5000       # <0, max(unsigned int)) | number of points to sample
+        torque_norm: "L1" # {L1, Lavg, Lmax}       | method of torque normalization

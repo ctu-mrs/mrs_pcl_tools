@@ -143,6 +143,7 @@ target_link_libraries(MrsPclTools_PCLSupportLib
 
 add_library(MrsPclTools_PCLFiltration
   src/PCLFiltration.cpp
+  src/filters.cpp
   src/groundplane_detector.cpp
   src/remove_below_ground_filter.cpp
   )
