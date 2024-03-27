@@ -1,6 +1,12 @@
 #pragma once
 
 /* includes //{ */
+#include <image_transport/image_transport.h>
+#include <image_transport/subscriber_filter.h>
+#include <message_filters/subscriber.h>
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
+#include <message_filters/sync_policies/exact_time.h>
 
 #include <mrs_pcl_tools/support.h>
 
@@ -47,6 +53,7 @@ using vec3_t = Eigen::Vector3f;
 using vec4_t = Eigen::Vector4f;
 using quat_t = Eigen::Quaternionf;
 
+namespace enc = sensor_msgs::image_encodings;
 /* class SensorDepthCamera //{ */
 
 /*//{ DepthTraits */
@@ -86,6 +93,57 @@ struct DepthTraits<float>
 
 /*//}*/
 
+/*//{ IntensityTraits */
+
+// Encapsulate differences between processing float, uint16_t and uint8_t intensities in RGBDI data
+template <typename T>
+struct IntensityTraits
+{};
+
+template <>
+struct IntensityTraits<uint8_t>
+{
+  static inline bool valid(uint8_t intensity) {
+    return intensity != 0;
+  }
+  static inline float toFloat(uint8_t intensity) {
+    return float(intensity);
+  }  
+  static inline uint8_t fromFloat(float intensity) {
+    return intensity + 0.5f;
+  }
+};
+
+template <>
+struct IntensityTraits<uint16_t>
+{
+  static inline bool valid(uint16_t intensity) {
+    return intensity != 0;
+  }
+  static inline float toFloat(uint16_t intensity) {
+    return float(intensity);
+  }  
+  static inline uint16_t fromFloat(float intensity) {
+    return intensity + 0.5f;
+  }
+};
+
+template <>
+struct IntensityTraits<float>
+{
+  static inline bool valid(float intensity) {
+    return std::isfinite(intensity);
+  }
+  static inline float toFloat(float intensity) {
+    return intensity;
+  }
+  static inline float fromFloat(float intensity) {
+    return intensity;
+  }
+};
+
+/*//}*/
+
 class SensorDepthCamera {
 public:
   void initialize(const ros::NodeHandle& nh, const std::shared_ptr<CommonHandlers_t> common_handlers, const std::string& prefix, const std::string& name);
@@ -106,9 +164,26 @@ private:
 
   void imagePointToCloudPoint(const int x, const int y, const float depth, pt_XYZ& point);
 
+  
+  template <typename T, typename U>
+  void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& cloud_out, PC_I::Ptr& cloud_over_max_range_out,
+                           const bool return_removed_close = false, const bool return_removed_far = false, const bool replace_nans = false,
+                           const bool keep_ordered = false);
+
+  template <typename T, typename U>
+  void convertDepthToCloudUnordered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc, PC_I::Ptr& removed_pc,
+                                    const bool return_removed_close = false, const bool return_removed_far = false, const bool replace_nans = false);
+
+  template <typename T, typename U>
+  void convertDepthToCloudOrdered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc, PC_I::Ptr& removed_pc, const bool return_removed_close = false,
+                                  const bool return_removed_far = false, const bool replace_nans = false);
+
+  void imagePointToCloudPoint(const int x, const int y, const float depth, const float intensity, pt_XYZI& point);
+
   sensor_msgs::Image::Ptr applyMask(const sensor_msgs::Image::ConstPtr& depth_msg);
 
   void process_depth_msg(const sensor_msgs::Image::ConstPtr msg);
+  void process_depth_intensity_msg(const sensor_msgs::Image::ConstPtr depth_msg, const sensor_msgs::Image::ConstPtr intensity_msg);
   void process_camera_info_msg(const sensor_msgs::CameraInfo::ConstPtr msg);
   void process_mask_msg(const sensor_msgs::Image::ConstPtr msg);
 
@@ -122,6 +197,15 @@ private:
   mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_mask;
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
+
+  std::shared_ptr<image_transport::ImageTransport> intensity_it, depth_it;
+  image_transport::SubscriberFilter sub_depth, sub_intensity;
+  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> ApproxSyncPolicy;
+  typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image> ExactSyncPolicy;
+  typedef message_filters::Synchronizer<ApproxSyncPolicy> ApproxSynchronizer;
+  typedef message_filters::Synchronizer<ExactSyncPolicy> ExactSynchronizer;
+  std::shared_ptr<ApproxSynchronizer> approx_sync;
+  std::shared_ptr<ExactSynchronizer> exact_sync;
 
   std::shared_ptr<CommonHandlers_t> _common_handlers;
 
@@ -152,6 +236,10 @@ private:
 private:
 
   bool mask_use;
+
+  bool intensity_use;
+  bool intensity_sync_exact;
+  std::string intensity_in_topic;
   
   int downsample_step_col;
   int downsample_step_row;
