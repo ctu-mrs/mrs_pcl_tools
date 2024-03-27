@@ -72,12 +72,12 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
     }
 
     if (mask_use) {
-      mask_in             = "/" + prefix + "/" + mask_in;
-      masked_out          = "/" + prefix + "/" + masked_out;
+      mask_in    = "/" + prefix + "/" + mask_in;
+      masked_out = "/" + prefix + "/" + masked_out;
     }
 
     if (intensity_use) {
-      intensity_in_topic  = "/" + prefix + "/" + intensity_in_topic;
+      intensity_in_topic = "/" + prefix + "/" + intensity_in_topic;
     }
   }
 
@@ -89,7 +89,7 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
   mrs_lib::construct_object(sh_camera_info, shopts, depth_camera_info_in, ros::Duration(20.0), &SensorDepthCamera::process_camera_info_msg, this);
 
   if (mask_use) {
-    sh_mask    = mrs_lib::SubscribeHandler<sensor_msgs::Image>(shopts, mask_in);
+    sh_mask = mrs_lib::SubscribeHandler<sensor_msgs::Image>(shopts, mask_in);
     mrs_lib::construct_object(sh_mask, shopts, mask_in, ros::Duration(1.0), &SensorDepthCamera::process_mask_msg, this);
   }
 
@@ -295,10 +295,10 @@ void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg
 
   sensor_msgs::Image::Ptr masked_msg;
   if (mask_use) {
-    masked_msg = applyMask(depth_msg_raw); 
+    masked_msg = applyMask(depth_msg_raw);
     pub_masked_depth.publish(*masked_msg);
   }
-  
+
   const auto& depth_msg = mask_use ? boost::make_shared<sensor_msgs::Image>(*masked_msg) : depth_msg_raw;
 
   if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1 || depth_msg->encoding == sensor_msgs::image_encodings::MONO16) {
@@ -311,13 +311,13 @@ void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg
   }
 
   const mrs_modules_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_modules_msgs::PclToolsDiagnostics>();
-  diag_msg->sensor_name                             = sensor_name;
-  diag_msg->stamp                                   = depth_msg->header.stamp;
-  diag_msg->sensor_type                             = mrs_modules_msgs::PclToolsDiagnostics::SENSOR_TYPE_DEPTH_CAMERA;
-  diag_msg->cols_before                             = cloud->width;
-  diag_msg->rows_before                             = cloud->height;
-  diag_msg->frequency                               = frequency;
-  diag_msg->vfov                                    = vfov;
+  diag_msg->sensor_name                                     = sensor_name;
+  diag_msg->stamp                                           = depth_msg->header.stamp;
+  diag_msg->sensor_type                                     = mrs_modules_msgs::PclToolsDiagnostics::SENSOR_TYPE_DEPTH_CAMERA;
+  diag_msg->cols_before                                     = cloud->width;
+  diag_msg->rows_before                                     = cloud->height;
+  diag_msg->frequency                                       = frequency;
+  diag_msg->vfov                                            = vfov;
 
   // Apply filters to the original cloud (beware, the filters are applied in sequential order: no parallelization)
   if (voxel_grid_use) {
@@ -355,8 +355,9 @@ void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg
 // Depth conversion inspired by:
 // https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
 template <typename T, typename U>
-void SensorDepthCamera::convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc, PC_I::Ptr& removed_pc,
-                                            const bool return_removed_close, const bool return_removed_far, const bool replace_nans, const bool keep_ordered) {
+void SensorDepthCamera::convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc,
+                                            PC_I::Ptr& removed_pc, const bool return_removed_close, const bool return_removed_far, const bool replace_nans,
+                                            const bool keep_ordered) {
 
   if (keep_ordered) {
 
@@ -373,8 +374,9 @@ void SensorDepthCamera::convertDepthToCloud(const sensor_msgs::Image::ConstPtr& 
 // Depth conversion inspired by:
 // https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
 template <typename T, typename U>
-void SensorDepthCamera::convertDepthToCloudUnordered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc, PC_I::Ptr& removed_pc,
-                                                     const bool return_removed_close, const bool return_removed_far, const bool replace_nans) {
+void SensorDepthCamera::convertDepthToCloudUnordered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg,
+                                                     PC_I::Ptr& out_pc, PC_I::Ptr& removed_pc, const bool return_removed_close, const bool return_removed_far,
+                                                     const bool replace_nans) {
 
   const unsigned int max_points_count = (image_height / downsample_step_row) * (image_width / downsample_step_col);
 
@@ -388,19 +390,19 @@ void SensorDepthCamera::convertDepthToCloudUnordered(const sensor_msgs::Image::C
   const T*  depth_row = reinterpret_cast<const T*>(&depth_msg->data[0]);
   const int row_step  = downsample_step_row * depth_msg->step / sizeof(T);
 
-  const U*  intensity_row = reinterpret_cast<const U*>(&intensity_msg->data[0]);
-  int intensity_row_step  = intensity_msg->step / sizeof(U);
+  const U* intensity_row      = reinterpret_cast<const U*>(&intensity_msg->data[0]);
+  int      intensity_row_step = intensity_msg->step / sizeof(U);
 
   size_t converted_it = 0;
   size_t removed_it   = 0;
 
   for (int v = 0; v < (int)depth_msg->height; v += downsample_step_row, depth_row += row_step, intensity_row += intensity_row_step) {
     for (int u = 0; u < (int)depth_msg->width; u += downsample_step_col) {
-      const auto depth_raw = depth_row[u];
+      const auto depth_raw     = depth_row[u];
       const auto intensity_raw = intensity_row[u];
-      const bool valid     = DepthTraits<T>::valid(depth_raw);
+      const bool valid         = DepthTraits<T>::valid(depth_raw);
 
-      const float intensity     = IntensityTraits<U>::toFloat(intensity_raw);
+      const float intensity = IntensityTraits<U>::toFloat(intensity_raw);
 
       if (!valid) {
 
@@ -449,8 +451,9 @@ void SensorDepthCamera::convertDepthToCloudUnordered(const sensor_msgs::Image::C
 // Depth conversion inspired by:
 // https://github.com/ros-perception/image_pipeline/blob/noetic/depth_image_proc/include/depth_image_proc/depth_conversions.h#L48
 template <typename T, typename U>
-void SensorDepthCamera::convertDepthToCloudOrdered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc, PC_I::Ptr& removed_pc,
-                                                   const bool return_removed_close, const bool return_removed_far, const bool replace_nans) {
+void SensorDepthCamera::convertDepthToCloudOrdered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg,
+                                                   PC_I::Ptr& out_pc, PC_I::Ptr& removed_pc, const bool return_removed_close, const bool return_removed_far,
+                                                   const bool replace_nans) {
 
   const bool         return_removed = return_removed_close || return_removed_far;
   const unsigned int W              = image_width / downsample_step_col;
@@ -470,8 +473,8 @@ void SensorDepthCamera::convertDepthToCloudOrdered(const sensor_msgs::Image::Con
   const T*  depth_row = reinterpret_cast<const T*>(&depth_msg->data[0]);
   const int row_step  = downsample_step_row * depth_msg->step / sizeof(T);
 
-  const U*  intensity_row = reinterpret_cast<const U*>(&intensity_msg->data[0]);
-  int intensity_row_step  = intensity_msg->step / sizeof(U);
+  const U* intensity_row      = reinterpret_cast<const U*>(&intensity_msg->data[0]);
+  int      intensity_row_step = intensity_msg->step / sizeof(U);
 
   size_t removed_it = 0;
 
@@ -485,26 +488,26 @@ void SensorDepthCamera::convertDepthToCloudOrdered(const sensor_msgs::Image::Con
 
       const auto depth_raw = depth_row[u];
 
-      const bool valid     = DepthTraits<T>::valid(depth_raw);
-      float      depth     = DepthTraits<T>::toMeters(depth_raw);
+      const bool valid = DepthTraits<T>::valid(depth_raw);
+      float      depth = DepthTraits<T>::toMeters(depth_raw);
 
       const bool invalid_close = depth < range_clip_min;
       const bool invalid_far   = depth > range_clip_max;
 
-      const auto intensity_raw = intensity_row[u];
+      const auto  intensity_raw = intensity_row[u];
       const float intensity     = IntensityTraits<U>::toFloat(intensity_raw);
 
       if (!valid) {
         // fill invalid points with NaN
-        out_pc->at(col, row).x = std::numeric_limits<float>::quiet_NaN();
-        out_pc->at(col, row).y = std::numeric_limits<float>::quiet_NaN();
-        out_pc->at(col, row).z = std::numeric_limits<float>::quiet_NaN();
+        out_pc->at(col, row).x         = std::numeric_limits<float>::quiet_NaN();
+        out_pc->at(col, row).y         = std::numeric_limits<float>::quiet_NaN();
+        out_pc->at(col, row).z         = std::numeric_limits<float>::quiet_NaN();
         out_pc->at(col, row).intensity = std::numeric_limits<float>::quiet_NaN();
       } else if (range_clip_use && (invalid_close || invalid_far)) {
         // fill clipped points with NaN
-        out_pc->at(col, row).x = std::numeric_limits<float>::quiet_NaN();
-        out_pc->at(col, row).y = std::numeric_limits<float>::quiet_NaN();
-        out_pc->at(col, row).z = std::numeric_limits<float>::quiet_NaN();
+        out_pc->at(col, row).x         = std::numeric_limits<float>::quiet_NaN();
+        out_pc->at(col, row).y         = std::numeric_limits<float>::quiet_NaN();
+        out_pc->at(col, row).z         = std::numeric_limits<float>::quiet_NaN();
         out_pc->at(col, row).intensity = std::numeric_limits<float>::quiet_NaN();
         // return removed points in a separate pointcloud
         if ((return_removed_close && invalid_close) || (return_removed_far && invalid_far)) {
@@ -537,9 +540,9 @@ void SensorDepthCamera::imagePointToCloudPoint(const int x, const int y, const f
 
   const float dc = depth * focal_length_inverse;
 
-  point.x = (x - image_center_x) * dc;
-  point.y = (y - image_center_y) * dc;
-  point.z = depth;
+  point.x         = (x - image_center_x) * dc;
+  point.y         = (y - image_center_y) * dc;
+  point.z         = depth;
   point.intensity = intensity;
 }
 /*//}*/
@@ -559,15 +562,15 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
   const std::string         scope_label = "PCLFiltration::process_depth_msg::" + sensor_name;
   const mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
-  PC_I::Ptr     cloud, cloud_over_max_range;
+  PC_I::Ptr   cloud, cloud_over_max_range;
   const auto& depth_msg_raw = depth_msg_in;
 
   sensor_msgs::Image::Ptr masked_msg;
   if (mask_use) {
-    masked_msg = applyMask(depth_msg_raw); 
+    masked_msg = applyMask(depth_msg_raw);
     pub_masked_depth.publish(*masked_msg);
   }
-  
+
   const auto& depth_msg = mask_use ? boost::make_shared<sensor_msgs::Image>(*masked_msg) : depth_msg_raw;
 
   if (depth_msg->encoding != enc::MONO16 && depth_msg->encoding != enc::TYPE_16UC1 && depth_msg->encoding != enc::TYPE_32FC1) {
@@ -575,7 +578,8 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
     return;
   }
 
-  if (intensity_msg->encoding != enc::MONO8 && intensity_msg->encoding != enc::MONO16 && intensity_msg->encoding != enc::TYPE_16UC1 && intensity_msg->encoding != enc::TYPE_32FC1) {
+  if (intensity_msg->encoding != enc::MONO8 && intensity_msg->encoding != enc::MONO16 && intensity_msg->encoding != enc::TYPE_16UC1 &&
+      intensity_msg->encoding != enc::TYPE_32FC1) {
     ROS_ERROR_THROTTLE(5.0, "Unsupported encoding: intensity: [%s]", depth_msg->encoding.c_str());
     return;
   }
@@ -583,7 +587,8 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
   if ((depth_msg->encoding == enc::MONO16 || depth_msg->encoding == enc::TYPE_16UC1) && intensity_msg->encoding == enc::MONO8) {
     convertDepthToCloud<uint16_t, uint8_t>(depth_msg, intensity_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false, keep_ordered);
 
-  } else if ((depth_msg->encoding == enc::MONO16 || depth_msg->encoding == enc::TYPE_16UC1) && (intensity_msg->encoding == enc::MONO16 || intensity_msg->encoding == enc::TYPE_16UC1)) {
+  } else if ((depth_msg->encoding == enc::MONO16 || depth_msg->encoding == enc::TYPE_16UC1) &&
+             (intensity_msg->encoding == enc::MONO16 || intensity_msg->encoding == enc::TYPE_16UC1)) {
     convertDepthToCloud<uint16_t, uint16_t>(depth_msg, intensity_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false, keep_ordered);
 
   } else if ((depth_msg->encoding == enc::MONO16 || depth_msg->encoding == enc::TYPE_16UC1) && intensity_msg->encoding == enc::TYPE_32FC1) {
@@ -604,13 +609,13 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
   }
 
   const mrs_modules_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_modules_msgs::PclToolsDiagnostics>();
-  diag_msg->sensor_name                             = sensor_name;
-  diag_msg->stamp                                   = depth_msg->header.stamp;
-  diag_msg->sensor_type                             = mrs_modules_msgs::PclToolsDiagnostics::SENSOR_TYPE_DEPTH_CAMERA;
-  diag_msg->cols_before                             = cloud->width;
-  diag_msg->rows_before                             = cloud->height;
-  diag_msg->frequency                               = frequency;
-  diag_msg->vfov                                    = vfov;
+  diag_msg->sensor_name                                     = sensor_name;
+  diag_msg->stamp                                           = depth_msg->header.stamp;
+  diag_msg->sensor_type                                     = mrs_modules_msgs::PclToolsDiagnostics::SENSOR_TYPE_DEPTH_CAMERA;
+  diag_msg->cols_before                                     = cloud->width;
+  diag_msg->rows_before                                     = cloud->height;
+  diag_msg->frequency                                       = frequency;
+  diag_msg->vfov                                            = vfov;
 
   // Apply filters to the original cloud (beware, the filters are applied in sequential order: no parallelization)
   if (voxel_grid_use) {
@@ -687,10 +692,10 @@ void SensorDepthCamera::process_camera_info_msg(const sensor_msgs::CameraInfo::C
       sub_intensity.subscribe(*intensity_it, intensity_in_topic, 1, hints);
 
       if (intensity_sync_exact) {
-        exact_sync.reset(new ExactSynchronizer(ExactSyncPolicy(10), sub_depth, sub_intensity) );
+        exact_sync.reset(new ExactSynchronizer(ExactSyncPolicy(10), sub_depth, sub_intensity));
         exact_sync->registerCallback(boost::bind(&SensorDepthCamera::process_depth_intensity_msg, this, boost::placeholders::_1, boost::placeholders::_2));
       } else {
-        approx_sync.reset(new ApproxSynchronizer(ApproxSyncPolicy(10), sub_depth, sub_intensity) );
+        approx_sync.reset(new ApproxSynchronizer(ApproxSyncPolicy(10), sub_depth, sub_intensity));
         approx_sync->registerCallback(boost::bind(&SensorDepthCamera::process_depth_intensity_msg, this, boost::placeholders::_1, boost::placeholders::_2));
       }
 
@@ -717,13 +722,12 @@ void SensorDepthCamera::process_mask_msg(const sensor_msgs::Image::ConstPtr msg)
   const std::string         scope_label = "PCLFiltration::process_mask_msg::" + sensor_name;
   const mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
-  mask_msg = msg;
+  mask_msg     = msg;
   got_mask_msg = true;
 
   pub_masked_depth = _nh.advertise<sensor_msgs::Image>(masked_out, 1);
 
   sh_mask.stop();
-
 }
 /*//}*/
 
@@ -733,10 +737,10 @@ sensor_msgs::Image::Ptr SensorDepthCamera::applyMask(const sensor_msgs::Image::C
   sensor_msgs::Image::Ptr depth_masked = boost::make_shared<sensor_msgs::Image>(*depth_msg);
 
   const int col_step = depth_msg->step / depth_msg->width;
-  const int row_step  = depth_msg->step;
+  const int row_step = depth_msg->step;
 
   const int col_step_mask = mask_msg->step / mask_msg->width;
-  const int row_step_mask  = mask_msg->step;
+  const int row_step_mask = mask_msg->step;
 
   for (int v = 0; v < (int)depth_msg->height; v += 1) {
 
@@ -744,16 +748,13 @@ sensor_msgs::Image::Ptr SensorDepthCamera::applyMask(const sensor_msgs::Image::C
 
     for (int u = 0; u < (int)depth_msg->width; u += 1) {
 
-      if (mask_msg->data[v*row_step_mask+u*col_step_mask] < 1) {
+      if (mask_msg->data[v * row_step_mask + u * col_step_mask] < 1) {
 
         for (int b = 0; b < col_step; b++) {
-          depth_masked->data[v*row_step+u*col_step+b] = 0;
+          depth_masked->data[v * row_step + u * col_step + b] = 0;
         }
-
       }
-
     }
-
   }
   return depth_masked;
 }

@@ -108,7 +108,7 @@ struct IntensityTraits<uint8_t>
   }
   static inline float toFloat(uint8_t intensity) {
     return float(intensity);
-  }  
+  }
   static inline uint8_t fromFloat(float intensity) {
     return intensity + 0.5f;
   }
@@ -122,7 +122,7 @@ struct IntensityTraits<uint16_t>
   }
   static inline float toFloat(uint16_t intensity) {
     return float(intensity);
-  }  
+  }
   static inline uint16_t fromFloat(float intensity) {
     return intensity + 0.5f;
   }
@@ -164,19 +164,21 @@ private:
 
   void imagePointToCloudPoint(const int x, const int y, const float depth, pt_XYZ& point);
 
-  
-  template <typename T, typename U>
-  void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& cloud_out, PC_I::Ptr& cloud_over_max_range_out,
-                           const bool return_removed_close = false, const bool return_removed_far = false, const bool replace_nans = false,
-                           const bool keep_ordered = false);
 
   template <typename T, typename U>
-  void convertDepthToCloudUnordered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc, PC_I::Ptr& removed_pc,
-                                    const bool return_removed_close = false, const bool return_removed_far = false, const bool replace_nans = false);
+  void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& cloud_out,
+                           PC_I::Ptr& cloud_over_max_range_out, const bool return_removed_close = false, const bool return_removed_far = false,
+                           const bool replace_nans = false, const bool keep_ordered = false);
 
   template <typename T, typename U>
-  void convertDepthToCloudOrdered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc, PC_I::Ptr& removed_pc, const bool return_removed_close = false,
-                                  const bool return_removed_far = false, const bool replace_nans = false);
+  void convertDepthToCloudUnordered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc,
+                                    PC_I::Ptr& removed_pc, const bool return_removed_close = false, const bool return_removed_far = false,
+                                    const bool replace_nans = false);
+
+  template <typename T, typename U>
+  void convertDepthToCloudOrdered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc,
+                                  PC_I::Ptr& removed_pc, const bool return_removed_close = false, const bool return_removed_far = false,
+                                  const bool replace_nans = false);
 
   void imagePointToCloudPoint(const int x, const int y, const float depth, const float intensity, pt_XYZI& point);
 
@@ -198,18 +200,18 @@ private:
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_mask;
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
 
-  std::shared_ptr<image_transport::ImageTransport> intensity_it, depth_it;
-  image_transport::SubscriberFilter sub_depth, sub_intensity;
+  std::shared_ptr<image_transport::ImageTransport>                                                intensity_it, depth_it;
+  image_transport::SubscriberFilter                                                               sub_depth, sub_intensity;
   typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> ApproxSyncPolicy;
-  typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image> ExactSyncPolicy;
-  typedef message_filters::Synchronizer<ApproxSyncPolicy> ApproxSynchronizer;
-  typedef message_filters::Synchronizer<ExactSyncPolicy> ExactSynchronizer;
-  std::shared_ptr<ApproxSynchronizer> approx_sync;
-  std::shared_ptr<ExactSynchronizer> exact_sync;
+  typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image>       ExactSyncPolicy;
+  typedef message_filters::Synchronizer<ApproxSyncPolicy>                                         ApproxSynchronizer;
+  typedef message_filters::Synchronizer<ExactSyncPolicy>                                          ExactSynchronizer;
+  std::shared_ptr<ApproxSynchronizer>                                                             approx_sync;
+  std::shared_ptr<ExactSynchronizer>                                                              exact_sync;
 
   std::shared_ptr<CommonHandlers_t> _common_handlers;
 
-  bool got_mask_msg = false;
+  bool                         got_mask_msg = false;
   sensor_msgs::Image::ConstPtr mask_msg;
 
 private:
@@ -234,13 +236,12 @@ private:
 
   // Filters parameters
 private:
-
   bool mask_use;
 
-  bool intensity_use;
-  bool intensity_sync_exact;
+  bool        intensity_use;
+  bool        intensity_sync_exact;
   std::string intensity_in_topic;
-  
+
   int downsample_step_col;
   int downsample_step_row;
 
