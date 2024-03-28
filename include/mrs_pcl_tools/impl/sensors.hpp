@@ -661,9 +661,6 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
   diag_msg->vfov                                            = vfov;
 
   // Apply filters to the original cloud (beware, the filters are applied in sequential order: no parallelization)
-  if (voxel_grid_use) {
-    cloud = mrs_pcl_tools::filters::applyVoxelGridFilter(cloud, voxel_grid_resolution);
-  }
   if (radius_outlier_use) {
     cloud = mrs_pcl_tools::filters::applyRadiusOutlierFilter(cloud, radius_outlier_radius, radius_outlier_neighbors);
   }
