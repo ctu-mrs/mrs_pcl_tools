@@ -167,17 +167,17 @@ private:
 
   template <typename T, typename U>
   void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& cloud_out,
-                           PC_I::Ptr& cloud_over_max_range_out, const bool return_removed_close = false, const bool return_removed_far = false,
+                           PC_I::Ptr& cloud_over_max_range_out, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false, const bool return_removed_far = false,
                            const bool replace_nans = false, const bool keep_ordered = false);
 
   template <typename T, typename U>
   void convertDepthToCloudUnordered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc,
-                                    PC_I::Ptr& removed_pc, const bool return_removed_close = false, const bool return_removed_far = false,
+                                    PC_I::Ptr& removed_pc, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false, const bool return_removed_far = false,
                                     const bool replace_nans = false);
 
   template <typename T, typename U>
   void convertDepthToCloudOrdered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc,
-                                  PC_I::Ptr& removed_pc, const bool return_removed_close = false, const bool return_removed_far = false,
+                                  PC_I::Ptr& removed_pc, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false, const bool return_removed_far = false,
                                   const bool replace_nans = false);
 
   void imagePointToCloudPoint(const int x, const int y, const float depth, const float intensity, pt_XYZI& point);
@@ -194,6 +194,7 @@ private:
   ros::NodeHandle _nh;
   ros::Publisher  pub_points;
   ros::Publisher  pub_points_over_max_range;
+  ros::Publisher  pub_points_low_intensity;
   ros::Publisher  pub_masked_depth;
 
   mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
@@ -241,6 +242,10 @@ private:
   bool        intensity_use;
   bool        intensity_sync_exact;
   std::string intensity_in_topic;
+  bool        filter_low_intensity;
+  double      filter_low_intensity_threshold;
+  std::string points_low_intensity_out_topic;
+
 
   int downsample_step_col;
   int downsample_step_row;
