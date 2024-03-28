@@ -11,6 +11,8 @@
 #include <Eigen/QR>
 #include <Eigen/Eigenvalues>
 
+/* #include <tsl/robin_map.h> */
+
 namespace mrs_pcl_tools
 {
 
@@ -36,11 +38,28 @@ protected:
 // | ---------------------- Voxel Filter ---------------------- |
 class VoxelFilter : public AbstractFilter {
 public:
-  VoxelFilter(const float resolution);
+  VoxelFilter(const float resolution, const std::string& method = "centroid");
   void filter(typename boost::shared_ptr<PC>& inout_pc) const override;
 
 private:
-  float _resolution;
+  enum METHOD
+  {
+    CENTROID,
+    HASHMAP,
+  };
+
+  METHOD _method;
+  float  _resolution;
+
+  // TODO: hashmap method
+  /* using Voxel = Eigen::Vector3i; */
+  /* struct VoxelHash */
+  /* { */
+  /*   size_t operator()(const Voxel& voxel) const { */
+  /*     const uint32_t* vec = reinterpret_cast<const uint32_t*>(voxel.data()); */
+  /*     return ((1 << 20) - 1) & (vec[0] * 73856093 ^ vec[1] * 19349663 ^ vec[2] * 83492791); */
+  /*   } */
+  /* }; */
 };
 
 // | ------------------- Normal-space Filter ------------------ |
@@ -59,16 +78,6 @@ private:
   const size_t _norm_est_K = 5;
 
   std::size_t bucketIdx(double theta, double phi) const;
-};
-
-class PointCloudFilters {
-public:
-  PointCloudFilters(){};
-  PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader> param_loader, const std::string& ns);
-  void applyFilters(typename boost::shared_ptr<PC>& inout_pc_ptr);
-
-private:
-  std::vector<std::shared_ptr<AbstractFilter>> _filters;
 };
 
 // | ----------------- Covariance-based Filter ---------------- |
@@ -90,6 +99,17 @@ private:
   TORQUE_NORM _torque_norm;
 
   const size_t _norm_est_K = 5;
+};
+
+// | ---------------- Wrapper class for filters --------------- |
+class PointCloudFilters {
+public:
+  PointCloudFilters(){};
+  PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader> param_loader, const std::string& ns);
+  void applyFilters(typename boost::shared_ptr<PC>& inout_pc_ptr);
+
+private:
+  std::vector<std::shared_ptr<AbstractFilter>> _filters;
 };
 
 }  // namespace mrs_pcl_tools

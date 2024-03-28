@@ -4,6 +4,8 @@ namespace mrs_pcl_tools
 {
 
 /*//{ class: PointCloudFilters */
+
+/*//{ PointCloudFilters() */
 PointCloudFilters::PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader> param_loader, const std::string& ns) {
 
   // TODO: Add the rest of filters using this convention: downsample, range_clip, radius outlier, minimum grid, bilateral
@@ -63,12 +65,16 @@ PointCloudFilters::PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader>
     }
   }
 }
+/*//}*/
 
-void PointCloudFilters::applyFilters(typename boost::shared_ptr<PC>& inout_pc_ptr) {
+/*//{ applyFilters() */
+void PointCloudFilters::applyFilters(typename boost::shared_ptr<PC>& inout_pc) {
   for (const auto& filter : _filters) {
-    filter->filter(inout_pc_ptr);
+    filter->filter(inout_pc);
   }
 }
+/*//}*/
+
 /*//}*/
 
 /*//{ class: AbstractFilter */
@@ -101,8 +107,18 @@ pcl::PointCloud<pcl::Normal>::Ptr AbstractFilter::estimateNormals(const typename
 /*//{ class: VoxelFilter */
 
 /*//{ VoxelFilter() */
-VoxelFilter::VoxelFilter(const float resolution) {
+VoxelFilter::VoxelFilter(const float resolution, const std::string& method) {
   _resolution = resolution;
+
+  if (method == "hashmap") {
+    _method = METHOD::HASHMAP;
+  } else if (method == "centroid") {
+    _method = METHOD::CENTROID;
+  } else {
+    ROS_ERROR("[VoxelFilter] Invalid method: %s (valid: hashmap, centroid).", method.c_str());
+    _params_valid = false;
+  }
+
   if (resolution < 0.0) {
     ROS_ERROR("[VoxelFilter] Invalid parameter resolution: %.1f (must be positive).", resolution);
     _params_valid = false;
@@ -113,13 +129,39 @@ VoxelFilter::VoxelFilter(const float resolution) {
 /*//{ filter() */
 void VoxelFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
 
-  // TODO: Replace PCL voxel filter with such that does not use centroids but real points (such as in KISS-ICP)
+  // Use PCL as it "centroids" all points within a voxel
+  if (_method == METHOD::CENTROID) {
 
-  pcl::VoxelGrid<typename PC::PointType> vg;
-  vg.setInputCloud(inout_pc);
-  vg.setLeafSize(_resolution, _resolution, _resolution);
+    pcl::VoxelGrid<typename PC::PointType> vg;
+    vg.setInputCloud(inout_pc);
+    vg.setLeafSize(_resolution, _resolution, _resolution);
 
-  vg.filter(*inout_pc);
+    vg.filter(*inout_pc);
+
+  }
+
+  // Use code from KISS-ICP which keeps real point within a voxel
+  else if (_method == METHOD::HASHMAP) {
+    ROS_ERROR("[VoxelFilter] Hashmap voxelization not implemented yet. Use \"centroid\" method.");
+
+    using Voxel = Eigen::Vector3i;
+
+    // TODO: implement
+    // TODO: add TSL library and reuse this piece of code for hashmap voxelization
+    /* tsl::robin_map<Voxel, Eigen::Vector3d, VoxelHash> grid; */
+    /* grid.reserve(frame.size()); */
+    /* for (const auto& point : frame) { */
+    /*   const auto voxel = Voxel((point / voxel_size).cast<int>()); */
+    /*   if (grid.contains(voxel)) */
+    /*     continue; */
+    /*   grid.insert({voxel, point}); */
+    /* } */
+    /* std::vector<Eigen::Vector3d> frame_dowsampled; */
+    /* frame_dowsampled.reserve(grid.size()); */
+    /* for (const auto& [_, point] : grid) { */
+    /*   frame_dowsampled.emplace_back(point); */
+    /* } */
+  }
 }
 /*//}*/
 
@@ -188,7 +230,6 @@ void NormSFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
 
       finite++;
     }
-
   }
 
   if (nbSample >= finite) {

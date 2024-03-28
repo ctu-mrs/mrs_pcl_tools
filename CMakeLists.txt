@@ -66,6 +66,9 @@ generate_messages(DEPENDENCIES
   visualization_msgs mrs_msgs
   )
 
+# TODO: add TSL for hashmap voxelization
+# include(3rdparty/tsl.cmake)
+
 ###################################
 ## catkin specific configuration ##
 ###################################
