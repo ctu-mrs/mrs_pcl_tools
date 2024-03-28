@@ -1,5 +1,7 @@
 #pragma once
 
+#include <random>
+
 #include <mrs_pcl_tools/common_includes_and_typedefs.h>
 
 #include <pcl/features/normal_3d.h>
@@ -25,6 +27,10 @@ public:
 
 protected:
   bool _params_valid = true;
+
+  const float INVALID_VALUE = std::numeric_limits<float>::quiet_NaN();
+
+  pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(const typename boost::shared_ptr<PC>& in_pc, const size_t nn_K) const;
 };
 
 // | ---------------------- Voxel Filter ---------------------- |
@@ -41,12 +47,18 @@ private:
 // Rusinkiewicz and Levoy, Efficient Variants of the ICP Algorithm, 2001
 class NormSFilter : public AbstractFilter {
 public:
-  NormSFilter(const double resolution_azimuth, const double resolution_elevation);
+  NormSFilter(const size_t count, const double resolution);
   void filter(typename boost::shared_ptr<PC>& inout_pc) const override;
 
 private:
-  double _res_az;
-  double _res_el;
+  size_t _count;
+  double _resolution;
+
+  size_t nbBucket;
+
+  const size_t _norm_est_K = 5;
+
+  std::size_t bucketIdx(double theta, double phi) const;
 };
 
 class PointCloudFilters {
@@ -78,8 +90,6 @@ private:
   TORQUE_NORM _torque_norm;
 
   const size_t _norm_est_K = 5;
-
-  const float INVALID_VALUE = std::numeric_limits<float>::quiet_NaN();
 };
 
 }  // namespace mrs_pcl_tools

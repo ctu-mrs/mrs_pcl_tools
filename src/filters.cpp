@@ -33,10 +33,10 @@ PointCloudFilters::PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader>
 
     } else if (name == "NormS") {
 
-      const double res_az = param_loader->loadParamReusable2<double>(prefix + "cloud_filter/NormS/resolution/azimuth");
-      const double res_el = param_loader->loadParamReusable2<double>(prefix + "cloud_filter/NormS/resolution/elevation");
+      const int    count      = param_loader->loadParamReusable2<int>(prefix + "cloud_filter/NormS/count");
+      const double resolution = param_loader->loadParamReusable2<double>(prefix + "cloud_filter/NormS/resolution");
 
-      filter = std::make_shared<NormSFilter>(res_az, res_el);
+      filter = std::make_shared<NormSFilter>(size_t(count), resolution);
 
     } else if (name == "CovS") {
 
@@ -72,12 +72,35 @@ void PointCloudFilters::applyFilters(typename boost::shared_ptr<PC>& inout_pc_pt
 /*//}*/
 
 /*//{ class: AbstractFilter */
+
+/*//{ isValid() */
 bool AbstractFilter::isValid() const {
   return _params_valid;
 }
 /*//}*/
 
+/*//{ estimateNormals() */
+pcl::PointCloud<pcl::Normal>::Ptr AbstractFilter::estimateNormals(const typename boost::shared_ptr<PC>& in_pc, const size_t nn_K) const {
+
+  pcl::NormalEstimation<PC::PointType, pcl::Normal> normal_estimator;
+  normal_estimator.setInputCloud(in_pc);
+
+  const pcl::search::KdTree<PC::PointType>::Ptr tree = boost::make_shared<pcl::search::KdTree<PC::PointType>>();
+  normal_estimator.setSearchMethod(tree);
+
+  const pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+  normal_estimator.setKSearch(nn_K);
+  normal_estimator.compute(*normals);
+
+  return normals;
+}
+/*//}*/
+
+/*//}*/
+
 /*//{ class: VoxelFilter */
+
+/*//{ VoxelFilter() */
 VoxelFilter::VoxelFilter(const float resolution) {
   _resolution = resolution;
   if (resolution < 0.0) {
@@ -85,7 +108,9 @@ VoxelFilter::VoxelFilter(const float resolution) {
     _params_valid = false;
   }
 }
+/*//}*/
 
+/*//{ filter() */
 void VoxelFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
 
   // TODO: Replace PCL voxel filter with such that does not use centroids but real points (such as in KISS-ICP)
@@ -94,27 +119,139 @@ void VoxelFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
   vg.setInputCloud(inout_pc);
   vg.setLeafSize(_resolution, _resolution, _resolution);
 
-  /* const boost::shared_ptr<PC> cloud_out = boost::make_shared<PC>(); */
   vg.filter(*inout_pc);
-
-  /* inout_pc = cloud_out; */
 }
 /*//}*/
 
-/*//{ class: NormSFilter */
-NormSFilter::NormSFilter(const double resolution_azimuth, const double resolution_elevation) {
-  _res_az = resolution_azimuth;
-  _res_el = resolution_elevation;
+/*//}*/
 
-  if (_res_az < 0.0 || _res_el < 0.0) {
-    ROS_ERROR("[NormSFilter] Invalid resolution in azimuth | elevation: %.1f | %.1f (both must be positive).", _res_az, _res_el);
+/*//{ class: NormSFilter */
+
+/*//{ NormSFilter() */
+NormSFilter::NormSFilter(const size_t count, const double resolution) {
+  _resolution = resolution;
+  _count      = count;
+
+  if (_resolution < 0.0) {
+    ROS_ERROR("[NormSFilter] Invalid resolution: %.1f (must be positive).", _resolution);
     _params_valid = false;
   }
-}
 
-void NormSFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
-  // TODO: implement
+  nbBucket = std::size_t(std::ceil(2.0 * M_PI / _resolution) * std::ceil(M_PI / _resolution));
 }
+/*//}*/
+
+/*//{ filter() */
+void NormSFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
+  // Implementation adapted from:
+  // https://github.com/norlab-ulaval/libpointmatcher/blob/master/pointmatcher/DataPointsFilters/NormalSpace.cpp
+
+  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("NormSFilter", nullptr, false);
+
+  const size_t nbPoints = inout_pc->size();
+  const size_t nbSample = _count;
+
+  if (nbSample >= nbPoints) {
+    return;
+  }
+
+  const auto& normals = estimateNormals(inout_pc, _norm_est_K);
+  timer.checkpoint("normal estimation");
+
+  std::mt19937 gen(time(nullptr));
+
+  // bucketed normal space
+  std::vector<std::vector<int>> idBuckets;
+  idBuckets.resize(nbBucket);
+
+  // Generate a random sequence of indices so that elements are placed in buckets in random order
+  std::vector<std::size_t> randIdcs(nbPoints);
+  std::iota(randIdcs.begin(), randIdcs.end(), 0);
+  std::shuffle(randIdcs.begin(), randIdcs.end(), gen);
+
+  // (1) put all points of the data into buckets based on their normal direction
+  size_t finite = 0;
+  for (const auto randIdx : randIdcs) {
+
+    const auto& n = normals->at(randIdx);
+
+    if (std::isfinite(n.normal_x) && std::isfinite(n.normal_y) && std::isfinite(n.normal_z)) {
+
+      // Theta = polar angle in [0 ; pi]
+      const double theta = std::acos(n.normal_z);
+      // Phi = azimuthal angle in [0 ; 2pi]
+      const double phi = std::fmod(std::atan2(n.normal_y, n.normal_x) + 2. * M_PI, 2. * M_PI);
+
+      // Catch normal space hashing errors
+      /* ROS_ERROR("bucketIdx(%.2f, %.2f) = %ld (nbBucket: %ld)", theta, phi, bucketIdx(theta, phi), nbBucket); */
+      idBuckets[bucketIdx(theta, phi)].push_back(randIdx);
+
+      finite++;
+    }
+
+  }
+
+  if (nbSample >= finite) {
+    return;
+  }
+
+  // Remove empty buckets
+  idBuckets.erase(std::remove_if(idBuckets.begin(), idBuckets.end(), [](const std::vector<int>& bucket) { return bucket.empty(); }), idBuckets.end());
+
+  // (2) uniformly pick points from all the buckets until the desired number of points is selected
+  /* std::vector<std::size_t> keepIndexes; */
+  /* keepIndexes.reserve(nbSample); */
+
+  for (std::size_t i = 0; i < nbSample; i++) {
+
+    // Get a random bucket
+    std::uniform_int_distribution<std::size_t> uniBucket(0, idBuckets.size() - 1);  // TODO: this has to be expensive in every loop
+
+    const std::size_t curBucketIdx = uniBucket(gen);
+    auto&             curBucket    = idBuckets[curBucketIdx];
+
+    //(3) A point is randomly picked in a bucket that contains multiple points
+    const int idToKeep = curBucket[curBucket.size() - 1];
+    curBucket.pop_back();
+    /* keepIndexes.push_back(static_cast<std::size_t>(idToKeep)); */
+
+    // Remove the bucket if it is empty
+    if (curBucket.empty()) {
+      idBuckets.erase(idBuckets.begin() + curBucketIdx);
+    }
+  }
+
+  // Invalidate points
+  for (const auto& ids : idBuckets) {
+    for (const int i : ids) {
+      auto& p = inout_pc->at(i);
+      p.x     = INVALID_VALUE;
+      p.y     = INVALID_VALUE;
+      p.z     = INVALID_VALUE;
+    }
+  }
+}
+/*//}*/
+
+/*//{ bucketIdx() */
+std::size_t NormSFilter::bucketIdx(double theta, double phi) const {
+  // Theta = polar angle in [0 ; pi] and Phi = azimuthal angle in [0 ; 2pi]
+
+  // Wrap Theta at Pi
+  if (theta >= M_PI) {
+    theta = 0.0;
+  }
+
+  // Wrap Phi at 2Pi
+  if (phi >= 2.0 * M_PI) {
+    phi = 0.0;
+  }
+
+  //                              block number                      block size                            element number
+  return static_cast<std::size_t>(std::floor(theta / _resolution) * std::ceil(2.0 * M_PI / _resolution) + std::floor(phi / _resolution));
+}
+/*//}*/
+
 /*//}*/
 
 /*//{ class: CovSFilter */
@@ -138,10 +275,10 @@ CovSFilter::CovSFilter(const size_t count, const std::string& torque_norm) {
 /*//{ filter() */
 void CovSFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
 
-  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("CovSFilter", nullptr, false);
-
   // Implementation adapted from:
   // https://github.com/norlab-ulaval/libpointmatcher/blob/master/pointmatcher/DataPointsFilters/CovarianceSampling.cpp
+
+  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("CovSFilter", nullptr, false);
 
   using Matrix66 = Eigen::Matrix<double, 6, 6>;
   using Vector6  = Eigen::Matrix<double, 6, 1>;
@@ -155,16 +292,7 @@ void CovSFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
   }
 
   // | --------------------- Compute Normals -------------------- |
-  pcl::NormalEstimation<PC::PointType, pcl::Normal> normal_estimator;
-  normal_estimator.setInputCloud(inout_pc);
-
-  const pcl::search::KdTree<PC::PointType>::Ptr tree = boost::make_shared<pcl::search::KdTree<PC::PointType>>();
-  normal_estimator.setSearchMethod(tree);
-
-  const pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
-  normal_estimator.setKSearch(_norm_est_K);
-  normal_estimator.compute(*normals);
-
+  const auto& normals = estimateNormals(inout_pc, _norm_est_K);
   timer.checkpoint("normal estimation");
 
   /* ROS_INFO("inout_pc size, normals size: %ld, %ld", inout_pc->size(), normals->size()); */
