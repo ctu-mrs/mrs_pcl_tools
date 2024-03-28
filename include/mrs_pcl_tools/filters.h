@@ -5,6 +5,10 @@
 #include <pcl/features/normal_3d.h>
 #include <pcl/kdtree/kdtree_flann.h>
 
+#include <Eigen/Core>
+#include <Eigen/QR>
+#include <Eigen/Eigenvalues>
+
 namespace mrs_pcl_tools
 {
 
@@ -67,11 +71,15 @@ private:
   {
     L1,
     Lavg,
-    Lmax
+    Lmax  // TODO: implement this option
   };
 
   size_t      _count;
   TORQUE_NORM _torque_norm;
+
+  const size_t _norm_est_K = 5;
+
+  const float INVALID_VALUE = std::numeric_limits<float>::quiet_NaN();
 };
 
 }  // namespace mrs_pcl_tools
