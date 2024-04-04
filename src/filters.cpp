@@ -70,9 +70,15 @@ PointCloudFilters::PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader>
 /*//}*/
 
 /*//{ applyFilters() */
-void PointCloudFilters::applyFilters(typename boost::shared_ptr<PC>& inout_pc) {
+void PointCloudFilters::applyFilters(typename boost::shared_ptr<PC>& inout_pc, const bool remove_nans) {
   for (const auto& filter : _filters) {
     filter->filter(inout_pc);
+  }
+
+  if (remove_nans) {
+    std::vector<int> ind;
+    inout_pc->is_dense = false;
+    pcl::removeNaNFromPointCloud(*inout_pc, *inout_pc, ind);
   }
 }
 /*//}*/

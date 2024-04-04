@@ -107,7 +107,7 @@ class PointCloudFilters {
 public:
   PointCloudFilters(){};
   PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader> param_loader, const std::string& ns = "");
-  void applyFilters(typename boost::shared_ptr<PC>& inout_pc_ptr);
+  void applyFilters(typename boost::shared_ptr<PC>& inout_pc_ptr, const bool remove_nans = false);
 
 private:
   std::vector<std::shared_ptr<AbstractFilter>> _filters;
