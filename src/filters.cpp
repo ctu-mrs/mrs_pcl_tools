@@ -15,6 +15,8 @@ PointCloudFilters::PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader>
     prefix = ns + "/";
   }
 
+  const bool enable_scope_timer = param_loader->loadParamReusable2(prefix + "cloud_filter/scope_timer/enabled", false);
+
   // | ---------------------- Load filters ---------------------- |
   const std::vector<std::string> sequence =
       param_loader->loadParamReusable2<std::vector<std::string>>(prefix + "cloud_filter/sequence", std::vector<std::string>());
@@ -31,21 +33,21 @@ PointCloudFilters::PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader>
 
       const float res = param_loader->loadParamReusable2<float>(prefix + "cloud_filter/voxel_grid/resolution");
 
-      filter = std::make_shared<VoxelFilter>(res);
+      filter = std::make_shared<VoxelFilter>(res, "centroid", enable_scope_timer);
 
     } else if (name == "NormS") {
 
       const int    count      = param_loader->loadParamReusable2<int>(prefix + "cloud_filter/NormS/count");
       const double resolution = param_loader->loadParamReusable2<double>(prefix + "cloud_filter/NormS/resolution");
 
-      filter = std::make_shared<NormSFilter>(size_t(count), resolution);
+      filter = std::make_shared<NormSFilter>(size_t(count), resolution, enable_scope_timer);
 
     } else if (name == "CovS") {
 
       const int         count       = param_loader->loadParamReusable2<int>(prefix + "cloud_filter/CovS/count");
       const std::string torque_norm = param_loader->loadParamReusable2<std::string>(prefix + "cloud_filter/CovS/torque_norm", "L1");
 
-      filter = std::make_shared<CovSFilter>(size_t(count), torque_norm);
+      filter = std::make_shared<CovSFilter>(size_t(count), torque_norm, enable_scope_timer);
 
     } else {
 
@@ -107,8 +109,9 @@ pcl::PointCloud<pcl::Normal>::Ptr AbstractFilter::estimateNormals(const typename
 /*//{ class: VoxelFilter */
 
 /*//{ VoxelFilter() */
-VoxelFilter::VoxelFilter(const float resolution, const std::string& method) {
-  _resolution = resolution;
+VoxelFilter::VoxelFilter(const float resolution, const std::string& method, const bool enable_scope_timer) {
+  _resolution         = resolution;
+  _enable_scope_timer = enable_scope_timer;
 
   if (method == "hashmap") {
     _method = METHOD::HASHMAP;
@@ -128,6 +131,8 @@ VoxelFilter::VoxelFilter(const float resolution, const std::string& method) {
 
 /*//{ filter() */
 void VoxelFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
+
+  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("VoxelFilter", nullptr, _enable_scope_timer);
 
   // Use PCL as it "centroids" all points within a voxel
   if (_method == METHOD::CENTROID) {
@@ -170,9 +175,10 @@ void VoxelFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
 /*//{ class: NormSFilter */
 
 /*//{ NormSFilter() */
-NormSFilter::NormSFilter(const size_t count, const double resolution) {
-  _resolution = resolution;
-  _count      = count;
+NormSFilter::NormSFilter(const size_t count, const double resolution, const bool enable_scope_timer) {
+  _resolution         = resolution;
+  _count              = count;
+  _enable_scope_timer = enable_scope_timer;
 
   if (_resolution < 0.0) {
     ROS_ERROR("[NormSFilter] Invalid resolution: %.1f (must be positive).", _resolution);
@@ -188,7 +194,7 @@ void NormSFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
   // Implementation adapted from:
   // https://github.com/norlab-ulaval/libpointmatcher/blob/master/pointmatcher/DataPointsFilters/NormalSpace.cpp
 
-  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("NormSFilter", nullptr, false);
+  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("NormSFilter", nullptr, _enable_scope_timer);
 
   const size_t nbPoints = inout_pc->size();
   const size_t nbSample = _count;
@@ -298,8 +304,10 @@ std::size_t NormSFilter::bucketIdx(double theta, double phi) const {
 /*//{ class: CovSFilter */
 
 /*//{ CovSFilter() */
-CovSFilter::CovSFilter(const size_t count, const std::string& torque_norm) {
-  _count = count;
+CovSFilter::CovSFilter(const size_t count, const std::string& torque_norm, const bool enable_scope_timer) {
+  _count              = count;
+  _enable_scope_timer = enable_scope_timer;
+
   if (torque_norm == "L1") {
     _torque_norm = TORQUE_NORM::L1;
   } else if (torque_norm == "Lavg") {
@@ -319,7 +327,7 @@ void CovSFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
   // Implementation adapted from:
   // https://github.com/norlab-ulaval/libpointmatcher/blob/master/pointmatcher/DataPointsFilters/CovarianceSampling.cpp
 
-  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("CovSFilter", nullptr, false);
+  mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer("CovSFilter", nullptr, _enable_scope_timer);
 
   using Matrix66 = Eigen::Matrix<double, 6, 6>;
   using Vector6  = Eigen::Matrix<double, 6, 1>;

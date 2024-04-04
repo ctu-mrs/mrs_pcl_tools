@@ -28,7 +28,8 @@ public:
   bool isValid() const;
 
 protected:
-  bool _params_valid = true;
+  bool _params_valid       = true;
+  bool _enable_scope_timer = false;
 
   const float INVALID_VALUE = std::numeric_limits<float>::quiet_NaN();
 
@@ -38,7 +39,7 @@ protected:
 // | ---------------------- Voxel Filter ---------------------- |
 class VoxelFilter : public AbstractFilter {
 public:
-  VoxelFilter(const float resolution, const std::string& method = "centroid");
+  VoxelFilter(const float resolution, const std::string& method = "centroid", const bool enable_scope_timer = true);
   void filter(typename boost::shared_ptr<PC>& inout_pc) const override;
 
 private:
@@ -66,7 +67,7 @@ private:
 // Rusinkiewicz and Levoy, Efficient Variants of the ICP Algorithm, 2001
 class NormSFilter : public AbstractFilter {
 public:
-  NormSFilter(const size_t count, const double resolution);
+  NormSFilter(const size_t count, const double resolution, const bool enable_scope_timer = true);
   void filter(typename boost::shared_ptr<PC>& inout_pc) const override;
 
 private:
@@ -84,7 +85,7 @@ private:
 // Gelfand et. al, Geometrically stable sampling for the ICP algorithm, 2003
 class CovSFilter : public AbstractFilter {
 public:
-  CovSFilter(const size_t count, const std::string& torque_norm);
+  CovSFilter(const size_t count, const std::string& torque_norm, const bool enable_scope_timer = true);
   void filter(typename boost::shared_ptr<PC>& inout_pc) const override;
 
 private:
@@ -105,7 +106,7 @@ private:
 class PointCloudFilters {
 public:
   PointCloudFilters(){};
-  PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader> param_loader, const std::string& ns);
+  PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader> param_loader, const std::string& ns = "");
   void applyFilters(typename boost::shared_ptr<PC>& inout_pc_ptr);
 
 private:

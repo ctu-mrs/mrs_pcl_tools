@@ -44,6 +44,9 @@ lidar3d:
     publish_plane_marker: true
 
   cloud_filter:
+    scope_timer:
+      enabled: false
+
     sequence: ["voxel_grid", "NormS"] # sequence of filters to be applied (in this order) | example: ["voxel_grid", "NormS"]
 
     downsample:        # basically binning
