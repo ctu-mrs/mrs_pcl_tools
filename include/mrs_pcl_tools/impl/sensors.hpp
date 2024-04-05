@@ -57,13 +57,24 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/depth_filter/bilateral/sigma_R", bilateral_sigma_R, 0.0f);
   bilateral_use = bilateral_sigma_S > 0.0f && bilateral_sigma_R > 0.0f;
 
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/freespacing/use", freespacing_use, false);
+  if (freespacing_use) {
+    _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/freespacing/freespace_ray_max_length", freespacing_max_ray_len);
+    const float voxel_res = _common_handlers->param_loader->loadParamReusable2("depth/" + sensor_name + "/freespacing/voxelize", -1.0f);
+
+    if (voxel_res > 0.0f) {
+      freespacing_voxel_filter = std::make_shared<VoxelFilter>(voxel_res, "centroid", false);
+    }
+  }
+
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/depth_in", depth_in);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/depth_camera_info_in", depth_camera_info_in);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/points_out", points_out);
   _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/points_over_max_range_out", points_over_max_range_out, std::string(""));
+  _common_handlers->param_loader->loadParam("depth/" + sensor_name + "/topic/freespacing_out", freespacing_out, std::string(""));
 
-
-  publish_over_max_range = points_over_max_range_out.size() > 0 && range_clip_use;
+  publish_over_max_range = !points_over_max_range_out.empty() && range_clip_use;
+  publish_freespacing    = freespacing_use && !freespacing_out.empty();
 
   if (prefix.size() > 0) {
 
@@ -73,6 +84,10 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
 
     if (publish_over_max_range) {
       points_over_max_range_out = "/" + prefix + "/" + points_over_max_range_out;
+    }
+
+    if (publish_freespacing) {
+      freespacing_out = "/" + prefix + "/" + freespacing_out;
     }
 
     if (mask_use) {
@@ -87,6 +102,12 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
       }
     }
   }
+
+  diag_msg              = boost::make_shared<mrs_modules_msgs::PclToolsDiagnostics>();
+  diag_msg->sensor_name = sensor_name;
+  diag_msg->sensor_type = mrs_modules_msgs::PclToolsDiagnostics::SENSOR_TYPE_DEPTH_CAMERA;
+  diag_msg->frequency   = frequency;
+  diag_msg->vfov        = vfov;
 
   // Start subscribe handler for depth camera info
   mrs_lib::SubscribeHandlerOptions shopts(_nh);
@@ -297,7 +318,7 @@ void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg
   const std::string         scope_label = "PCLFiltration::process_depth_msg::" + sensor_name;
   const mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
-  PC::Ptr     cloud, cloud_over_max_range;
+  PC::Ptr     cloud, cloud_over_max_range, cloud_freespacing;
   const auto& depth_msg_raw = msg;
 
   sensor_msgs::Image::Ptr masked_msg;
@@ -308,23 +329,54 @@ void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg
 
   const auto& depth_msg = mask_use ? boost::make_shared<sensor_msgs::Image>(*masked_msg) : depth_msg_raw;
 
+  const bool want_to_publish_over_max_range = publish_over_max_range && pub_points_over_max_range.getNumSubscribers() > 0;
+  const bool want_to_publish_freespacing    = publish_freespacing && pub_freespacing.getNumSubscribers() > 0;
+  const bool return_removed_far             = want_to_publish_over_max_range || want_to_publish_freespacing;
+
   if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1 || depth_msg->encoding == sensor_msgs::image_encodings::MONO16) {
-    convertDepthToCloud<uint16_t>(depth_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false, keep_ordered);
+    convertDepthToCloud<uint16_t>(depth_msg, cloud, cloud_over_max_range, false, return_removed_far, false, keep_ordered);
   } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-    convertDepthToCloud<float>(depth_msg, cloud, cloud_over_max_range, false, publish_over_max_range, false, keep_ordered);
+    convertDepthToCloud<float>(depth_msg, cloud, cloud_over_max_range, false, return_removed_far, false, keep_ordered);
   } else {
     ROS_ERROR_THROTTLE(5.0, "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
     return;
   }
 
-  const mrs_modules_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_modules_msgs::PclToolsDiagnostics>();
-  diag_msg->sensor_name                                     = sensor_name;
-  diag_msg->stamp                                           = depth_msg->header.stamp;
-  diag_msg->sensor_type                                     = mrs_modules_msgs::PclToolsDiagnostics::SENSOR_TYPE_DEPTH_CAMERA;
-  diag_msg->cols_before                                     = cloud->width;
-  diag_msg->rows_before                                     = cloud->height;
-  diag_msg->frequency                                       = frequency;
-  diag_msg->vfov                                            = vfov;
+  // | ---------------- Freespacing for voxgraph ---------------- |
+  if (want_to_publish_freespacing) {
+
+    cloud_freespacing = boost::make_shared<PC>();
+    cloud_freespacing->reserve(cloud->size() + cloud_over_max_range->size());
+
+    // add all points over clip range range
+    *cloud_freespacing += *cloud_over_max_range;
+
+    // saturate length of point-vectors at freespacing_max_ray_len
+    for (auto& p : cloud_freespacing->points) {
+      const float p_norm = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+
+      if (p_norm > freespacing_max_ray_len) {
+        const float scale = freespacing_max_ray_len / p_norm;
+
+        p.x *= scale;
+        p.y *= scale;
+        p.z *= scale;
+      }
+    }
+
+    // finally add all (or only high-intensity pts if filter_low_intensity=true) in close range
+    *cloud_freespacing += *cloud;
+
+    // voxelize if desired
+    if (freespacing_voxel_filter) {
+      freespacing_voxel_filter->filter(cloud_freespacing);
+    }
+  }
+
+  // | ------------------------ Filtering ----------------------- |
+  diag_msg->stamp       = depth_msg->header.stamp;
+  diag_msg->cols_before = cloud->width;
+  diag_msg->rows_before = cloud->height;
 
   _filters.applyFilters(cloud);
 
@@ -431,9 +483,11 @@ void SensorDepthCamera::convertDepthToCloudUnordered(const sensor_msgs::Image::C
       const bool  invalid_close = depth < range_clip_min;
       const bool  invalid_far   = depth > range_clip_max;
 
-      // Convert to point cloud points and optionally clip range
+      //// Convert to point cloud points and optionally clip range and filter by intensity
+      // If we are not clipping range OR the point is in valid range
       if (!range_clip_use || (!invalid_close && !invalid_far)) {
 
+        // If we are filtering by intensity and the intensity is low
         if (filter_low_intensity && intensity < filter_low_intensity_threshold) {
           imagePointToCloudPoint(u, v, depth, intensity, low_intensity_pc->points.at(low_intensity_it++));
         } else {
@@ -600,6 +654,7 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
   const mrs_lib::ScopeTimer timer       = mrs_lib::ScopeTimer(scope_label, _common_handlers->scope_timer_logger, _common_handlers->scope_timer_enabled);
 
   PC_I::Ptr   cloud, cloud_over_max_range, cloud_low_intensity;
+  PC::Ptr     cloud_freespacing;
   const auto& depth_msg_raw = depth_msg_in;
 
   sensor_msgs::Image::Ptr masked_msg;
@@ -621,29 +676,33 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
     return;
   }
 
+  const bool want_to_publish_over_max_range = publish_over_max_range && pub_points_over_max_range.getNumSubscribers() > 0;
+  const bool want_to_publish_freespacing    = publish_freespacing && pub_freespacing.getNumSubscribers() > 0;
+  const bool return_removed_far             = want_to_publish_over_max_range || want_to_publish_freespacing;
+
   if ((depth_msg->encoding == enc::MONO16 || depth_msg->encoding == enc::TYPE_16UC1) && intensity_msg->encoding == enc::MONO8) {
-    convertDepthToCloud<uint16_t, uint8_t>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, publish_over_max_range, false,
+    convertDepthToCloud<uint16_t, uint8_t>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, return_removed_far, false,
                                            keep_ordered);
 
   } else if ((depth_msg->encoding == enc::MONO16 || depth_msg->encoding == enc::TYPE_16UC1) &&
              (intensity_msg->encoding == enc::MONO16 || intensity_msg->encoding == enc::TYPE_16UC1)) {
-    convertDepthToCloud<uint16_t, uint16_t>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, publish_over_max_range, false,
+    convertDepthToCloud<uint16_t, uint16_t>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, return_removed_far, false,
                                             keep_ordered);
 
   } else if ((depth_msg->encoding == enc::MONO16 || depth_msg->encoding == enc::TYPE_16UC1) && intensity_msg->encoding == enc::TYPE_32FC1) {
-    convertDepthToCloud<uint16_t, float>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, publish_over_max_range, false,
+    convertDepthToCloud<uint16_t, float>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, return_removed_far, false,
                                          keep_ordered);
 
   } else if (depth_msg->encoding == enc::TYPE_32FC1 && intensity_msg->encoding == enc::MONO8) {
-    convertDepthToCloud<float, uint8_t>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, publish_over_max_range, false,
+    convertDepthToCloud<float, uint8_t>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, return_removed_far, false,
                                         keep_ordered);
 
   } else if (depth_msg->encoding == enc::TYPE_32FC1 && (intensity_msg->encoding == enc::MONO16 || intensity_msg->encoding == enc::TYPE_16UC1)) {
-    convertDepthToCloud<float, uint16_t>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, publish_over_max_range, false,
+    convertDepthToCloud<float, uint16_t>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, return_removed_far, false,
                                          keep_ordered);
 
   } else if (depth_msg->encoding == enc::TYPE_32FC1 && intensity_msg->encoding == enc::TYPE_32FC1) {
-    convertDepthToCloud<float, float>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, publish_over_max_range, false,
+    convertDepthToCloud<float, float>(depth_msg, intensity_msg, cloud, cloud_over_max_range, cloud_low_intensity, false, return_removed_far, false,
                                       keep_ordered);
 
   } else {
@@ -651,14 +710,53 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
     return;
   }
 
-  const mrs_modules_msgs::PclToolsDiagnostics::Ptr diag_msg = boost::make_shared<mrs_modules_msgs::PclToolsDiagnostics>();
-  diag_msg->sensor_name                                     = sensor_name;
-  diag_msg->stamp                                           = depth_msg->header.stamp;
-  diag_msg->sensor_type                                     = mrs_modules_msgs::PclToolsDiagnostics::SENSOR_TYPE_DEPTH_CAMERA;
-  diag_msg->cols_before                                     = cloud->width;
-  diag_msg->rows_before                                     = cloud->height;
-  diag_msg->frequency                                       = frequency;
-  diag_msg->vfov                                            = vfov;
+  // | ---------------- Freespacing for voxgraph ---------------- |
+  if (want_to_publish_freespacing) {
+
+    cloud_freespacing = boost::make_shared<PC>();
+    cloud_freespacing->resize(cloud->size() + cloud_over_max_range->size());
+
+    size_t it = 0;
+
+    // saturate length of point-vectors at freespacing_max_ray_len
+    // note: converting to XYZ since our VoxelFilter can't do XYZ_I yet
+    for (const auto& p : cloud_over_max_range->points) {
+
+      const float p_norm = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+
+      auto& point = cloud_freespacing->at(it++);
+      if (p_norm > freespacing_max_ray_len) {
+        const float scale = freespacing_max_ray_len / p_norm;
+
+        point.x = scale * p.x;
+        point.y = scale * p.y;
+        point.z = scale * p.z;
+      } else {
+        point.x = p.x;
+        point.y = p.y;
+        point.z = p.z;
+      }
+    }
+
+    // finally add all (or only high-intensity pts if filter_low_intensity=true) in close range
+    for (const auto& p : cloud->points) {
+      auto& point = cloud_freespacing->at(it++);
+      point.x     = p.x;
+      point.y     = p.y;
+      point.z     = p.z;
+    }
+
+    // voxelize if desired
+    if (freespacing_voxel_filter) {
+      freespacing_voxel_filter->filter(cloud_freespacing);
+    }
+  }
+
+  // | ------------------------ Filtering ----------------------- |
+
+  diag_msg->stamp       = depth_msg->header.stamp;
+  diag_msg->cols_before = cloud->width;
+  diag_msg->rows_before = cloud->height;
 
   // TODO: resolve templating of this method
   /* _filters.applyFilters(cloud); */
@@ -674,11 +772,20 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
     cloud = mrs_pcl_tools::filters::applyMinimumGridFilter(cloud, minimum_grid_resolution);
   }
 
+  diag_msg->cols_after = cloud->width;
+  diag_msg->rows_after = cloud->height;
+
   try {
     pub_points.publish(cloud);
-    if (publish_over_max_range) {
+
+    if (want_to_publish_freespacing) {
+      pub_freespacing.publish(cloud_freespacing);
+    }
+
+    if (want_to_publish_over_max_range) {
       pub_points_over_max_range.publish(cloud_over_max_range);
     }
+
     if (filter_low_intensity) {
       pub_points_low_intensity.publish(cloud_low_intensity);
     }
@@ -686,8 +793,6 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
   catch (...) {
   }
 
-  diag_msg->cols_after = cloud->width;
-  diag_msg->rows_after = cloud->height;
   _common_handlers->diagnostics->publish(diag_msg);
 }
 /*//}*/
@@ -725,6 +830,10 @@ void SensorDepthCamera::process_camera_info_msg(const sensor_msgs::CameraInfo::C
     pub_points = _nh.advertise<sensor_msgs::PointCloud2>(points_out, 1);
     if (publish_over_max_range) {
       pub_points_over_max_range = _nh.advertise<sensor_msgs::PointCloud2>(points_over_max_range_out, 1);
+    }
+
+    if (publish_freespacing) {
+      pub_freespacing = _nh.advertise<sensor_msgs::PointCloud2>(freespacing_out, 1);
     }
 
     if (intensity_use) {

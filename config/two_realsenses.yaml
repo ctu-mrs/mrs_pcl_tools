@@ -12,6 +12,7 @@ depth:
       depth_camera_info_in: "up_rgbd/depth/camera_info"
       points_out: "up_rgbd/points_processed"
       points_over_max_range_out: "up_rgbd/points_over_max_range" # used if non-empty and range_clip used
+      freespacing_out: "up_rgbd/points_freespacing" # for voxblox usage
 
     depth_filter:
       downsample:
@@ -29,6 +30,11 @@ depth:
       bilateral:
         sigma_S: 0.0      # used if both >0, BREAKS ordering even if keep_ordered=true
         sigma_R: 0.005    # crashes with bad_alloc error
+
+    freespacing:
+      use: true
+      freespace_ray_max_length: 3.0  # (m) maximum length of a freespacing ray (applies only to points over max range)
+      voxelize: 0.05                 # (m) | used only if >0
 
     cloud_filter:
       sequence: ["voxel_grid"] # sequence of filters to be applied (in this order) | example: ["voxel_grid", "NormS"]

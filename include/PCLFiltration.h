@@ -100,7 +100,8 @@ struct DepthTraits<float>
 // Encapsulate differences between processing float, uint16_t and uint8_t intensities in RGBDI data
 template <typename T>
 struct IntensityTraits
-{};
+{
+};
 
 template <>
 struct IntensityTraits<uint8_t>
@@ -169,18 +170,18 @@ private:
 
   template <typename T, typename U>
   void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& cloud_out,
-                           PC_I::Ptr& cloud_over_max_range_out, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false, const bool return_removed_far = false,
-                           const bool replace_nans = false, const bool keep_ordered = false);
+                           PC_I::Ptr& cloud_over_max_range_out, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false,
+                           const bool return_removed_far = false, const bool replace_nans = false, const bool keep_ordered = false);
 
   template <typename T, typename U>
   void convertDepthToCloudUnordered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc,
-                                    PC_I::Ptr& removed_pc, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false, const bool return_removed_far = false,
-                                    const bool replace_nans = false);
+                                    PC_I::Ptr& removed_pc, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false,
+                                    const bool return_removed_far = false, const bool replace_nans = false);
 
   template <typename T, typename U>
   void convertDepthToCloudOrdered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc,
-                                  PC_I::Ptr& removed_pc, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false, const bool return_removed_far = false,
-                                  const bool replace_nans = false);
+                                  PC_I::Ptr& removed_pc, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false,
+                                  const bool return_removed_far = false, const bool replace_nans = false);
 
   void imagePointToCloudPoint(const int x, const int y, const float depth, const float intensity, pt_XYZI& point);
 
@@ -197,7 +198,10 @@ private:
   ros::Publisher  pub_points;
   ros::Publisher  pub_points_over_max_range;
   ros::Publisher  pub_points_low_intensity;
+  ros::Publisher  pub_freespacing;
   ros::Publisher  pub_masked_depth;
+
+  mrs_modules_msgs::PclToolsDiagnostics::Ptr diag_msg;
 
   mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
   mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_mask;
@@ -218,7 +222,7 @@ private:
   sensor_msgs::Image::ConstPtr mask_msg;
 
 private:
-  std::string depth_in, depth_camera_info_in, mask_in, points_out, points_over_max_range_out, masked_out;
+  std::string depth_in, depth_camera_info_in, mask_in, points_out, points_over_max_range_out, freespacing_out, masked_out;
   std::string sensor_name;
 
   float frequency;
@@ -227,6 +231,7 @@ private:
   bool has_camera_info = false;
   bool keep_ordered;
   bool publish_over_max_range;
+  bool publish_freespacing;
 
   unsigned int image_width;
   unsigned int image_height;
@@ -240,7 +245,7 @@ private:
   // Filters parameters
 private:
   PointCloudFilters _filters;
-  bool mask_use;
+  bool              mask_use;
 
   bool        intensity_use;
   bool        intensity_sync_exact;
@@ -266,6 +271,12 @@ private:
   bool  bilateral_use;
   float bilateral_sigma_S;
   float bilateral_sigma_R;
+
+  // Freespacing parameters
+private:
+  bool                         freespacing_use;
+  float                        freespacing_max_ray_len;
+  std::shared_ptr<VoxelFilter> freespacing_voxel_filter;
 };
 
 #include <mrs_pcl_tools/impl/sensors.hpp>
