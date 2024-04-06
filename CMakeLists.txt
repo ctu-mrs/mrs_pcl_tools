@@ -66,8 +66,7 @@ generate_messages(DEPENDENCIES
   visualization_msgs mrs_msgs
   )
 
-# TODO: add TSL for hashmap voxelization
-# include(3rdparty/tsl.cmake)
+add_subdirectory(thirdparty/robin-map)
 
 ###################################
 ## catkin specific configuration ##
@@ -140,6 +139,7 @@ target_link_libraries(MrsPclTools_PCLSupportLib
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${Eigen_LIBRARIES}
+  tsl::robin_map
   )
 
 # PCLFiltration
@@ -165,6 +165,7 @@ target_link_libraries(
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${Eigen_LIBRARIES}
+  tsl::robin_map
   )
 
 target_include_directories(MrsPclTools_PCLFiltration SYSTEM PRIVATE

@@ -80,6 +80,7 @@ depth:
     cloud_filter:
       sequence: ["voxel_grid"] # sequence of filters below to be applied (in this order) | example: ["range_clip", "voxel_grid"]
       voxel_grid:         # uniform sampling (breaks ordering)
+        method: "hashmap" # centroid (points in voxel are averaged), hashmap (first point in voxel is kept)
         resolution: 0.05  # (m) | voxel size
       NormS:              # Rusinkiewicz and Levoy, Efficient Variants of the ICP Algorithm, 2001 (breaks ordering)
         resolution:

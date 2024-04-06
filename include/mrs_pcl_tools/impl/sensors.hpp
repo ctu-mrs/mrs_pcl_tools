@@ -63,7 +63,7 @@ void SensorDepthCamera::initialize(const ros::NodeHandle& nh, const std::shared_
     const float voxel_res = _common_handlers->param_loader->loadParamReusable2("depth/" + sensor_name + "/freespacing/voxelize", -1.0f);
 
     if (voxel_res > 0.0f) {
-      freespacing_voxel_filter = std::make_shared<VoxelFilter>(voxel_res, "centroid", false);
+      freespacing_voxel_filter = std::make_shared<VoxelFilter>(voxel_res, "hashmap", false);
     }
   }
 

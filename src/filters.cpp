@@ -31,9 +31,10 @@ PointCloudFilters::PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader>
 
     if (name == "voxel_grid") {
 
-      const float res = param_loader->loadParamReusable2<float>(prefix + "cloud_filter/voxel_grid/resolution");
+      const float       res    = param_loader->loadParamReusable2<float>(prefix + "cloud_filter/voxel_grid/resolution");
+      const std::string method = param_loader->loadParamReusable2<std::string>(prefix + "cloud_filter/voxel_grid/method", "centroid");
 
-      filter = std::make_shared<VoxelFilter>(res, "centroid", enable_scope_timer);
+      filter = std::make_shared<VoxelFilter>(res, method, enable_scope_timer);
 
     } else if (name == "NormS") {
 
@@ -155,23 +156,32 @@ void VoxelFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
   else if (_method == METHOD::HASHMAP) {
     ROS_ERROR("[VoxelFilter] Hashmap voxelization not implemented yet. Use \"centroid\" method.");
 
+    // prepare new output cloud
+    const boost::shared_ptr<PC> pc_out = boost::make_shared<PC>();
+    pc_out->reserve(inout_pc->size());
+
     using Voxel = Eigen::Vector3i;
 
-    // TODO: implement
-    // TODO: add TSL library and reuse this piece of code for hashmap voxelization
-    /* tsl::robin_map<Voxel, Eigen::Vector3d, VoxelHash> grid; */
-    /* grid.reserve(frame.size()); */
-    /* for (const auto& point : frame) { */
-    /*   const auto voxel = Voxel((point / voxel_size).cast<int>()); */
-    /*   if (grid.contains(voxel)) */
-    /*     continue; */
-    /*   grid.insert({voxel, point}); */
-    /* } */
-    /* std::vector<Eigen::Vector3d> frame_dowsampled; */
-    /* frame_dowsampled.reserve(grid.size()); */
-    /* for (const auto& [_, point] : grid) { */
-    /*   frame_dowsampled.emplace_back(point); */
-    /* } */
+    // init map (key: Voxel, value: pt_XYZ, hashing: VoxelHash)
+    tsl::robin_map<Voxel, pt_XYZ, VoxelHash> grid;
+    grid.reserve(inout_pc->size());
+
+    // voxelize: keep first point inserted into the voxel (we could easily keep the most middle point or multiple points if needed)
+    for (const auto& point : inout_pc->points) {
+      const auto voxel = Voxel((Eigen::Vector3f(point.x, point.y, point.z) / _resolution).cast<int>());
+      if (grid.contains(voxel)) {
+        continue;
+      }
+      pc_out->push_back(point);
+      grid.insert({voxel, point});
+    }
+
+    pc_out->header   = inout_pc->header;
+    pc_out->width    = pc_out->size();
+    pc_out->height   = pc_out->size() > 0 ? 1 : 0;
+    pc_out->is_dense = true;
+
+    inout_pc = pc_out;
   }
 }
 /*//}*/
