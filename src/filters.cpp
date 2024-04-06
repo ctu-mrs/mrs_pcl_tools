@@ -1,5 +1,5 @@
 #include <mrs_pcl_tools/filters.h>
-#include <tsl/robin_map.h>
+#include <tsl/robin_map.h> // needs to be here in case filters.h is included from external files
 
 namespace mrs_pcl_tools
 {
