@@ -1,4 +1,5 @@
 #include <mrs_pcl_tools/filters.h>
+#include <tsl/robin_map.h>
 
 namespace mrs_pcl_tools
 {

@@ -11,8 +11,6 @@
 #include <Eigen/QR>
 #include <Eigen/Eigenvalues>
 
-#include <tsl/robin_map.h>
-
 namespace mrs_pcl_tools
 {
 
