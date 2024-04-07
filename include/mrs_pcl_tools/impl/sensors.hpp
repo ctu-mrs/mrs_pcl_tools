@@ -155,10 +155,11 @@ void SensorDepthCamera::convertDepthToCloudUnordered(const sensor_msgs::Image::C
 
   out_pc = boost::make_shared<PC>();
   out_pc->resize(max_points_count);
+
   if (return_removed_close || return_removed_far) {
     removed_pc = boost::make_shared<PC>();
+    removed_pc->resize(max_points_count);
   }
-  removed_pc->resize(max_points_count);
 
   const T*  depth_row = reinterpret_cast<const T*>(&depth_msg->data[0]);
   const int row_step  = downsample_step_row * depth_msg->step / sizeof(T);
@@ -443,8 +444,8 @@ void SensorDepthCamera::convertDepthToCloudUnordered(const sensor_msgs::Image::C
 
   if (return_removed_close || return_removed_far) {
     removed_pc = boost::make_shared<PC_I>();
+    removed_pc->resize(max_points_count);
   }
-  removed_pc->resize(max_points_count);
 
   if (filter_low_intensity) {
     low_intensity_pc = boost::make_shared<PC_I>();
