@@ -33,7 +33,7 @@ PointCloudFilters::PointCloudFilters(const std::shared_ptr<mrs_lib::ParamLoader>
     if (name == "voxel_grid") {
 
       const float       res    = param_loader->loadParamReusable2<float>(prefix + "cloud_filter/voxel_grid/resolution");
-      const std::string method = param_loader->loadParamReusable2<std::string>(prefix + "cloud_filter/voxel_grid/method", "centroid");
+      const std::string method = param_loader->loadParamReusable2<std::string>(prefix + "cloud_filter/voxel_grid/method", "hashmap");
 
       filter = std::make_shared<VoxelFilter>(res, method, enable_scope_timer);
 
