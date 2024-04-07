@@ -32,7 +32,7 @@ depth:
         sigma_R: 0.005    # crashes with bad_alloc error
 
     freespacing:
-      use: true
+      use: false
       freespace_ray_max_length: 3.0  # (m) maximum length of a freespacing ray (applies only to points over max range)
       voxelize: 0.05                 # (m) | used only if >0
 

@@ -155,7 +155,6 @@ void VoxelFilter::filter(typename boost::shared_ptr<PC>& inout_pc) const {
 
   // Use code from KISS-ICP which keeps real point within a voxel
   else if (_method == METHOD::HASHMAP) {
-    ROS_ERROR("[VoxelFilter] Hashmap voxelization not implemented yet. Use \"centroid\" method.");
 
     // prepare new output cloud
     const boost::shared_ptr<PC> pc_out = boost::make_shared<PC>();
