@@ -348,6 +348,7 @@ void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg
 
     cloud_freespacing = boost::make_shared<PC>();
     cloud_freespacing->reserve(cloud->size() + cloud_over_max_range->size());
+    cloud_freespacing->header = cloud->header;
 
     // add all points over clip range range
     *cloud_freespacing += *cloud_over_max_range;
@@ -394,8 +395,13 @@ void SensorDepthCamera::process_depth_msg(const sensor_msgs::Image::ConstPtr msg
 
   try {
     pub_points.publish(cloud);
-    if (publish_over_max_range) {
+
+    if (want_to_publish_over_max_range) {
       pub_points_over_max_range.publish(cloud_over_max_range);
+    }
+
+    if (want_to_publish_freespacing) {
+      pub_freespacing.publish(cloud_freespacing);
     }
   }
   catch (...) {
@@ -716,6 +722,7 @@ void SensorDepthCamera::process_depth_intensity_msg(const sensor_msgs::Image::Co
 
     cloud_freespacing = boost::make_shared<PC>();
     cloud_freespacing->resize(cloud->size() + cloud_over_max_range->size());
+    cloud_freespacing->header = cloud->header;
 
     size_t it = 0;
 
