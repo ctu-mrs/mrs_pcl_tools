@@ -34,6 +34,7 @@ set(CATKIN_DEPENDENCIES
   sensor_msgs
   std_msgs
   visualization_msgs
+  livox_ros_driver2
   )
 
 find_package(PCL REQUIRED COMPONENTS

@@ -19,8 +19,9 @@ void PCLFiltration::onInit() {
   _common_handlers->param_loader = std::make_shared<mrs_lib::ParamLoader>(nh, "PCLFilter");
 
   // Transformer
-  const auto uav_name           = _common_handlers->param_loader->loadParam2<std::string>("uav_name");
-  _common_handlers->transformer = std::make_shared<mrs_lib::Transformer>("PCLFilter");
+  const auto uav_name            = _common_handlers->param_loader->loadParam2<std::string>("uav_name");
+  const auto topic_3d_lidar_type = _common_handlers->param_loader->loadParam2<std::string>("topic_3d_lidar_type_in");
+  _common_handlers->transformer  = std::make_shared<mrs_lib::Transformer>("PCLFilter");
   _common_handlers->transformer->setDefaultPrefix(uav_name);
   _common_handlers->transformer->setLookupTimeout(ros::Duration(0.05));
   _common_handlers->transformer->retryLookupNewest(false);
@@ -117,22 +118,31 @@ void PCLFiltration::onInit() {
   _common_handlers->param_loader->loadParam("rplidar/voxel_resolution", _rplidar_voxel_resolution, 0.0f);
 
   if (!_common_handlers->param_loader->loadedSuccessfully()) {
-    NODELET_ERROR("[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
+    NODELET_ERROR("[PCLFiltration]: Some compulsory parameters were not loaded successfully. Shuting down.");
     ros::shutdown();
   }
 
   if (_lidar3d_republish) {
 
     if (_lidar3d_row_step <= 0 || _lidar3d_col_step <= 0) {
-      NODELET_ERROR("[PCLFiltration]: Downsampling row/col steps for 3D lidar must be >=1, ending nodelet.");
+      NODELET_ERROR("[PCLFiltration]: Downsampling row/col steps for 3D lidar must be >=1. Shuting down.");
       ros::shutdown();
     }
 
 
     mrs_lib::SubscribeHandlerOptions shopts(nh);
-    shopts.node_name            = "PCLFiltration";
-    shopts.no_message_timeout   = ros::Duration(5.0);
-    _sub_lidar3d                = mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>(shopts, "lidar3d_in", &PCLFiltration::lidar3dCallback, this);
+    shopts.node_name          = "PCLFiltration";
+    shopts.no_message_timeout = ros::Duration(5.0);
+
+    if (topic_3d_lidar_type == "sensor_msgs/PointCloud2") {
+      _sub_lidar3d_ros = mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>(shopts, "lidar3d_in", &PCLFiltration::lidar3dCallback, this);
+    } else if (topic_3d_lidar_type == "livox_ros_driver2/CustomMsg") {
+      _sub_lidar3d_livox = mrs_lib::SubscribeHandler<livox_ros_driver2::CustomMsg>(shopts, "lidar3d_in", &PCLFiltration::lidarLivoxCallback, this);
+    } else {
+      NODELET_ERROR("[PCLFiltration]: Unknown type of 3D LiDAR msg: %s. Shuting down.", topic_3d_lidar_type.c_str());
+      ros::shutdown();
+    }
+
     _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 1);
     _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 1);
     if (_filter_removeBelowGround.used())
@@ -212,7 +222,46 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr msg
 
   _common_handlers->diagnostics->publish(diag_msg);
 }
+//}
 
+/* lidarLivoxCallback() //{ */
+void PCLFiltration::lidarLivoxCallback(const livox_ros_driver2::CustomMsg::ConstPtr msg) {
+
+  if (!is_initialized || !_lidar3d_republish) {
+    return;
+  }
+
+  // FIXME: a lot of unneccessary conversions is happening here (doing this the ugly way due to HEAVY time constraints)
+
+  // Convert to pcl::PointXYZI point cloud
+  const PC_I::Ptr cloud = boost::make_shared<PC_I>();
+  cloud->reserve(msg->points.size());
+
+  pcl_conversions::toPCL(msg->header, cloud->header);
+
+  for (const auto& p_livox : msg->points) {
+    pt_XYZI p_xyzi;
+    p_xyzi.x         = p_livox.x;
+    p_xyzi.y         = p_livox.y;
+    p_xyzi.z         = p_livox.z;
+    p_xyzi.intensity = p_livox.reflectivity;
+
+    cloud->emplace_back(p_xyzi);
+  }
+
+  cloud->width  = cloud->size();
+  cloud->height = 1;
+
+  // Convert to sensor_msgs::PointCloud2 message type
+  const sensor_msgs::PointCloud2::Ptr cloud_ros = boost::make_shared<sensor_msgs::PointCloud2>();
+  pcl::toROSMsg(*cloud, *cloud_ros);
+
+  // Call standard method
+  lidar3dCallback(cloud_ros);
+}
+//}
+
+/* process_msg() //{ */
 template <typename PC>
 void PCLFiltration::process_msg(typename boost::shared_ptr<PC>& inout_pc_ptr) {
 
