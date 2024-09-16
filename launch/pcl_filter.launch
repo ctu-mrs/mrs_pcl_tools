@@ -7,10 +7,8 @@
   <arg name="custom_config" default="" />
   <arg name="node_name" default="pcl_filter" />
   <arg name="name_suffix" default="" />
-
-  <arg name="topic_3d_lidar_in"      default="os_cloud_nodelet/points" />
-  <arg name="topic_3d_lidar_type_in" default="sensor_msgs/PointCloud2" />
-  <arg name="topic_3d_lidar_out"     default="~points_processed" />
+  <arg name="topic_3d_lidar_in" default="os_cloud_nodelet/points" />
+  <arg name="topic_3d_lidar_out" default="~points_processed" />
 
   <arg     if="$(arg debug)" name="launch_prefix" value="debug_roslaunch" />
   <arg unless="$(arg debug)" name="launch_prefix" value="" />
@@ -32,8 +30,7 @@
     <node pkg="nodelet" type="nodelet" name="$(arg nodelet_name)" args="$(arg nodelet) mrs_pcl_tools/PCLFiltration $(arg nodelet_manager)" output="screen" launch-prefix="$(arg launch_prefix)">
 
       <!-- Parameters -->
-      <param name="uav_name"               type="string" value="$(arg UAV_NAME)" />
-      <param name="topic_3d_lidar_type_in" type="string" value="$(arg topic_3d_lidar_type_in)" />
+      <param name="uav_name" type="string" value="$(arg UAV_NAME)" />
 
       <rosparam file="$(find mrs_pcl_tools)/config/pcl_filter.yaml" />
       <rosparam if="$(eval not arg('custom_config') == '')" file="$(arg custom_config)" command="load" />

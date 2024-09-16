@@ -28,8 +28,6 @@
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/image_encodings.h>
 
-#include <livox_ros_driver2/CustomMsg.h>
-
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/Transform.h>
@@ -169,18 +167,18 @@ private:
 
   template <typename T, typename U>
   void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& cloud_out,
-                           PC_I::Ptr& cloud_over_max_range_out, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false,
-                           const bool return_removed_far = false, const bool replace_nans = false, const bool keep_ordered = false);
+                           PC_I::Ptr& cloud_over_max_range_out, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false, const bool return_removed_far = false,
+                           const bool replace_nans = false, const bool keep_ordered = false);
 
   template <typename T, typename U>
   void convertDepthToCloudUnordered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc,
-                                    PC_I::Ptr& removed_pc, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false,
-                                    const bool return_removed_far = false, const bool replace_nans = false);
+                                    PC_I::Ptr& removed_pc, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false, const bool return_removed_far = false,
+                                    const bool replace_nans = false);
 
   template <typename T, typename U>
   void convertDepthToCloudOrdered(const sensor_msgs::Image::ConstPtr& depth_msg, const sensor_msgs::Image::ConstPtr& intensity_msg, PC_I::Ptr& out_pc,
-                                  PC_I::Ptr& removed_pc, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false,
-                                  const bool return_removed_far = false, const bool replace_nans = false);
+                                  PC_I::Ptr& removed_pc, PC_I::Ptr& cloud_low_intensity, const bool return_removed_close = false, const bool return_removed_far = false,
+                                  const bool replace_nans = false);
 
   void imagePointToCloudPoint(const int x, const int y, const float depth, const float intensity, pt_XYZI& point);
 
@@ -286,8 +284,7 @@ public:
 private:
   bool is_initialized = false;
 
-  mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>     _sub_lidar3d_ros;
-  mrs_lib::SubscribeHandler<livox_ros_driver2::CustomMsg> _sub_lidar3d_livox;
+  mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2> _sub_lidar3d;
 
   ros::Publisher _pub_lidar3d;
   ros::Publisher _pub_lidar3d_over_max_range;
@@ -307,7 +304,6 @@ private:
 
   /* 3D LIDAR */
   void        lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr msg);
-  void        lidarLivoxCallback(const livox_ros_driver2::CustomMsg::ConstPtr msg);
   std::string _lidar3d_name;
   float       _lidar3d_frequency;
   float       _lidar3d_vfov;
