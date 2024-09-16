@@ -20,7 +20,7 @@ void PCLFiltration::onInit() {
 
   // Transformer
   const auto uav_name            = _common_handlers->param_loader->loadParam2<std::string>("uav_name");
-  const auto topic_3d_lidar_type = _common_handlers->param_loader->loadParam2<std::string>("topic_3d_lidar_type_in");
+  const auto topic_3d_lidar_type = _common_handlers->param_loader->loadParam2<std::string>("topic_3d_lidar_type_in", "sensor_msgs/PointCloud2");
   _common_handlers->transformer  = std::make_shared<mrs_lib::Transformer>("PCLFilter");
   _common_handlers->transformer->setDefaultPrefix(uav_name);
   _common_handlers->transformer->setLookupTimeout(ros::Duration(0.05));
