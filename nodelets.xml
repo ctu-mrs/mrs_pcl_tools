@@ -6,6 +6,14 @@
   </class>
 </library>
 
+<library path="lib/libMrsPclTools_LivoxPCLtoPCL2">
+  <class name="mrs_pcl_tools/LivoxPCLtoPCL2" type="mrs_pcl_tools::LivoxPCLtoPCL2" base_class_type="nodelet::Nodelet">
+    <description>
+      Nodelet for mrs pointcloud conversion.
+    </description>
+  </class>
+</library>
+
 <library path="lib/libMrsPclTools_PCL2MapRegistration">
   <class name="mrs_pcl_tools/PCL2MapRegistration" type="mrs_pcl_tools::PCL2MapRegistration" base_class_type="nodelet::Nodelet">
     <description>
