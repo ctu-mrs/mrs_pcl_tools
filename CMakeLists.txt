@@ -73,6 +73,7 @@ generate_messages(DEPENDENCIES
 set(LIBRARIES
   MrsPclTools_PCLSupportLib
   MrsPclTools_PCLFiltration
+  MrsPclTools_LivoxPCLtoPCL2
   MrsPclTools_PCL2MapRegistration
   MrsPclTools_GroundplaneDetector
   MrsPclTools_RemoveBelowGroundFilter
@@ -164,6 +165,31 @@ target_link_libraries(
   )
 
 target_include_directories(MrsPclTools_PCLFiltration SYSTEM PRIVATE
+  ${PCL_INCLUDE_DIRS}
+  )
+
+# LivoxPCLtoPCL2
+
+add_library(MrsPclTools_LivoxPCLtoPCL2
+  src/LivoxPCLtoPCL2.cpp
+  )
+
+add_dependencies(MrsPclTools_LivoxPCLtoPCL2
+  mrs_pcl_tools_generate_messages
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
+  )
+
+target_link_libraries(
+  MrsPclTools_LivoxPCLtoPCL2
+  MrsPclTools_PCLSupportLib
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${Eigen_LIBRARIES}
+  )
+
+target_include_directories(MrsPclTools_LivoxPCLtoPCL2 SYSTEM PRIVATE
   ${PCL_INCLUDE_DIRS}
   )
 
