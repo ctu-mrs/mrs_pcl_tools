@@ -17,8 +17,6 @@
 #include <ros/message_traits.h>
 #include <visualization_msgs/MarkerArray.h>
 
-#include <livox_ros_driver2/CustomMsg.h>
-
 namespace mrs_pcl_tools
 {
 
@@ -26,8 +24,6 @@ std::optional<PC::Ptr>      loadPcXYZ(const std::string &pcd_file);
 std::optional<PC_NORM::Ptr> loadPcNormals(const std::string &pcd_file);
 
 void savePCD(const std::string &pcd_file, const sensor_msgs::PointCloud2::Ptr &cloud, const bool &binary = true);
-
-void convertLivoxPCLtoPCL2(const sensor_msgs::PointCloud2::Ptr &cloud, const livox_ros_driver2::CustomMsg::ConstPtr &livox_msg);
 
 PC_NORM::Ptr estimateNormals(const PC::Ptr &cloud, const float &normal_est_radius);
 
