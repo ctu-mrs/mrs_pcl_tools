@@ -101,7 +101,7 @@ void printHelp() {
   ROS_ERROR(" topic_points:            point cloud topic (supported types: sensor_msgs/PointCloud2)");
   ROS_ERROR(" point_cloud.ply:         path to store the output point cloud in ply/pcd format (string)");
   ROS_ERROR(" --poses-file:            text file with poses in format [timestamp x y z qx qy qz qw]");
-  ROS_ERROR(" --poses-topic:           topic with poses (supported types: nav_msgs/Odometry)");
+  ROS_ERROR(" --poses-topic:           topic with poses (supported types: nav_msgs/Odometry, geometry_msgs/PoseStamped)");
 
   ROS_ERROR("Optional arguments:");
   ROS_ERROR(" --start-time:                   start time offset of the rosbag (default: 0.0 s)");
