@@ -1,90 +1,81 @@
 cmake_minimum_required(VERSION 3.5)
 project(mrs_pcl_tools)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_definitions(-O3)
 add_definitions(-DCOMPILE_WITH_OUSTER)
 # add_definitions(-g)
 
-# disables anoying googletest warning
-set(CATKIN_ENABLE_TESTING FALSE)
+# set the compile options to show code warnings
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
 
-# disables anoying PCL warnings
-set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE INTERNAL "No dev warnings")
+# # disables anoying googletest warning
+# set(CATKIN_ENABLE_TESTING FALSE)
 
-set(CATKIN_DEPENDENCIES
-  cmake_modules
-  dynamic_reconfigure
-  eigen_conversions
+# # disables anoying PCL warnings
+# set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE INTERNAL "No dev warnings")
+
+set(DEPENDENCIES
+  ament_cmake
+  rclcpp
+  rclcpp_components
   geometry_msgs
-  message_generation
-  message_runtime
+  # message_generation
+  # message_runtime
   mrs_lib
   mrs_msgs
-  mrs_modules_msgs
-  nodelet
-  ouster_ros
-  pcl_conversions
-  pcl_ros
-  rosconsole
-  roscpp
   sensor_msgs
   std_msgs
   visualization_msgs
+  mrs_modules_msgs
+  # nodelet
+  ouster_ros
+  pcl_conversions
+  pcl_ros
+  rclcppconsole
   )
 
-find_package(PCL REQUIRED COMPONENTS
-  common
-  )
+# find_package(PCL REQUIRED COMPONENTS
+#   common
+#   )
 
 # Include Eigen3
 find_package(Eigen3 REQUIRED)
 set(Eigen_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIRS})
 set(Eigen_LIBRARIES ${Eigen_LIBRARIES})
 
-find_package(catkin REQUIRED COMPONENTS
-  ${CATKIN_DEPENDENCIES}
-  )
+foreach(DEP IN LISTS DEPENDENCIES)
+  find_package(${DEP} REQUIRED)
+endforeach()
 
-add_service_files(DIRECTORY srv/registration FILES
-  SrvRegisterPointCloudByName.srv
-  SrvRegisterPointCloudOffline.srv
-  )
 
-generate_dynamic_reconfigure_options(
-  cfg/pcl_filtration_dynparam.cfg
-  cfg/pcl2map_registration_dynparam.cfg
-  )
+# add_service_files(DIRECTORY srv/registration FILES
+#   SrvRegisterPointCloudByName.srv
+#   SrvRegisterPointCloudOffline.srv
+#   )
 
-generate_messages(DEPENDENCIES
-  std_msgs
-  sensor_msgs
-  geometry_msgs
-  visualization_msgs mrs_msgs
-  )
 
 ###################################
 ## catkin specific configuration ##
 ###################################
 
+# set(LIBRARIES
+#   MrsPclTools_PCLSupportLib
+#   MrsPclTools_PCLFiltration
+#   MrsPclTools_PCL2MapRegistration
+#   MrsPclTools_GroundplaneDetector
+#   MrsPclTools_RemoveBelowGroundFilter
+#   MrsPclTools_PCLPublishCloudFileToNetwork
+#   )
 set(LIBRARIES
-  MrsPclTools_PCLSupportLib
-  MrsPclTools_PCLFiltration
-  MrsPclTools_PCL2MapRegistration
-  MrsPclTools_GroundplaneDetector
-  MrsPclTools_RemoveBelowGroundFilter
-  MrsPclTools_PCLPublishCloudFileToNetwork
-  )
+    MrsPclTools_PCLFiltration
+    )
 
-set(EXECUTABLES
-  estimate_cloud_to_cloud_drift
-  estimate_lidar_slam_drift
-  pcd_estimate_normals
-  concatenate_lidar_scans
-  )
 
 catkin_package(
   INCLUDE_DIRS include
@@ -123,21 +114,21 @@ add_definitions(
 
 # PCLSupportLib
 
-add_library(MrsPclTools_PCLSupportLib
-  src/support.cpp
-  )
+# add_library(MrsPclTools_PCLSupportLib
+#   src/support.cpp
+#   )
 
-add_dependencies(MrsPclTools_PCLSupportLib
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-  ${PROJECT_NAME}_gencfg
-  )
+# add_dependencies(MrsPclTools_PCLSupportLib
+#   ${${PROJECT_NAME}_EXPORTED_TARGETS}
+#   ${catkin_EXPORTED_TARGETS}
+#   ${PROJECT_NAME}_gencfg
+#   )
 
-target_link_libraries(MrsPclTools_PCLSupportLib
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${Eigen_LIBRARIES}
-  )
+# target_link_libraries(MrsPclTools_PCLSupportLib
+#   ${catkin_LIBRARIES}
+#   ${PCL_LIBRARIES}
+#   ${Eigen_LIBRARIES}
+#   )
 
 # PCLFiltration
 
@@ -167,197 +158,59 @@ target_include_directories(MrsPclTools_PCLFiltration SYSTEM PRIVATE
   ${PCL_INCLUDE_DIRS}
   )
 
+# component registration to make it discoverable in runtime.
+rclcpp_components_register_nodes(MrsPclTools_PCLFiltration PLUGIN "MrsPclTools::MrsPclTools_PCLFiltration" EXECUTABLE MrsPclTools_PCLFiltration)
+
 # PCL2MapRegistration
 
-add_library(MrsPclTools_PCL2MapRegistration
-  src/PCL2MapRegistration.cpp
-  )
+# add_library(MrsPclTools_PCL2MapRegistration
+#   src/PCL2MapRegistration.cpp
+#   )
 
-add_dependencies(MrsPclTools_PCL2MapRegistration
-  mrs_pcl_tools_gencfg
-  mrs_pcl_tools_generate_messages
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-  ${PROJECT_NAME}_gencfg
-  )
+# add_dependencies(MrsPclTools_PCL2MapRegistration
+#   mrs_pcl_tools_gencfg
+#   mrs_pcl_tools_generate_messages
+#   ${${PROJECT_NAME}_EXPORTED_TARGETS}
+#   ${catkin_EXPORTED_TARGETS}
+#   ${PROJECT_NAME}_gencfg
+#   )
 
-target_link_libraries(MrsPclTools_PCL2MapRegistration
-  MrsPclTools_PCLSupportLib
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${Eigen_LIBRARIES}
-  )
+# target_link_libraries(MrsPclTools_PCL2MapRegistration
+#   MrsPclTools_PCLSupportLib
+#   ${catkin_LIBRARIES}
+#   ${PCL_LIBRARIES}
+#   ${Eigen_LIBRARIES}
+#   )
 
-target_include_directories(MrsPclTools_PCL2MapRegistration
-  SYSTEM PRIVATE ${PCL_INCLUDE_DIRS}
-  )
+# target_include_directories(MrsPclTools_PCL2MapRegistration
+#   SYSTEM PRIVATE ${PCL_INCLUDE_DIRS}
+#   )
 
 # PCLPublishCloudFileToNetwork
 
-add_library(MrsPclTools_PCLPublishCloudFileToNetwork
-  src/PCLPublishCloudFileToNetwork.cpp
-  )
+# add_library(MrsPclTools_PCLPublishCloudFileToNetwork
+#   src/PCLPublishCloudFileToNetwork.cpp
+#   )
 
-add_dependencies(MrsPclTools_PCLPublishCloudFileToNetwork
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-  ${PROJECT_NAME}_gencfg
-  )
+# add_dependencies(MrsPclTools_PCLPublishCloudFileToNetwork
+#   ${${PROJECT_NAME}_EXPORTED_TARGETS}
+#   ${catkin_EXPORTED_TARGETS}
+#   ${PROJECT_NAME}_gencfg
+#   )
 
-target_link_libraries(
-  MrsPclTools_PCLPublishCloudFileToNetwork
-  MrsPclTools_PCLSupportLib
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${Eigen_LIBRARIES}
-  )
+# target_link_libraries(
+#   MrsPclTools_PCLPublishCloudFileToNetwork
+#   MrsPclTools_PCLSupportLib
+#   ${catkin_LIBRARIES}
+#   ${PCL_LIBRARIES}
+#   ${Eigen_LIBRARIES}
+#   )
 
-target_include_directories(MrsPclTools_PCLPublishCloudFileToNetwork SYSTEM PRIVATE
-  ${PCL_INCLUDE_DIRS}
-  )
+# target_include_directories(MrsPclTools_PCLPublishCloudFileToNetwork SYSTEM PRIVATE
+#   ${PCL_INCLUDE_DIRS}
+#   )
 
-# GroundplaneDetector
 
-add_library(MrsPclTools_GroundplaneDetector
-  src/groundplane_detector.cpp
-  )
-
-add_dependencies(MrsPclTools_GroundplaneDetector
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-  ${PROJECT_NAME}_gencfg
-  )
-
-target_link_libraries(
-  MrsPclTools_GroundplaneDetector
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${Eigen_LIBRARIES}
-  )
-
-target_include_directories(MrsPclTools_GroundplaneDetector SYSTEM PRIVATE
-  ${PCL_INCLUDE_DIRS}
-  )
-
-# RemoveBelowGroundFilter
-
-add_library(MrsPclTools_RemoveBelowGroundFilter
-  src/remove_below_ground_filter.cpp
-  )
-
-add_dependencies(MrsPclTools_RemoveBelowGroundFilter
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-  ${PROJECT_NAME}_gencfg
-  )
-
-target_link_libraries(
-  MrsPclTools_RemoveBelowGroundFilter
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${Eigen_LIBRARIES}
-  )
-
-target_include_directories(MrsPclTools_RemoveBelowGroundFilter SYSTEM PRIVATE
-  ${PCL_INCLUDE_DIRS}
-  )
-
-## | ----------------------- Executables ---------------------- |
-
-add_executable(estimate_cloud_to_cloud_drift
-  src/executables/EstimateCloudToCloudDrift.cpp
-  )
-
-add_dependencies(estimate_cloud_to_cloud_drift
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-  ${PROJECT_NAME}_gencfg
-  )
-
-target_link_libraries(estimate_cloud_to_cloud_drift
-  MrsPclTools_PCLSupportLib
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${Eigen_LIBRARIES}
-  )
-
-# estimate_lidar_slam_drift
-
-add_executable(estimate_lidar_slam_drift
-  src/executables/EstimateLidarSlamDrift.cpp
-  )
-
-add_dependencies(estimate_lidar_slam_drift
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-  ${PROJECT_NAME}_gencfg
-  )
-
-target_link_libraries(estimate_lidar_slam_drift
-  MrsPclTools_PCLSupportLib
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${Eigen_LIBRARIES}
-  )
-
-# pcd_estimate_normals
-
-add_executable(pcd_estimate_normals
-  src/executables/PcdEstimateNormals.cpp
-  )
-
-add_dependencies(pcd_estimate_normals
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-  ${PROJECT_NAME}_gencfg
-  )
-
-target_link_libraries(pcd_estimate_normals
-  MrsPclTools_PCLSupportLib
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  )
-
-# concatenate_lidar_scans
-
-add_executable(concatenate_lidar_scans
-  src/executables/ConcatenateLidarScans.cpp
-  )
-
-add_dependencies(concatenate_lidar_scans
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-  ${PROJECT_NAME}_gencfg
-  )
-
-target_link_libraries(concatenate_lidar_scans
-  MrsPclTools_PCLSupportLib
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${Eigen_LIBRARIES}
-  )
-
-# FreespacePointcloudCreator
-
-add_library(FreespacePointcloudCreator
-  src/freespace_pointcloud_creator.cpp
-  )
-
-add_dependencies(FreespacePointcloudCreator
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-  ${PROJECT_NAME}_gencfg
-  )
-
-target_link_libraries(FreespacePointcloudCreator
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${Eigen_LIBRARIES}
-  )
-
-target_include_directories(FreespacePointcloudCreator
-  SYSTEM PRIVATE ${PCL_INCLUDE_DIRS}
-  )
 
 ## --------------------------------------------------------------
 ## |                            Build                           |

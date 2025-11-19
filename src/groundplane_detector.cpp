@@ -175,6 +175,11 @@ namespace mrs_pcl_tools
     pl.setPrefix(orig_prefix);
   }
 
+  void GroundplaneDetector(rclcpp::NodeOptions options)
+  {
+    timer_intialization_ = create_wall_timer(std::chrono::duration<double>(1.0),std::bind(&GroundplaneDetector::intialize,this));
+  }
+
   void GroundplaneDetector::initialize(ros::NodeHandle& nh, const std::shared_ptr<mrs_lib::Transformer>& tfr, const groundplane_detection_config_t& cfg)
   {
     m_cfg = cfg;
@@ -200,7 +205,7 @@ namespace mrs_pcl_tools
   void GroundplaneDetector::initialize(ros::NodeHandle& nh, const groundplane_detection_config_t& cfg)
   {
     auto transformer = std::make_shared<mrs_lib::Transformer>(NODE_NAME);
-    transformer->setLookupTimeout(ros::Duration(0.3));
+    transformer->setLookupTimeout(rclcpp::Duration(0.3));
 
     initialize(nh, transformer, cfg);
   }

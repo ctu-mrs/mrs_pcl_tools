@@ -14,19 +14,19 @@
 #include <mrs_lib/subscribe_handler.h>
 #include <mrs_lib/scope_timer.h>
 
-#include <sensor_msgs/LaserScan.h>
-#include <sensor_msgs/Range.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/CameraInfo.h>
-#include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <sensor_msgs/msg/range.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
+#include <sensor_msgs/image_encodings.hpp>
 
-#include <geometry_msgs/Point.h>
-#include <geometry_msgs/PointStamped.h>
-#include <geometry_msgs/Transform.h>
+#include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/transform.hpp>
 
-#include <visualization_msgs/MarkerArray.h>
+#include <visualization_msgs/msg/marker_array.hpp>
 
-#include <mrs_modules_msgs/PclToolsDiagnostics.h>
+#include <mrs_modules_msgs/msg/pcl_tools_diagnostics.hpp>
 
 #include <boost/smart_ptr/make_shared_array.hpp>
 #include <limits>
@@ -48,9 +48,9 @@ struct CommonHandlers_t;
 
 /* class RemoveBelowGroundFilter //{ */
 
-class RemoveBelowGroundFilter {
+class RemoveBelowGroundFilter{
 public:
-  void initialize(ros::NodeHandle& nh, const std::shared_ptr<CommonHandlers_t> common_handlers);
+  void initialize(rclcpp::Node::SharedPtr nh_, const std::shared_ptr<CommonHandlers_t> common_handlers);
 
   bool used() const {
     return initialized;

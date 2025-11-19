@@ -1,12 +1,12 @@
-<library path="lib/libMrsPclTools_PCLFiltration">
-  <class name="mrs_pcl_tools/PCLFiltration" type="mrs_pcl_tools::PCLFiltration" base_class_type="nodelet::Nodelet">
+<library path="mrs_pcl_tools::PCLFiltration">
+  <class name="mrs_pcl_tools/PCLFiltration" type="mrs_pcl_tools::PCLFiltration" base_class_type="rclcpp::Node">
     <description>
-      Nodelet for mrs pointcloud filtration.
+      Node for mrs pointcloud filtration.
     </description>
   </class>
 </library>
 
-<library path="lib/libMrsPclTools_PCL2MapRegistration">
+<!-- <library path="lib/libMrsPclTools_PCL2MapRegistration">
   <class name="mrs_pcl_tools/PCL2MapRegistration" type="mrs_pcl_tools::PCL2MapRegistration" base_class_type="nodelet::Nodelet">
     <description>
       Nodelet for mrs pointcloud registration to a priori map.
@@ -28,4 +28,4 @@
         Creates a pointcloud with points corresponding to zero or invalid points in an organized input pointcloud with the same direction and max. length to represent free space for mapping purposes.
     </description>
   </class>
-</library>
+</library> -->

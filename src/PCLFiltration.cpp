@@ -4,25 +4,26 @@ namespace mrs_pcl_tools
 {
 
 /* onInit() //{ */
-void PCLFiltration::onInit() {
-
-  ros::NodeHandle nh = nodelet::Nodelet::getMTPrivateNodeHandle();
-  ros::Time::waitForValid();
+void PCLFiltration::initialize() {
 
   // Set PCL verbosity level to errors and higher
   /* pcl::console::setVerbosityLevel(pcl::console::L_ERROR); */
 
   /*//{ Common handlers */
+  node_ = this->shared_from_this();
+  clock_ = node_->get_clock();
   _common_handlers = std::make_shared<CommonHandlers_t>();
 
   // Param loader
-  _common_handlers->param_loader = std::make_shared<mrs_lib::ParamLoader>(nh, "PCLFilter");
+  _common_handlers->param_loader = std::make_shared<mrs_lib::ParamLoader>(node_, "PCLFilter");
 
   // Transformer
   const auto uav_name           = _common_handlers->param_loader->loadParam2<std::string>("uav_name");
-  _common_handlers->transformer = std::make_shared<mrs_lib::Transformer>("PCLFilter");
+
+  // shared from this is wrong you have to make initialize function and then make shared pointer to class base and then use that here instead of nh or shared from this().
+  _common_handlers->transformer = std::make_shared<mrs_lib::Transformer>(shared_from_this(), "PCLFilter");
   _common_handlers->transformer->setDefaultPrefix(uav_name);
-  _common_handlers->transformer->setLookupTimeout(ros::Duration(0.05));
+  _common_handlers->transformer->setLookupTimeout(rclcpp::Duration::from_seconds(0.05));
   _common_handlers->transformer->retryLookupNewest(false);
 
   // Scope timer
@@ -31,7 +32,7 @@ void PCLFiltration::onInit() {
   _common_handlers->scope_timer_logger   = std::make_shared<mrs_lib::ScopeTimerLogger>(time_logger_filepath, _common_handlers->scope_timer_enabled);
 
   // Diagnostics message
-  _common_handlers->diagnostics = std::make_shared<Diagnostics_t>(nh);
+  _common_handlers->diagnostics = std::make_shared<Diagnostics_t>(shared_from_this());
 
   /*//}*/
 
@@ -58,16 +59,16 @@ void PCLFiltration::onInit() {
 
   // load dynamic row selection
   if (_lidar3d_dynamic_row_selection_enabled && _lidar3d_row_step > 1 && _lidar3d_row_step % 2 != 0) {
-    NODELET_ERROR("[PCLFiltration]: Dynamic selection of lidar rows is enabled, but `lidar_row_step` is not even and/or greater than 1. Ending nodelet.");
-    ros::shutdown();
+    RCLCPP_ERROR(node_->get_logger(), "[PCLFiltration]: Dynamic selection of lidar rows is enabled, but `lidar_row_step` is not even and/or greater than 1. Ending component.");
+    rclcpp::shutdown();
   }
 
   _lidar3d_downsample_use = _lidar3d_dynamic_row_selection_enabled || _lidar3d_row_step > 1 || _lidar3d_col_step > 1;
   if (_lidar3d_downsample_use) {
-    NODELET_INFO("[PCLFiltration] Downsampling of input lidar data is enabled -> dynamically: %s, row step: %d, col step: %d",
+    RCLCPP_INFO(node_->get_logger(), "[PCLFiltration] Downsampling of input lidar data is enabled -> dynamically: %s, row step: %d, col step: %d",
                  _lidar3d_dynamic_row_selection_enabled ? "true" : "false", _lidar3d_row_step, _lidar3d_col_step);
   } else {
-    NODELET_INFO("[PCLFiltration] Downsampling of input lidar data is disabled.");
+    RCLCPP_INFO(node_->get_logger(), "[PCLFiltration] Downsampling of input lidar data is disabled.");
   }
 
   // load ground removal parameters
@@ -117,34 +118,36 @@ void PCLFiltration::onInit() {
   _common_handlers->param_loader->loadParam("rplidar/voxel_resolution", _rplidar_voxel_resolution, 0.0f);
 
   if (!_common_handlers->param_loader->loadedSuccessfully()) {
-    NODELET_ERROR("[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
-    ros::shutdown();
+    RCLCPP_ERROR(node_->get_logger(), "[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
+    rclcpp::shutdown();
   }
 
   if (_lidar3d_republish) {
 
     if (_lidar3d_row_step <= 0 || _lidar3d_col_step <= 0) {
-      NODELET_ERROR("[PCLFiltration]: Downsampling row/col steps for 3D lidar must be >=1, ending nodelet.");
-      ros::shutdown();
+      RCLCPP_ERROR(node_->get_logger(), "[PCLFiltration]: Downsampling row/col steps for 3D lidar must be >=1, ending component.");
+      rclcpp::shutdown();
     }
 
 
-    mrs_lib::SubscribeHandlerOptions shopts(nh);
+    mrs_lib::SubscribeHandlerOptions shopts(shared_from_this());
     shopts.node_name            = "PCLFiltration";
-    shopts.no_message_timeout   = ros::Duration(5.0);
-    _sub_lidar3d                = mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2>(shopts, "lidar3d_in", &PCLFiltration::lidar3dCallback, this);
-    _pub_lidar3d                = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_out", 1);
-    _pub_lidar3d_over_max_range = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_over_max_range_out", 1);
+    shopts.no_message_timeout   = rclcpp::Duration::from_seconds(5.0);
+    _sub_lidar3d                = mrs_lib::SubscribeHandler<sensor_msgs::msg::PointCloud2>(shopts, "lidar3d_in", std::bind(&PCLFiltration::lidar3dCallback, this, std::placeholders::_1));
+    _pub_lidar3d                = create_publisher<sensor_msgs::msg::PointCloud2>("lidar3d_out", 1);
+    _pub_lidar3d_over_max_range = create_publisher<sensor_msgs::msg::PointCloud2>("lidar3d_over_max_range_out", 1);
     if (_filter_removeBelowGround.used())
-      _pub_lidar3d_below_ground = nh.advertise<sensor_msgs::PointCloud2>("lidar3d_below_ground_out", 1);
+      _pub_lidar3d_below_ground = create_publisher<sensor_msgs::msg::PointCloud2>("lidar3d_below_ground_out", 1);
   }
 
+
+  // todo you will have to import the mrs_config library and make the changes accordingly
   reconfigure_server_ = boost::make_shared<ReconfigureServer>(config_mutex_, nh);
   /* reconfigure_server_->updateConfig(last_drs_config); */
   ReconfigureServer::CallbackType f = boost::bind(&PCLFiltration::callbackReconfigure, this, _1, _2);
   reconfigure_server_->setCallback(f);
 
-  NODELET_INFO_ONCE("[PCLFiltration] Nodelet initialized");
+  RCLCPP_INFO_ONCE(node->get_logger(), "[PCLFiltration] Component initialized");
 
   is_initialized = true;
 }
@@ -155,7 +158,7 @@ void PCLFiltration::callbackReconfigure(Config& config, [[maybe_unused]] uint32_
   if (!is_initialized) {
     return;
   }
-  NODELET_INFO("[PCLFiltration] Reconfigure callback.");
+  RCLCPP_INFO(node->get_logger(), "[PCLFiltration] Reconfigure callback.");
 
   _lidar3d_filter_intensity_use       = config.lidar3d_filter_intensity_use;
   _lidar3d_filter_intensity_threshold = config.lidar3d_filter_intensity_threshold;
@@ -171,10 +174,10 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr msg
   }
 
   if (msg->width % _lidar3d_col_step != 0 || msg->height % _lidar3d_row_step != 0) {
-    NODELET_WARN(
-        "[PCLFiltration] Step-based downsampling of 3D lidar data would create nondeterministic results. Data (w: %d, h: %d) with downsampling step (w: %d, "
-        "h: %d) would leave some samples untouched. Skipping lidar frame.",
-        msg->width, msg->height, _lidar3d_col_step, _lidar3d_row_step);
+    RCLCPP_WARN(node->get_logger(),
+                "[PCLFiltration] Step-based downsampling of 3D lidar data would create nondeterministic results. Data (w: %d, h: %d) with downsampling step (w: %d, "
+                "h: %d) would leave some samples untouched. Skipping lidar frame.",
+                msg->width, msg->height, _lidar3d_col_step, _lidar3d_row_step);
     return;
   }
 
@@ -193,7 +196,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr msg
   const bool is_ouster_type = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
   if (is_ouster_type) {
 
-    NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: ouster_ros::Point.");
+    RCLCPP_INFO_ONCE(get_logger(),"[PCLFiltration] Received first 3D LIDAR message. Point type: ouster_ros::Point.");
     PC_OS::Ptr cloud = boost::make_shared<PC_OS>();
     pcl::fromROSMsg(*msg, *cloud);
     process_msg(cloud);
@@ -202,7 +205,7 @@ void PCLFiltration::lidar3dCallback(const sensor_msgs::PointCloud2::ConstPtr msg
 
   } else {
 
-    NODELET_INFO_ONCE("[PCLFiltration] Received first 3D LIDAR message. Point type: pcl::PointXYZI.");
+    RCLCPP_INFO_ONCE(node_->get_logger(),"[PCLFiltration] Received first 3D LIDAR message. Point type: pcl::PointXYZI.");
     PC_I::Ptr cloud = boost::make_shared<PC_I>();
     pcl::fromROSMsg(*msg, *cloud);
     process_msg(cloud);
@@ -317,9 +320,9 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFar(typename boost::
   // Attempt to get the range field name's index
   const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
   if (range_exists)
-    ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
+    RCLCPP_INFO_ONCE(node_->get_logger(), "[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
   else
-    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
+    RCLCPP_WARN_ONCE(node_->get_logger(), "[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
 
   for (auto& point : inout_pc->points) {
     bool invalid_close = false;
@@ -379,20 +382,20 @@ typename boost::shared_ptr<PC> PCLFiltration::removeCloseAndFarAndLowFields(type
 
   // Attempt to get the fields' name indices
   if (filter_intensity) {
-    ROS_INFO_ONCE("[PCLFiltration] Found field name \"intensity\" in point type, will be using intensity for filtering.");
+    RCLCPP_INFO_ONCE(node_->get_logger(), "[PCLFiltration] Found field name \"intensity\" in point type, will be using intensity for filtering.");
     std::tie(filter_intensity, intensity_offset) = getFieldOffset<pt_t>("intensity");
   }
   if (filter_reflectivity) {
-    ROS_INFO_ONCE("[PCLFiltration] Found field name \"reflectivity\" in point type, will be using reflectivity for filtering.");
+    RCLCPP_INFO_ONCE(node_->get_logger(),"[PCLFiltration] Found field name \"reflectivity\" in point type, will be using reflectivity for filtering.");
     std::tie(filter_reflectivity, reflectivity_offset) = getFieldOffset<pt_t>("reflectivity");
   }
 
   // Attempt to get the range field name's index
   const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
   if (range_exists) {
-    ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
+    RCLCPP_INFO_ONCE(ndoe_->get_logger(), "[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
   } else {
-    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
+    RCLCPP_WARN_ONCE(node->get_logger(), "[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
   }
 
   for (auto& point : inout_pc->points) {
@@ -481,20 +484,20 @@ typename boost::shared_ptr<PC> PCLFiltration::removeLowFields(typename boost::sh
 
   // Attempt to get the fields' name indices
   if (filter_intensity) {
-    ROS_INFO_ONCE("[PCLFiltration] Found field name \"intensity\" in point type, will be using intensity for filtering.");
+    RCLCPP_INFO_ONCE(node_->get_logger(), "[PCLFiltration] Found field name \"intensity\" in point type, will be using intensity for filtering.");
     std::tie(filter_intensity, intensity_offset) = getFieldOffset<pt_t>("intensity");
   }
   if (filter_reflectivity) {
-    ROS_INFO_ONCE("[PCLFiltration] Found field name \"reflectivity\" in point type, will be using reflectivity for filtering.");
+    RCLCPP_INFO_ONCE(node_->get_logger(),"[PCLFiltration] Found field name \"reflectivity\" in point type, will be using reflectivity for filtering.");
     std::tie(filter_reflectivity, reflectivity_offset) = getFieldOffset<pt_t>("reflectivity");
   }
 
   // Attempt to get the range field name's index
   const auto [range_exists, range_offset] = getFieldOffset<pt_t>("range");
   if (range_exists) {
-    ROS_INFO_ONCE("[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
+    RCLCPP_INFO_ONCE(node_->get_logger(),"[PCLFiltration] Found field name \"range\" in point type, will be using range from points.");
   } else {
-    ROS_WARN_ONCE("[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
+    RCLCPP_WARN_ONCE(node_->get_logger(),"[PCLFiltration] Unable to find field name \"range\" in point type, will be using calculated range.");
   }
 
   for (auto& point : inout_pc->points) {
@@ -570,7 +573,7 @@ void PCLFiltration::cropBoxPointCloud(boost::shared_ptr<PC>& inout_pc) {
       const Eigen::Affine3d tf = tf2::transformToEigen(tf_opt.value().transform);
       cb.setTransform(tf.cast<float>());
     } else {
-      ROS_WARN_STREAM_THROTTLE(1.0, "[PCLFiltration]: Could not find pointcloud transformation (from \""
+      RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), 1.0, "[PCLFiltration]: Could not find pointcloud transformation (from \""
                                         << inout_pc->header.frame_id << "\" to \"" << _lidar3d_cropbox_frame_id << "\") ! Not applying CropBox filter.");
       return;
     }
@@ -719,4 +722,5 @@ void PCLFiltration::invalidatePointsAtIndices(const pcl::IndicesConstPtr& indice
 
 }  // namespace mrs_pcl_tools
 
-PLUGINLIB_EXPORT_CLASS(mrs_pcl_tools::PCLFiltration, nodelet::Nodelet);
+#include <pluginlib/class_list_macros.hpp>
+PLUGINLIB_EXPORT_CLASS(mrs_pcl_tools::PCLFiltration, rclcpp::Node);

@@ -16,17 +16,17 @@
 #include <mrs_lib/subscribe_handler.h>
 #include <mrs_lib/scope_timer.h>
 
-#include <sensor_msgs/LaserScan.h>
-#include <sensor_msgs/Range.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/CameraInfo.h>
-#include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <sensor_msgs/msg/range.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
+#include <sensor_msgs/image_encodings.hpp>
 
-#include <geometry_msgs/Point.h>
-#include <geometry_msgs/PointStamped.h>
-#include <geometry_msgs/Transform.h>
+#include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/transform.hpp>
 
-#include <visualization_msgs/MarkerArray.h>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include <mrs_modules_msgs/PclToolsDiagnostics.h>
 
@@ -35,7 +35,7 @@
 
 #include <tf2_eigen/tf2_eigen.h>
 
-#include <mrs_pcl_tools/pcl_filtration_dynparamConfig.h>
+#include <mrs_lib/param_loader.h>
 
 //}
 
@@ -72,23 +72,27 @@ public:
     void loadParams(mrs_lib::ParamLoader& pl, const std::string& param_prefix);
   } m_cfg;
 
-  void initialize(ros::NodeHandle& nh, const std::shared_ptr<mrs_lib::Transformer>& tfr, const groundplane_detection_config_t& cfg);
+  GroundplaneDetector(const rclcpp::NodeOptions& options);
 
-  void initialize(ros::NodeHandle& nh, const groundplane_detection_config_t& cfg);
+  void intialize(rclcpp::Node::SharedPtr nh_, const std::shared_ptr<mrs_lib::Transformer>& tfr, const groundplane_detection_config_t& cfg);
+
+  void intialize(rclcpp::Node::SharedPtr nh_, const groundplane_detection_config_t& cfg);
 
   template <typename PC>
   [[nodiscard]] std::optional<plane_t> detectGroundplane(const typename boost::shared_ptr<const PC>& pc) const;
 
 private:
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Clock::SharedPtr clock_;
   const std::string NODE_NAME   = "GroundplaneDetector";
-  bool              initialized = false;
+  bool              is_initialized = false;
 
   std::shared_ptr<mrs_lib::Transformer>         m_tfr                = nullptr;
-  std::optional<ros::Publisher>                 m_pub_detected_plane = std::nullopt;
-  std::optional<ros::Publisher>                 m_pub_inlier_points  = std::nullopt;
-  mrs_lib::SubscribeHandler<sensor_msgs::Range> m_sh_range;
+  std::optional<rclcpp::Publisher<mrs_msgs::msg::messagename>::SharedPtr>  m_pub_detected_plane = std::nullopt;
+  std::optional<rclcpp::Publisher<mrs_msgs::msg::messageName>::SharedPtr>  m_pub_inlier_points  = std::nullopt;
+  mrs_lib::SubscribeHandler<sensor_msgs::msgs::Range> m_sh_range;
 
-  visualization_msgs::MarkerArray plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::Header& header) const;
+  visualization_msgs::MarkerArray plane_visualization(const vec3_t& plane_normal, float plane_d, const std_msgs::msgs::Header& header) const;
 };
 
 #include <mrs_pcl_tools/impl/groundplane_detector.hpp>
