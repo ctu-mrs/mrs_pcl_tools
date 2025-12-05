@@ -5,7 +5,7 @@ std::optional<plane_t> GroundplaneDetector::detectGroundplane(const typename boo
 {
   if (!initialized)
   {
-    ROS_ERROR_STREAM("[" << NODE_NAME << "]: not initialized, skipping.");
+    RCLCPP_ERROR_STREAM(node_->get_logger(), "not initialized, skipping.");
     return std::nullopt;
   }
 
@@ -29,12 +29,12 @@ std::optional<plane_t> GroundplaneDetector::detectGroundplane(const typename boo
       }
       else
       {
-        ROS_WARN_STREAM_THROTTLE(1.0, "[" << NODE_NAME << "]: Could not get transformation from " << range_msg->header.frame_id << " to " << pc->header.frame_id << ", cannot use range measurement for ground plane point estimation.");
+        RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000, "[" << NODE_NAME << "]: Could not get transformation from " << range_msg->header.frame_id << " to " << pc->header.frame_id << ", cannot use range measurement for ground plane point estimation.");
       }
     }
     else
     {
-      ROS_WARN_STREAM_THROTTLE(1.0, "[" << NODE_NAME << "]: Range measurement is out of bounds, not using it for ground plane point estimation (" << range_msg->range << " not in (" << range_msg->min_range << ", " << range_msg->max_range << "))");
+      RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), 1.0, "[" << NODE_NAME << "]: Range measurement is out of bounds, not using it for ground plane point estimation (" << range_msg->range << " not in (" << range_msg->min_range << ", " << range_msg->max_range << "))");
     }
   }
 
@@ -47,7 +47,7 @@ std::optional<plane_t> GroundplaneDetector::detectGroundplane(const typename boo
   vg.filter(*pc_filtered);
 
   // try to estimate the ground normal from the static frame
-  ros::Time stamp;
+  rclcpp::Time stamp;
   pcl_conversions::fromPCL(pc->header.stamp, stamp);
   const auto tf_opt = m_tfr->getTransform(m_cfg.static_frame_id, pc->header.frame_id, stamp);
   if (tf_opt.has_value())
@@ -83,7 +83,7 @@ std::optional<plane_t> GroundplaneDetector::detectGroundplane(const typename boo
   ransac.setDistanceThreshold(m_cfg.max_inlier_dist);
   if (!ransac.computeModel())
   {
-    ROS_ERROR_STREAM_THROTTLE(1.0, "[" << NODE_NAME << "]: Could not fit a ground-plane model! Skipping detection.");
+    RCLCPP_ERROR_STREAM_THROTTLE(1.0, "[" << NODE_NAME << "]: Could not fit a ground-plane model! Skipping detection.");
     return std::nullopt;
   }
 

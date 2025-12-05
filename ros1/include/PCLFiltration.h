@@ -1,14 +1,14 @@
 #pragma once
 
 /* includes //{ */
-#include <image_transport/image_transport.h>
-#include <image_transport/subscriber_filter.h>
-#include <message_filters/subscriber.h>
-#include <message_filters/synchronizer.h>
-#include <message_filters/sync_policies/approximate_time.h>
-#include <message_filters/sync_policies/exact_time.h>
+#include <image_transport/image_transport.hpp>
+#include <image_transport/subscriber_filter.hpp>
+#include <message_filters/subscriber.hpp>
+#include <message_filters/synchronizer.hpp>
+#include <message_filters/sync_policies/approximate_time.hpp>
+#include <message_filters/sync_policies/exact_time.hpp>
 
-#include <mrs_pcl_tools/support.h>
+#include <mrs_pcl_tools/support.hpp>
 
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/extract_indices.h>
@@ -18,32 +18,36 @@
 
 #include <pcl_conversions/pcl_conversions.h>
 
-#include <mrs_lib/transformer.h>
-#include <mrs_lib/subscribe_handler.h>
-#include <mrs_lib/scope_timer.h>
+#include <mrs_lib/transformer.hpp>
+#include <mrs_lib/subscribe_handler.hpp>
+#include <mrs_lib/scope_timer.hpp>
 
-#include <sensor_msgs/LaserScan.h>
-#include <sensor_msgs/Range.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/CameraInfo.h>
-#include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <sensor_msgs/msg/range.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
+#include <sensor_msgs/image_encodings/image_encodings.hpp>
 
-#include <geometry_msgs/Point.h>
-#include <geometry_msgs/PointStamped.h>
-#include <geometry_msgs/Transform.h>
+#include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/transform.hpp>
 
-#include <visualization_msgs/MarkerArray.h>
+#include <visualization_msgs/msg/marker_array.hpp>
 
-#include <mrs_modules_msgs/PclToolsDiagnostics.h>
+#include <mrs_modules_msgs/msg/pcl_tools_diagnostics.hpp>
 
 #include <boost/smart_ptr/make_shared_array.hpp>
 #include <limits>
 
-#include <tf2_eigen/tf2_eigen.h>
+#include <tf2_eigen/tf2_eigen.hpp>
 
-#include <mrs_pcl_tools/pcl_filtration_dynparamConfig.h>
+#include <rcl_interfaces/msg/parameter_descriptor.hpp>
+#include <rclcpp/rclcpp.hpp>
 
-#include <mrs_pcl_tools/remove_below_ground_filter.h>
+#include <mrs_pcl_tools/remove_below_ground_filter.hpp>
+
+// handle dynamic param manager
+#include <mrs_lib/dynparam_mgr.h>
 
 //}
 
@@ -69,9 +73,11 @@ struct DepthTraits<uint16_t>
   static inline bool valid(uint16_t depth) {
     return depth != 0;
   }
+
   static inline float toMeters(uint16_t depth) {
     return float(depth) * 0.001f;
   }  // originally mm
+  
   static inline uint16_t fromMeters(float depth) {
     return (depth * 1000.0f) + 0.5f;
   }
@@ -144,13 +150,14 @@ struct IntensityTraits<float>
 
 /*//}*/
 
-class SensorDepthCamera {
+class SensorDepthCamera : public rclcpp::Node {
 public:
-  void initialize(const ros::NodeHandle& nh, const std::shared_ptr<CommonHandlers_t> common_handlers, const std::string& prefix, const std::string& name);
+  SensorDepthCamera(rclcpp::NodeOptions options);
+  void initialize();
 
 private:
   template <typename T>
-  void convertDepthToCloud(const sensor_msgs::Image::ConstPtr& depth_msg, PC::Ptr& cloud_out, PC::Ptr& cloud_over_max_range_out,
+  void convertDepthToCloud(const sensor_msgs::msg::Image::SharedPtr depth_msg, PC::Ptr& cloud_out, PC::Ptr& cloud_over_max_range_out,
                            const bool return_removed_close = false, const bool return_removed_far = false, const bool replace_nans = false,
                            const bool keep_ordered = false);
 
@@ -190,30 +197,29 @@ private:
   void process_mask_msg(const sensor_msgs::Image::ConstPtr msg);
 
 private:
-  bool            initialized = false;
-  ros::NodeHandle _nh;
-  ros::Publisher  pub_points;
-  ros::Publisher  pub_points_over_max_range;
-  ros::Publisher  pub_points_low_intensity;
-  ros::Publisher  pub_masked_depth;
+  bool initialized = false;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_points;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_points_over_max_range;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_points_low_intensity;
+  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr pub_masked_depth;
 
-  mrs_lib::SubscribeHandler<sensor_msgs::CameraInfo> sh_camera_info;
-  mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_mask;
-  mrs_lib::SubscribeHandler<sensor_msgs::Image>      sh_depth;
+  mrs_lib::SubscribeHandler<sensor_msgs::msg::CameraInfo> sh_camera_info;
+  mrs_lib::SubscribeHandler<sensor_msgs::msg::Image>      sh_mask;
+  mrs_lib::SubscribeHandler<sensor_msgs::msg::Image>      sh_depth;
 
-  std::shared_ptr<image_transport::ImageTransport>                                                intensity_it, depth_it;
-  image_transport::SubscriberFilter                                                               sub_depth, sub_intensity;
-  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> ApproxSyncPolicy;
-  typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image>       ExactSyncPolicy;
-  typedef message_filters::Synchronizer<ApproxSyncPolicy>                                         ApproxSynchronizer;
-  typedef message_filters::Synchronizer<ExactSyncPolicy>                                          ExactSynchronizer;
-  std::shared_ptr<ApproxSynchronizer>                                                             approx_sync;
-  std::shared_ptr<ExactSynchronizer>                                                              exact_sync;
+  std::shared_ptr<image_transport::ImageTransport>                                                                    intensity_it, depth_it;
+  image_transport::SubscriberFilter                                                                                   sub_depth, sub_intensity;
+  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::Image, sensor_msgs::msg::Image> ApproxSyncPolicy;
+  typedef message_filters::sync_policies::ExactTime<sensor_msgs::msg::Image, sensor_msgs::msg::Image>       ExactSyncPolicy;
+  typedef message_filters::Synchronizer<ApproxSyncPolicy>                                                 ApproxSynchronizer;
+  typedef message_filters::Synchronizer<ExactSyncPolicy>                                                  ExactSynchronizer;
+  std::shared_ptr<ApproxSynchronizer>                                                                     approx_sync;
+  std::shared_ptr<ExactSynchronizer>                                                                      exact_sync;
 
   std::shared_ptr<CommonHandlers_t> _common_handlers;
 
-  bool                         got_mask_msg = false;
-  sensor_msgs::Image::ConstPtr mask_msg;
+  bool                                    got_mask_msg = false;
+  sensor_msgs::msg::Image::ConstSharedPtr mask_msg;
 
 private:
   std::string depth_in, depth_camera_info_in, mask_in, points_out, points_over_max_range_out, masked_out;
@@ -276,26 +282,27 @@ private:
 class RemoveBelowGroundFilter;
 
 /* class PCLFiltration //{ */
-class PCLFiltration : public nodelet::Nodelet {
+class PCLFiltration : public rclcpp::Node {
 
 public:
-  virtual void onInit();
+  PCLFiltration(rclcpp::NodeOptions options));
+  void initialize();
 
 private:
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Clock::SharedPtr clock_;
   bool is_initialized = false;
 
-  mrs_lib::SubscribeHandler<sensor_msgs::PointCloud2> _sub_lidar3d;
+  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr _sub_lidar3d;
 
-  ros::Publisher _pub_lidar3d;
-  ros::Publisher _pub_lidar3d_over_max_range;
-  ros::Publisher _pub_lidar3d_below_ground;
-  ros::Publisher _pub_fitted_plane;
-  ros::Publisher _pub_ground_point;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr _pub_lidar3d;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr _pub_lidar3d_over_max_range;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr _pub_lidar3d_below_ground;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr _pub_fitted_plane;
+  rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr _pub_ground_point;
 
-  boost::recursive_mutex                               config_mutex_;
-  typedef mrs_pcl_tools::pcl_filtration_dynparamConfig Config;
-  typedef dynamic_reconfigure::Server<Config>          ReconfigureServer;
-  boost::shared_ptr<ReconfigureServer>                 reconfigure_server_;
+  std::mutex config_mutex_;
+  OnSetParametersCallbackHandle::SharedPtr _param_callback_handler;
   /* mrs_pcl_tools::mrs_pcl_tools_dynparamConfig         last_drs_config; */
 
   RemoveBelowGroundFilter _filter_removeBelowGround;

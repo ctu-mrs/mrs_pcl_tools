@@ -7,7 +7,7 @@ typename boost::shared_ptr<PC> RemoveBelowGroundFilter::applyInPlace(const typen
   removed_pc_ptr->header = inout_pc->header;
   if (!initialized)
   {
-    ROS_ERROR("[RemoveBelowGroundFilter]: not initialized, skipping.");
+    RCLCPP_ERROR(node_->get_logger(), "[RemoveBelowGroundFilter]: not initialized, skipping.");
     return removed_pc_ptr;
   }
 
@@ -17,7 +17,7 @@ typename boost::shared_ptr<PC> RemoveBelowGroundFilter::applyInPlace(const typen
   const auto plane_opt = m_ground_detector.detectGroundplane(const_pc);
   if (!plane_opt.has_value())
   {
-    ROS_ERROR("[RemoveBelowGroundFilter]: failed to find ground plane, skipping.");
+    RCLCPP_ERROR(node_->get_logger(), "[RemoveBelowGroundFilter]: failed to find ground plane, skipping.");
     return removed_pc_ptr;
   }
   const auto plane = plane_opt.value();
