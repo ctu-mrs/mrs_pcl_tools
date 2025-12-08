@@ -20,6 +20,9 @@ endif()
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g" CACHE STRING "" FORCE)
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
 
+# disables anoying PCL warnings
+set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE INTERNAL "No dev warnings")
+
 
 set(DEPENDENCIES
   ament_cmake
@@ -43,6 +46,7 @@ set(DEPENDENCIES
 # find_package(PCL REQUIRED COMPONENTS
 #   common
 # )
+
 find_package(PCL REQUIRED)
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
@@ -83,18 +87,21 @@ set(LIBRARIES
 ## | --------------------- MrsPclTools_PCLSupportLib --------------------- |
 
 # Change to shared later
-add_library(MrsPclTools_PCLSupportLib INTERFACE
+add_library(MrsPclTools_PCLSupportLib SHARED
+  src/utils/ros_logger.cpp
+  src/utils/pointcloud_io.cpp
+  src/utils/pointcloud_io_ros.cpp
 )
 
 ament_target_dependencies(MrsPclTools_PCLSupportLib
-  INTERFACE
+  PUBLIC
     ${DEPENDENCIES}
 )
 
 ## | -------------------- export interfaces ------------------- |
 foreach(library IN LISTS LIBRARIES)
   target_include_directories(${library}
-    INTERFACE
+    PUBLIC
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
       ${PCL_INCLUDE_DIRS}

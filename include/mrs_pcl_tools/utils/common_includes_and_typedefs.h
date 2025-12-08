@@ -19,13 +19,16 @@
 #include <pcl/impl/pcl_base.hpp>
 #include <pcl/common/common.h>
 #include <pcl/PCLPointCloud2.h>
-// #include <pcl_ros/point_cloud.h>
-#include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/impl/voxel_grid.hpp>
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/impl/crop_box.hpp>
 #include <pcl/filters/plane_clipper3D.h>
 #include <pcl/filters/passthrough.h>
+
+#include "mrs_pcl_tools/utils/i_logger.h"
+
+
+
 
 // mrs_lib
 // #include <mrs_lib/param_loader.h>

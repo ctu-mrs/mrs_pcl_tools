@@ -10,6 +10,8 @@
 #else
   #define DEBUG_LOG(logger, msg) do {} while (0)
 #endif
+#define INFO_LOG_COND(verbose, logger, msg) if (verbose) { (logger).info(msg); }
+#define ERROR_LOG_COND(verbose, logger, msg) if (verbose) { (logger).error(msg); }
 
 enum class LogLevel {Debug, Info, Warn, Error};
 

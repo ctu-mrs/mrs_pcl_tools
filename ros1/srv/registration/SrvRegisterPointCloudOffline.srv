@@ -1,8 +1,0 @@
-bool                apply_random_transform
-bool                init_guess_use
-geometry_msgs/Point init_guess_translation
-float64             init_guess_yaw
----
-bool success
-string message
-geometry_msgs/TransformStamped transform
