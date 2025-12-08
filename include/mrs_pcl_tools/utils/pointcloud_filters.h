@@ -7,16 +7,22 @@
 #include <pcl/filters/grid_minimum.h>
 #include <pcl/filters/fast_bilateral_omp.h>
 
+namespace mrs_pcl_tools
+{
 
 namespace filters
 {
 
 /*//{ applyVoxelGridFilter() */
 template <typename PC_t>
-typename std::shared_ptr<PC_t> applyVoxelGridFilter(std::shared_ptr<PC_t> const& cloud, const float resolution)
+typename std::shared_ptr<PC_t> applyVoxelGridFilter(ILogger& logger, std::shared_ptr<PC_t> const& cloud,
+                                                    const float resolution)
 {
   if (resolution <= 0.0f)
   {
+    logger.error(
+        "[mrs_pcl_tools::filters::applyVoxelGridFilter] Resolution is less than or equal to zero, not applying voxel "
+        "grid filter.");
     return cloud;
   }
 
@@ -33,7 +39,8 @@ typename std::shared_ptr<PC_t> applyVoxelGridFilter(std::shared_ptr<PC_t> const&
 
 /*//{ applyRadiusOutlierFilter() */
 template <typename PC_t>
-typename std::shared_ptr<PC_t> applyRadiusOutlierFilter(std::shared_ptr<PC_t> const& cloud, const float radius,
+typename std::shared_ptr<PC_t> applyRadiusOutlierFilter([[maybe_unused]] ILogger& logger,
+                                                        std::shared_ptr<PC_t> const& cloud, const float radius,
                                                         const int neighbors, const bool keep_organized = true)
 {
   auto cloud_out = std::make_shared<PC_t>();
@@ -52,7 +59,8 @@ typename std::shared_ptr<PC_t> applyRadiusOutlierFilter(std::shared_ptr<PC_t> co
 
 /*//{ applyMinimumGridFilter() */
 template <typename PC_t>
-typename std::shared_ptr<PC_t> applyMinimumGridFilter(std::shared_ptr<PC_t> const& cloud, const float resolution)
+typename std::shared_ptr<PC_t> applyMinimumGridFilter([[maybe_unused]] ILogger& logger,
+                                                      std::shared_ptr<PC_t> const& cloud, const float resolution)
 {
   pcl::GridMinimum<typename PC_t::PointType> gmf(resolution);
   gmf.setInputCloud(cloud);
@@ -66,10 +74,13 @@ typename std::shared_ptr<PC_t> applyMinimumGridFilter(std::shared_ptr<PC_t> cons
 
 /*//{ applyBilateralFilter() */
 template <typename PC_t>
-typename std::shared_ptr<PC_t> applyBilateralFilter(std::shared_ptr<PC_t> const &cloud, const float sigma_S, const float sigma_R) {
-
-  if (cloud->width <= 1 || cloud->height <= 1) {
-    // ROS_ERROR("[mrs_pcl_tools::filters::applyBilateralFilter] Unorganized cloud given, not applying bilateral filter.");
+typename std::shared_ptr<PC_t> applyBilateralFilter(ILogger& logger, std::shared_ptr<PC_t> const& cloud,
+                                                    const float sigma_S, const float sigma_R)
+{
+  if (cloud->width <= 1 || cloud->height <= 1)
+  {
+    logger.error(
+        "[mrs_pcl_tools::filters::applyBilateralFilter] Unorganized cloud given, not applying bilateral filter.");
     return cloud;
   }
 
@@ -86,3 +97,5 @@ typename std::shared_ptr<PC_t> applyBilateralFilter(std::shared_ptr<PC_t> const 
 /*//}*/
 
 }  // namespace filters
+
+}  // namespace mrs_pcl_tools

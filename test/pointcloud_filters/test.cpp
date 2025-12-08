@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
+#include "../dummy_logger.h"
 
 #include <mrs_pcl_tools/utils/pointcloud_filters.h>
 
 /* TEST(TESTSuite, returnOriginal_VoxelGridFilter) //{ */
 TEST(TESTSuite, returnOriginal_VoxelGridFilter)
 {
+  DummyLogger logger;
+
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
   cloud->width = 100;
@@ -18,7 +21,7 @@ TEST(TESTSuite, returnOriginal_VoxelGridFilter)
     point.z = 1024 * rand() / (RAND_MAX + 1.0f);
   }
 
-  auto cloud_filtered = filters::applyVoxelGridFilter(cloud, 0.0f);
+  auto cloud_filtered = mrs_pcl_tools::filters::applyVoxelGridFilter(logger, cloud, 0.0f);
 
   EXPECT_EQ(cloud_filtered->size(), cloud->size());
 }
@@ -27,6 +30,8 @@ TEST(TESTSuite, returnOriginal_VoxelGridFilter)
 /* TEST(TESTSuite, downsample_VoxelGridFilter) //{ */
 TEST(TESTSuite, downsample_VoxelGridFilter)
 {
+  DummyLogger logger;
+  
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
   cloud->width = 100;
@@ -40,7 +45,7 @@ TEST(TESTSuite, downsample_VoxelGridFilter)
     point.z = 1024 * rand() / (RAND_MAX + 1.0f);
   }
 
-  auto cloud_filtered = filters::applyVoxelGridFilter(cloud, 0.1f);
+  auto cloud_filtered = mrs_pcl_tools::filters::applyVoxelGridFilter(logger, cloud, 0.1f);
 
   EXPECT_LT(cloud_filtered->size(), cloud->size());
   EXPECT_GT(cloud_filtered->size(), 0u);
@@ -50,6 +55,8 @@ TEST(TESTSuite, downsample_VoxelGridFilter)
 /* TEST(TESTSuite, applyRadiusOutlierFilter) //{ */
 TEST(TESTSuite, applyRadiusOutlierFilter)
 {
+  DummyLogger logger;
+
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
   cloud->width = 5;
   cloud->height = 1;
@@ -68,7 +75,7 @@ TEST(TESTSuite, applyRadiusOutlierFilter)
   const int min_neighbors = 2;
   const bool keep_organized = false;
 
-  auto cloud_filtered = filters::applyRadiusOutlierFilter(cloud, radius, min_neighbors, keep_organized);
+  auto cloud_filtered = mrs_pcl_tools::filters::applyRadiusOutlierFilter(logger, cloud, radius, min_neighbors, keep_organized);
   EXPECT_EQ(cloud_filtered->size(), 3u);
 }
 //}
@@ -77,6 +84,8 @@ TEST(TESTSuite, applyRadiusOutlierFilter)
 /* TEST(TESTSuite, applyMinimumGridFilter) //{ */
 TEST(TESTSuite, applyMinimumGridFilter)
 {
+  DummyLogger logger;
+
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
   cloud->width = 3;
   cloud->height = 1;
@@ -89,7 +98,7 @@ TEST(TESTSuite, applyMinimumGridFilter)
 
 
   const float resolution = 0.1;
-  auto cloud_filtered = filters::applyMinimumGridFilter(cloud, resolution);
+  auto cloud_filtered = mrs_pcl_tools::filters::applyMinimumGridFilter(logger, cloud, resolution);
   EXPECT_EQ(cloud_filtered->size(), 1u);
   EXPECT_FLOAT_EQ((*cloud_filtered)[0].z, min_height);
 }

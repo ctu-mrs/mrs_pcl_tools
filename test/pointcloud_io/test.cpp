@@ -6,9 +6,9 @@
 /* TEST(TESTSuite, loadPcXYZ_success) //{ */
 TEST(TESTSuite, loadPcXYZ_success)
 {
-  std::string path = std::string(TEST_ASSETS_DIR) + "/lamppost.pcd";
-
   DummyLogger logger;
+
+  std::string path = std::string(TEST_ASSETS_DIR) + "/lamppost.pcd";
   auto result = mrs_pcl_tools::loadPcXYZ(logger, path);
 
   ASSERT_TRUE(result.has_value());
@@ -20,9 +20,9 @@ TEST(TESTSuite, loadPcXYZ_success)
 /* TEST(TESTSuite, loadPcXYZ_failure) //{ */
 TEST(TESTSuite, loadPcXYZ_failure)
 {
-  std::string path = std::string(TEST_ASSETS_DIR) + "/does_not_exist.pcd";
-
   DummyLogger logger;
+  
+  std::string path = std::string(TEST_ASSETS_DIR) + "/does_not_exist.pcd";
   auto result = mrs_pcl_tools::loadPcXYZ(logger, path);
 
   ASSERT_FALSE(result.has_value());
@@ -33,6 +33,7 @@ TEST(TESTSuite, loadPcXYZ_failure)
 TEST(TESTSuite, loadCloud_pcd)
 {
   DummyLogger logger;
+
   std::string path = std::string(TEST_ASSETS_DIR) + "/lamppost.pcd";
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
@@ -46,6 +47,7 @@ TEST(TESTSuite, loadCloud_pcd)
 TEST(TESTSuite, loadCloud_unknownType)
 {
   DummyLogger logger;
+  
   std::string path = std::string(TEST_ASSETS_DIR) + "/lamppost.unknown";
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 

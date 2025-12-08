@@ -42,6 +42,7 @@ std::optional<PC_NORM::Ptr> loadPcNormals(ILogger& logger, const std::string& pc
 }
 /*//}*/
 
+/*//{ hasNormals() */
 bool hasNormals(ILogger& logger, const std::string& pcd_file)
 {
   pcl::PCDReader reader_pcd;
@@ -72,6 +73,7 @@ bool hasNormals(ILogger& logger, const std::string& pcd_file)
 
   return true;
 }
+/*//}*/
 
 /*//{ savePCD() */
 void savePCD(const std::string& pcd_file, const pcl::PCLPointCloud2& cloud, const bool binary)
