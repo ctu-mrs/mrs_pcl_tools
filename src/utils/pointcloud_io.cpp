@@ -12,7 +12,7 @@ std::optional<PC::Ptr> loadPcXYZ(ILogger& logger, const std::string& pcd_file)
   if (pcl::io::loadPCDFile<pt_XYZ>(pcd_file, *pc) < 0)
   {
     logger.error("[PCLSupportLibrary] Couldn't read PCD file from path: " + pcd_file);
-    return nullptr;
+    return std::nullopt;
   }
   logger.info("[PCLSupportLibrary] Loaded XYZ pcl with " + std::to_string(pc->points.size()) + " points.");
   return pc;
@@ -25,7 +25,7 @@ std::optional<PC_NORM::Ptr> loadPcNormals(ILogger& logger, const std::string& pc
   // Check if normals are present in the PCD file by looking at the header
   if (!hasNormals(logger, pcd_file))
   {
-    return nullptr;
+    return std::nullopt;
   }
 
   // Load PCD file
@@ -34,7 +34,7 @@ std::optional<PC_NORM::Ptr> loadPcNormals(ILogger& logger, const std::string& pc
   if (pcl::io::loadPCDFile(pcd_file, *cloud) < 0)
   {
     logger.error("[PCLSupportLibrary] Couldn't read normals of PCD file: " + pcd_file);
-    return nullptr;
+    return std::nullopt;
   }
 
   logger.info("[PCLSupportLibrary] Loaded PCL normals with " + std::to_string(cloud->points.size()) + " points.");

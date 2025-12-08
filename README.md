@@ -15,6 +15,10 @@ Package grouping smaller nodes for processing, filtering, and general online/off
 
 * [ouster-ros](https://github.com/ctu-mrs/ouster-ros) for Ouster point type.
 
+## Assets
+This project includes several point cloud example files obtained from the following [website](https://github.com/PointCloudLibrary/data/tree/master).
+
+
 
 ## ToDo
 - [ ] custom srv

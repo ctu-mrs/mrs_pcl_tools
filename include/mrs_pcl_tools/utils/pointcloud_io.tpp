@@ -29,7 +29,7 @@ bool mrs_pcl_tools::loadCloud(ILogger& logger, const std::string& filepath, type
   }
 
   INFO_LOG_COND(success && verbose, logger,
-                "[PCLSupportLibrary] Loaded point cloud with " + cloud->points.size() + " points.");
+                "[PCLSupportLibrary] Loaded point cloud with " + std::to_string(cloud->points.size()) + " points.");
 
   return success;
 }
