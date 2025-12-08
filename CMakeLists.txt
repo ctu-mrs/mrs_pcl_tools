@@ -91,6 +91,7 @@ add_library(MrsPclTools_PCLSupportLib SHARED
   src/utils/ros_logger.cpp
   src/utils/pointcloud_io.cpp
   src/utils/pointcloud_io_ros.cpp
+  src/utils/math_utils.cpp
 )
 
 ament_target_dependencies(MrsPclTools_PCLSupportLib
