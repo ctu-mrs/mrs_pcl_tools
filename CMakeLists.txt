@@ -94,6 +94,7 @@ add_library(MrsPclTools_PCLSupportLib SHARED
   src/utils/math_utils.cpp
   src/utils/visualization.cpp
   src/utils/pointcloud_ros.cpp
+  src/utils/pointcloud_fields.cpp
   src/utils/pointcloud_fields_ros.cpp
 )
 
