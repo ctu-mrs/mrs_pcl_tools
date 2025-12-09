@@ -1,4 +1,4 @@
-
+/*//{ loadCloud() */
 template <typename PC_t>
 bool mrs_pcl_tools::loadCloud(ILogger& logger, const std::string& filepath, typename std::shared_ptr<PC_t> const& cloud,
                               const bool verbose)
@@ -33,3 +33,4 @@ bool mrs_pcl_tools::loadCloud(ILogger& logger, const std::string& filepath, type
 
   return success;
 }
+/*//}*/
