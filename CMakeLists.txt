@@ -96,12 +96,21 @@ add_library(MrsPclTools_PCLSupportLib SHARED
   src/utils/pointcloud_ros.cpp
   src/utils/pointcloud_fields.cpp
   src/utils/pointcloud_fields_ros.cpp
+  src/groundplane_detector.cpp #TODO: remove
 )
 
 ament_target_dependencies(MrsPclTools_PCLSupportLib
   PUBLIC
     ${DEPENDENCIES}
 )
+
+## | --------------------- MrsPclTools_PCLFiltration --------------------- |
+
+# add_library(MrsPclTools_PCLFiltration
+#   src/PCLFiltration.cpp
+#   # src/groundplane_detector.cpp
+#   # src/remove_below_ground_filter.cpp
+#   )
 
 ## | -------------------- export interfaces ------------------- |
 foreach(library IN LISTS LIBRARIES)
