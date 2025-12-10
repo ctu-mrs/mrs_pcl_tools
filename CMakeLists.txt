@@ -96,7 +96,8 @@ add_library(MrsPclTools_PCLSupportLib SHARED
   src/utils/pointcloud_ros.cpp
   src/utils/pointcloud_fields.cpp
   src/utils/pointcloud_fields_ros.cpp
-  src/groundplane_detector.cpp #TODO: remove
+  src/groundplane_detector.cpp #TODO: remove later
+  src/groundplane_detector_core.cpp #TODO: remove later
 )
 
 ament_target_dependencies(MrsPclTools_PCLSupportLib

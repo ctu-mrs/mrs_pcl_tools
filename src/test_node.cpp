@@ -2,12 +2,28 @@
 #include <mrs_pcl_tools/support.h>
 #include <mrs_pcl_tools/groundplane_detector.h>
 
-
-
 namespace mrs_pcl_tools
 {
 
 using namespace std::literals::chrono_literals;
+
+pcl::PointCloud<pcl::PointXYZ>::Ptr getRandomPc()
+{
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+  cloud->width = 100;
+  cloud->height = 100;
+  cloud->resize(cloud->width * cloud->height);
+
+  for (auto& point : *cloud)
+  {
+    point.x = 1024 * rand() / (RAND_MAX + 1.0f);
+    point.y = 1024 * rand() / (RAND_MAX + 1.0f);
+    point.z = 1024 * rand() / (RAND_MAX + 1.0f);
+  }
+
+  return cloud;
+}
 
 class Testing : public rclcpp::Node
 {
@@ -34,10 +50,12 @@ private:
     }
 
     m_transformer_ = std::make_shared<mrs_lib::Transformer>(m_node_);
-    
-    m_ground_detector.initialize(
-        m_node_, m_transformer_,
-        GroundplaneDetector::groundplane_detection_config_t(*m_param_loader_, "lidar3d/ground_removal/"));
+
+    m_ground_detector.initialize(m_node_, m_transformer_,
+                                 GroundplaneDetector::loadCfg(*m_param_loader_, "lidar3d/ground_removal/"));
+
+    auto test_pc = getRandomPc();
+    auto temp = m_ground_detector.detectGroundplane(test_pc);
 
     m_timer_init_->cancel();
   }

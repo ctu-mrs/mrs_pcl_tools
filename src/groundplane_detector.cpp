@@ -3,6 +3,24 @@
 namespace mrs_pcl_tools
 {
 
+groundplane_detection_config_t GroundplaneDetector::loadCfg(mrs_lib::ParamLoader& pl,
+                                                            const std::string& param_prefix)
+{
+  groundplane_detection_config_t cfg;
+  const std::string orig_prefix = pl.getPrefix();
+  pl.setPrefix(param_prefix);
+  pl.loadParam("static_frame_id", cfg.static_frame_id);
+  pl.loadParam("range/use", cfg.range_use, false);
+  pl.loadParam("range/max_difference", cfg.range_max_diff, 1.0);
+  pl.loadParam("range/max_difference_without_rangefinder", cfg.range_max_diff_without_rangefinder, 1.5);
+  pl.loadParam("max_precrop_height", cfg.max_precrop_height, std::numeric_limits<double>::infinity());
+  pl.loadParam("ransac/max_inlier_distance", cfg.max_inlier_dist, 3.0);
+  pl.loadParam("ransac/max_angle_difference", cfg.max_angle_diff, 15.0 / 180.0 * M_PI);
+  pl.loadParam("publish_plane_marker", cfg.publish_plane_marker, false);
+  pl.setPrefix(orig_prefix);
+  return cfg;
+}
+
 /* initialize() //{ */
 void GroundplaneDetector::initialize(rclcpp::Node::SharedPtr nh_, const std::shared_ptr<mrs_lib::Transformer>& tfr,
                                      const groundplane_detection_config_t& cfg)
@@ -10,6 +28,8 @@ void GroundplaneDetector::initialize(rclcpp::Node::SharedPtr nh_, const std::sha
   m_logger_ = new RosLogger(nh_->get_logger());
   m_cfg = cfg;
   m_tfr = tfr;
+
+  m_ground_plane_detector_ = std::make_unique<GroundplaneDetectorCore>(*m_logger_, m_cfg);
 
   if (m_cfg.range_use)
   {
@@ -210,39 +230,6 @@ void GroundplaneDetector::m_addNormalMarker(const vec3_t& pos, const vec3_t& pla
 }
 //}
 
-/* groundplane_detection_config_t constructor //{ */
-GroundplaneDetector::groundplane_detection_config_t::groundplane_detection_config_t(mrs_lib::ParamLoader& pl,
-                                                                                    const std::string& param_prefix)
-{
-  loadParams(pl, param_prefix);
-}
-//}
-
-/* loadParams() //{ */
-void GroundplaneDetector::groundplane_detection_config_t::loadParams(mrs_lib::ParamLoader& pl,
-                                                                     const std::string& param_prefix)
-{
-  const std::string orig_prefix = pl.getPrefix();
-  pl.setPrefix(param_prefix);
-  pl.loadParam("static_frame_id", static_frame_id);
-  pl.loadParam("range/use", range_use, false);
-  pl.loadParam("range/max_difference", range_max_diff, 1.0);
-  pl.loadParam("range/max_difference_without_rangefinder", range_max_diff_without_rangefinder, 1.5);
-  pl.loadParam("max_precrop_height", max_precrop_height, std::numeric_limits<double>::infinity());
-  pl.loadParam("ransac/max_inlier_distance", max_inlier_dist, 3.0);
-  pl.loadParam("ransac/max_angle_difference", max_angle_diff, 15.0 / 180.0 * M_PI);
-  pl.loadParam("publish_plane_marker", publish_plane_marker, false);
-  pl.setPrefix(orig_prefix);
-}
-//}
-
-/* plane_t() //{ */
-plane_t::plane_t(const vec3_t& normal, const float distance)
-  : normal(normal.normalized()), distance(distance / normal.norm())
-{
-}
-//}
-
 // /* m_tryEstimateGroundNormal() //{ */
 // bool GroundplaneDetector::m_tryEstimateGroundNormal(vec3_t& ground_normal)
 // {
@@ -273,22 +260,5 @@ plane_t::plane_t(const vec3_t& normal, const float distance)
 // }
 // //}
 
-/* m_fitPlaneWithRansac() //{ */
-void GroundplaneDetector::m_fitPlaneWithRansac()
-{
-}
-//}
-
-/* m_isGroundPointInlier() //{ */
-void GroundplaneDetector::m_isGroundPointInlier()
-{
-}
-//}
-
-/* m_publishResult() //{ */
-void GroundplaneDetector::m_publishResult()
-{
-}
-//}
 
 }  // namespace mrs_pcl_tools
