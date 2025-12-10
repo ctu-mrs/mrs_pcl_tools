@@ -147,6 +147,22 @@ target_include_directories(mrs_pcl_tools_mrs_pcl_tools
 
 
 
+add_library(mrs_pcl_tests SHARED
+  src/test_node.cpp
+)
+
+target_link_libraries(mrs_pcl_tests
+  ${LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
+target_compile_definitions(mrs_pcl_tests
+  PRIVATE
+    $<$<CONFIG:Debug>:DEBUG>
+)
+rclcpp_components_register_nodes(mrs_pcl_tests PLUGIN "${PROJECT_NAME}::Testing" EXECUTABLE mrs_pcl_tests)
+
+
 ## --------------------------------------------------------------
 ## |                           Testing                          |
 ## --------------------------------------------------------------
@@ -169,6 +185,7 @@ ament_export_libraries(
 
 install(
   TARGETS
+    mrs_pcl_tests
     mrs_pcl_tools_mrs_pcl_tools
     ${LIBRARIES}
     ${EXECUTABLES}
@@ -185,6 +202,14 @@ install(
 
 ament_export_include_directories(
   "include/${PROJECT_NAME}"
+)
+
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(DIRECTORY config
+  DESTINATION share/${PROJECT_NAME}
 )
 
 ament_export_targets(

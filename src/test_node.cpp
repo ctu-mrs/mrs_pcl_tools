@@ -1,0 +1,57 @@
+#include <rclcpp/rclcpp.hpp>
+#include <mrs_pcl_tools/support.h>
+#include <mrs_pcl_tools/groundplane_detector.h>
+
+
+
+namespace mrs_pcl_tools
+{
+
+using namespace std::literals::chrono_literals;
+
+class Testing : public rclcpp::Node
+{
+public:
+  Testing(rclcpp::NodeOptions options) : Node("mrs_pcl_tools", options)
+  {
+    m_timer_init_ =
+        this->create_wall_timer(std::chrono::duration<double>(0.1s), std::bind(&Testing::m_timerInit, this));
+  }
+
+private:
+  void m_timerInit()
+  {
+    m_node_ = this->shared_from_this();
+    m_param_loader_ = std::make_shared<mrs_lib::ParamLoader>(m_node_, m_node_->get_name());
+
+    std::vector<std::string> config_files;
+    m_param_loader_->loadParam("config_files", config_files);
+
+    for (auto config_file : config_files)
+    {
+      RCLCPP_INFO(m_node_->get_logger(), "loading config file '%s'", config_file.c_str());
+      m_param_loader_->addYamlFile(config_file);
+    }
+
+    m_transformer_ = std::make_shared<mrs_lib::Transformer>(m_node_);
+    
+    m_ground_detector.initialize(
+        m_node_, m_transformer_,
+        GroundplaneDetector::groundplane_detection_config_t(*m_param_loader_, "lidar3d/ground_removal/"));
+
+    m_timer_init_->cancel();
+  }
+
+private:
+  rclcpp::TimerBase::SharedPtr m_timer_init_;
+  rclcpp::Node::SharedPtr m_node_;
+  std::shared_ptr<mrs_lib::ParamLoader> m_param_loader_;
+  std::shared_ptr<mrs_lib::Transformer> m_transformer_;
+
+  GroundplaneDetector m_ground_detector;
+};
+
+}  // namespace mrs_pcl_tools
+
+#include <rclcpp_components/register_node_macro.hpp>
+RCLCPP_COMPONENTS_REGISTER_NODE(mrs_pcl_tools::Testing)

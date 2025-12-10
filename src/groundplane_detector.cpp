@@ -3,9 +3,54 @@
 namespace mrs_pcl_tools
 {
 
-/* plane_visualization //{ */
-visualization_msgs::msg::MarkerArray GroundplaneDetector::plane_visualization(const vec3_t& plane_normal, float plane_d,
-                                                                              const std_msgs::msg::Header& header) const
+/* initialize() //{ */
+void GroundplaneDetector::initialize(rclcpp::Node::SharedPtr nh_, const std::shared_ptr<mrs_lib::Transformer>& tfr,
+                                     const groundplane_detection_config_t& cfg)
+{
+  m_logger_ = new RosLogger(nh_->get_logger());
+  m_cfg = cfg;
+  m_tfr = tfr;
+
+  if (m_cfg.range_use)
+  {
+    mrs_lib::SubscriberHandlerOptions shopts;
+    shopts.node = nh_;
+    shopts.node_name = nh_->get_name();
+    shopts.no_message_timeout = rclcpp::Duration(std::chrono::duration<double>(5.0));
+    mrs_lib::construct_object(m_sh_range, shopts, "~/rangefinder_in");
+  }
+
+  if (cfg.publish_plane_marker)
+  {
+    mrs_lib::PublisherHandlerOptions pubopts;
+    pubopts.node = nh_;
+    pubopts.qos = rclcpp::QoS(10);
+
+    // clang-format off
+    m_pub_detected_plane = mrs_lib::PublisherHandler<visualization_msgs::msg::MarkerArray>(pubopts, "~/detected_groundplane_out");
+    m_pub_inlier_points = mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2>(pubopts, "~/groundplane_inliers_out");
+    // clang-format on
+  }
+
+  m_initialized = true;
+}
+//}
+
+/* initialize() //{ */
+void GroundplaneDetector::initialize(rclcpp::Node::SharedPtr nh_, const groundplane_detection_config_t& cfg)
+{
+  m_logger_ = new RosLogger(nh_->get_logger());
+
+  auto transformer = std::make_shared<mrs_lib::Transformer>(nh_);
+  transformer->setLookupTimeout(rclcpp::Duration(std::chrono::duration<double>(0.3)));
+
+  initialize(nh_, transformer, cfg);
+}
+//}
+
+/* m_planeVisualization() //{ */
+visualization_msgs::msg::MarkerArray GroundplaneDetector::m_planeVisualization(
+    const vec3_t& plane_normal, float plane_d, const std_msgs::msg::Header& header) const
 {
   visualization_msgs::msg::MarkerArray ret;
 
@@ -30,18 +75,18 @@ visualization_msgs::msg::MarkerArray GroundplaneDetector::plane_visualization(co
   poly.ptD.y = -size;
   poly.ptD.z = 0;
 
-  m_add_borders_marker(pos, quat, poly, header, ret.markers);
-  m_add_plane_marker(pos, quat, poly, header, ret.markers);
-  m_add_normal_marker(pos, plane_normal, header, ret.markers);
+  m_addBorderMarker(pos, quat, poly, header, ret.markers);
+  m_addPlaneMarker(pos, quat, poly, header, ret.markers);
+  m_addNormalMarker(pos, plane_normal, header, ret.markers);
 
   return ret;
 }
 //}
 
-/* m_add_borders_marker() //{ */
-void GroundplaneDetector::m_add_borders_marker(const vec3_t& pos, const quat_t& quat, const polygon_t& poly,
-                                               const std_msgs::msg::Header& header,
-                                               std::vector<visualization_msgs::msg::Marker>& markers) const
+/* m_addBorderMarker() //{ */
+void GroundplaneDetector::m_addBorderMarker(const vec3_t& pos, const quat_t& quat, const polygon_t& poly,
+                                            const std_msgs::msg::Header& header,
+                                            std::vector<visualization_msgs::msg::Marker>& markers) const
 {
   visualization_msgs::msg::Marker borders_marker;
   borders_marker.header = header;
@@ -83,10 +128,10 @@ void GroundplaneDetector::m_add_borders_marker(const vec3_t& pos, const quat_t& 
 }
 //}
 
-/* m_add_normal_marker() //{ */
-void GroundplaneDetector::m_add_plane_marker(const vec3_t& pos, const quat_t& quat, const polygon_t& poly,
-                                             const std_msgs::msg::Header& header,
-                                             std::vector<visualization_msgs::msg::Marker>& markers) const
+/* m_addPlaneMarker() //{ */
+void GroundplaneDetector::m_addPlaneMarker(const vec3_t& pos, const quat_t& quat, const polygon_t& poly,
+                                           const std_msgs::msg::Header& header,
+                                           std::vector<visualization_msgs::msg::Marker>& markers) const
 {
   visualization_msgs::msg::Marker plane_marker;
   plane_marker.header = header;
@@ -127,10 +172,10 @@ void GroundplaneDetector::m_add_plane_marker(const vec3_t& pos, const quat_t& qu
 }
 //}
 
-/* m_add_normal_marker() //{ */
-void GroundplaneDetector::m_add_normal_marker(const vec3_t& pos, const vec3_t& plane_normal,
-                                              const std_msgs::msg::Header& header,
-                                              std::vector<visualization_msgs::msg::Marker>& markers) const
+/* m_addNormalMarker() //{ */
+void GroundplaneDetector::m_addNormalMarker(const vec3_t& pos, const vec3_t& plane_normal,
+                                            const std_msgs::msg::Header& header,
+                                            std::vector<visualization_msgs::msg::Marker>& markers) const
 {
   visualization_msgs::msg::Marker normal_marker;
   normal_marker.header = header;
@@ -194,6 +239,54 @@ void GroundplaneDetector::groundplane_detection_config_t::loadParams(mrs_lib::Pa
 /* plane_t() //{ */
 plane_t::plane_t(const vec3_t& normal, const float distance)
   : normal(normal.normalized()), distance(distance / normal.norm())
+{
+}
+//}
+
+// /* m_tryEstimateGroundNormal() //{ */
+// bool GroundplaneDetector::m_tryEstimateGroundNormal(vec3_t& ground_normal)
+// {
+//   // ros::Time stamp;
+//   // pcl_conversions::fromPCL(pc->header.stamp, stamp);
+//   // const auto tf_opt = m_tfr->getTransform(m_cfg.static_frame_id, pc->header.frame_id, stamp);
+//   // if (tf_opt.has_value())
+//   // {
+//   //   const Eigen::Affine3f tf = tf2::transformToEigen(tf_opt.value().transform).template cast<float>();
+//   //   ground_normal = tf.rotation()*vec3_t(0, 0, 1);
+//   //   // if the range measurement is not used for estimation of the ground point, assume that the static frame
+//   starts
+//   //   at ground level if (!range_meas_used)
+//   //     ground_point = tf*vec3_t(0, 0, 0);
+
+//   //   // crop out points above a certain height to reduce the number of non-ground-plane points
+//   //   const float plane_d = -ground_normal.dot(ground_point)-m_cfg.max_precrop_height;
+//   //   const vec4_t plane_params = -vec4_t(ground_normal.x(), ground_normal.y(), ground_normal.z(), plane_d);
+//   //   pcl::IndicesPtr inds_filtered = boost::make_shared<pcl::Indices>();
+//   //   pcl::PlaneClipper3D<pt_t> pclip(plane_params);
+//   //   pclip.clipPointCloud3D(*pc_filtered, *inds_filtered);
+//   //   pcl::ExtractIndices<pt_t> ei;
+//   //   ei.setIndices(inds_filtered);
+//   //   ei.filterDirectly(pc_filtered);
+//   //   return true;
+//   // }
+//   return false;
+// }
+// //}
+
+/* m_fitPlaneWithRansac() //{ */
+void GroundplaneDetector::m_fitPlaneWithRansac()
+{
+}
+//}
+
+/* m_isGroundPointInlier() //{ */
+void GroundplaneDetector::m_isGroundPointInlier()
+{
+}
+//}
+
+/* m_publishResult() //{ */
+void GroundplaneDetector::m_publishResult()
 {
 }
 //}
