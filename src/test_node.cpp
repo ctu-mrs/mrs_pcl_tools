@@ -55,7 +55,8 @@ private:
                                  GroundplaneDetector::loadCfg(*m_param_loader_, "lidar3d/ground_removal/"));
 
     auto test_pc = getRandomPc();
-    auto temp = m_ground_detector.detectGroundplane(test_pc);
+    std::shared_ptr<const pcl::PointCloud<pcl::PointXYZ>> const_test_pc = test_pc;
+    auto temp = m_ground_detector.detectGroundplane(const_test_pc);
 
     m_timer_init_->cancel();
   }

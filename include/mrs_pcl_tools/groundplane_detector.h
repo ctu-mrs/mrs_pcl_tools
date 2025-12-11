@@ -37,7 +37,7 @@ public:
   void initialize(rclcpp::Node::SharedPtr nh, const groundplane_detection_config_t& cfg);
 
   template <typename PC>
-  [[nodiscard]] std::optional<plane_t> detectGroundplane(const std::shared_ptr<PC>& pc) const;
+  [[nodiscard]] std::optional<plane_t> detectGroundplane(const std::shared_ptr<const PC>& pc) const;
 
 private:
   visualization_msgs::msg::MarkerArray m_planeVisualization(const vec3_t& plane_normal, float plane_d,
@@ -69,7 +69,7 @@ private:
 //}
 
 template <typename PC>
-std::optional<plane_t> GroundplaneDetector::detectGroundplane(const std::shared_ptr<PC>& cloud) const
+std::optional<plane_t> GroundplaneDetector::detectGroundplane(const std::shared_ptr<const PC>& cloud) const
 {
   if (!m_initialized)
   {
@@ -77,8 +77,7 @@ std::optional<plane_t> GroundplaneDetector::detectGroundplane(const std::shared_
     return std::nullopt;
   }
 
-  const PC& pc = *cloud;
-  auto plane = m_ground_plane_detector_->detect(pc);
+  auto plane = m_ground_plane_detector_->detect(cloud, std::nullopt, std::nullopt);
 
   //   // m_publishResult();
   //   // return plane_t({ fit_n, fit_d });
