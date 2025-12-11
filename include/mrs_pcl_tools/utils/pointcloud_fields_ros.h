@@ -9,8 +9,8 @@
 namespace mrs_pcl_tools
 {
 
-bool hasNormals(const std::vector<sensor_msgs::msg::PointField>& fields);
-bool hasNormals(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& cloud);
-bool hasField(const std::string& field, const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg);
+  bool hasNormals(const std::vector<sensor_msgs::msg::PointField>& fields);
+  bool hasNormals(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& cloud);
+  bool hasField(const std::string& field, const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg);
 
 }  // namespace mrs_pcl_tools

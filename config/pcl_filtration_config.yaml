@@ -1,0 +1,5 @@
+lidar3d:
+  filter_intensity_use: false # 3D LIDAR intensity filter active? [true/false]
+  filter_intensity_threshold: 100.0 # points below this intensity beyond the range will be filtered out <0, 100000000>
+  filter_intensity_range: 5.0 # points beyond this the range below the intensity will be filtered out <0, 100000000>
+

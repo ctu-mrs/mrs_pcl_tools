@@ -103,6 +103,24 @@ ament_target_dependencies(MrsPclTools_PCLSupportLib
     ${DEPENDENCIES}
 )
 
+## | --------------------- MrsPclTools_PCLFiltration --------------------- |
+
+add_library(mrs_pcl_filtration SHARED
+  src/pcl_filtration_ros.cpp
+)
+
+target_link_libraries(mrs_pcl_filtration
+  ${LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
+target_compile_definitions(mrs_pcl_filtration
+  PRIVATE
+    $<$<CONFIG:Debug>:DEBUG>
+)
+rclcpp_components_register_nodes(mrs_pcl_filtration PLUGIN "${PROJECT_NAME}::PCLFiltration" EXECUTABLE mrs_pcl_filtration)
+
+
 ## | -------------------- export interfaces ------------------- |
 foreach(library IN LISTS LIBRARIES)
   target_include_directories(${library}
@@ -142,6 +160,22 @@ target_include_directories(mrs_pcl_tools_mrs_pcl_tools
 ## |                           Testing                          |
 ## --------------------------------------------------------------
 
+add_library(mrs_pcl_tests SHARED
+  src/test_node.cpp
+)
+
+target_link_libraries(mrs_pcl_tests
+  ${LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
+target_compile_definitions(mrs_pcl_tests
+  PRIVATE
+    $<$<CONFIG:Debug>:DEBUG>
+)
+rclcpp_components_register_nodes(mrs_pcl_tests PLUGIN "${PROJECT_NAME}::Testing" EXECUTABLE mrs_pcl_tests)
+
+
 if(ENABLE_TESTS)
 
   add_subdirectory(test)
@@ -160,6 +194,8 @@ ament_export_libraries(
 
 install(
   TARGETS
+    mrs_pcl_filtration
+    mrs_pcl_tests
     mrs_pcl_tools_mrs_pcl_tools
     ${LIBRARIES}
     ${EXECUTABLES}
@@ -176,6 +212,14 @@ install(
 
 ament_export_include_directories(
   "include/${PROJECT_NAME}"
+)
+
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(DIRECTORY config
+  DESTINATION share/${PROJECT_NAME}
 )
 
 ament_export_targets(

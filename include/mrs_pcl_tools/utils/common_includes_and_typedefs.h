@@ -28,8 +28,6 @@
 #include "mrs_pcl_tools/utils/i_logger.h"
 
 
-
-
 // mrs_lib
 // #include <mrs_lib/param_loader.h>
 // #include <mrs_lib/attitude_converter.h>

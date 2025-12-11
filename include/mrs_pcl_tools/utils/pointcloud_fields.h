@@ -12,14 +12,14 @@
 namespace mrs_pcl_tools
 {
 
-PC_NORM::Ptr estimateNormals(const PC::Ptr& cloud, const float& normal_est_radius);
-bool hasNormals(ILogger& logger, const std::string& pcd_file);
+  PC_NORM::Ptr estimateNormals(const PC::Ptr& cloud, const float& normal_est_radius);
+  bool hasNormals(ILogger& logger, const std::string& pcd_file);
 
-template <typename pt_t>
-std::tuple<bool, std::size_t> getFieldOffset(const std::string& field_name);
+  template <typename pt_t>
+  std::tuple<bool, std::size_t> getFieldOffset(const std::string& field_name);
 
-template <typename T, typename pt_t>
-T getFieldValue(const pt_t& point, std::size_t field_offset);
+  template <typename T, typename pt_t>
+  T getFieldValue(const pt_t& point, std::size_t field_offset);
 
 }  // namespace mrs_pcl_tools
 

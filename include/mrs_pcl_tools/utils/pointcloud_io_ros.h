@@ -11,6 +11,6 @@
 namespace mrs_pcl_tools
 {
 
-void savePCD(ILogger& logger, const std::string& pcd_file, const sensor_msgs::msg::PointCloud2::SharedPtr& cloud_msg, const bool binary = true);
+  void savePCD(ILogger& logger, const std::string& pcd_file, const sensor_msgs::msg::PointCloud2::SharedPtr& cloud_msg, const bool binary = true);
 
 }  // namespace mrs_pcl_tools

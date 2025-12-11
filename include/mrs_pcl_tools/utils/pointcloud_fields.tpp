@@ -7,11 +7,11 @@ std::tuple<bool, std::size_t> mrs_pcl_tools::getFieldOffset(const std::string& f
 
   if (field_idx == -1)
   {
-    return { false, 0 };
+    return {false, 0};
   }
 
   const std::size_t field_offset = fields.at(field_idx).offset;
-  return { true, field_offset };
+  return {true, field_offset};
 }
 /*//}*/
 
@@ -25,3 +25,6 @@ T mrs_pcl_tools::getFieldValue(const pt_t& point, std::size_t field_offset)
   return field_value;
 }
 /*//}*/
+
+template <typename PC_t>
+typename std::shared_ptr<PC_t> applyCropBox(ILogger& logger, std::shared_ptr<PC_t> const& cloud);
