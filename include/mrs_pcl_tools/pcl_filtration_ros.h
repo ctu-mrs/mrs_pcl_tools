@@ -7,6 +7,10 @@
 
 #include <mrs_lib/param_loader.h>
 #include <mrs_lib/transformer.h>
+#include <mrs_lib/subscriber_handler.h>
+#include <mrs_lib/publisher_handler.h>
+
+#include <sensor_msgs/msg/point_cloud2.hpp>
 //}
 
 namespace mrs_pcl_tools
@@ -28,8 +32,20 @@ namespace mrs_pcl_tools
 
   private:
     void m_timerInit();
+
     void m_readParams();
     void m_readLidarParams();
+    void m_readLidarGeneralParams();
+    void m_readLidarClipParams();
+    void m_readLidarCropboxParams();
+    void m_readLidarDownSamplingParams();
+
+    void m_initLidarRepublishing();
+
+    void m_lidarCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);
+
+    template <typename PC>
+    void m_processMsg(std::shared_ptr<PC>& inout_pc_ptr);
 
   private:
     rclcpp::TimerBase::SharedPtr m_timer_init_;
@@ -38,9 +54,16 @@ namespace mrs_pcl_tools
     std::shared_ptr<mrs_lib::Transformer> m_transformer_;
     std::shared_ptr<RosLogger> m_logger_;
 
+    mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2> m_pub_lidar;
+    mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2> m_pub_lidar_over_max_range;
+    mrs_lib::SubscriberHandler<sensor_msgs::msg::PointCloud2> m_sub_lidar;
+
+
     std::unique_ptr<PCLFiltrationCore> m_pcl_filtration_core_;
 
     Lidar3DConfig m_lidar_params;
+
+    bool m_is_initialized{false};
   };
 
   template <typename PC>

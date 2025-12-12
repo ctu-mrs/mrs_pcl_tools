@@ -47,7 +47,6 @@ namespace mrs_pcl_tools
     std::string frame_id;
     vec3_t min;
     vec3_t max;
-    unsigned int dynamic_row_offset;
   };
 
   struct DownsampleConfig
@@ -66,6 +65,7 @@ namespace mrs_pcl_tools
     bool republish;
     float invalid_value;
     bool dynamic_row_selection_enabled;
+    uint32_t dynamic_row_offset;
 
     RangeClipConfig rangeclip;
     InertialClipConfig inertclip;

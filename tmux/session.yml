@@ -8,16 +8,26 @@ tmux_options: -f /etc/ctu-mrs/tmux.conf
 pre_window:
   - export UAV_NAME=uav1
   - export USE_SIM_TIME="true"
+  - export RUN_TYPE=simulation
+  - export UAV_TYPE=x500
+  - export RMW_IMPLEMENTATION=rmw_zenoh_cpp
 startup_window: status
 windows:
   - zenoh_router:
       layout: tiled
       panes:
         - ros2 run rmw_zenoh_cpp rmw_zenohd
-  - lynx_driver:
+  - gazebo:
       layout: tiled
       panes:
-        - ros2 launch mrs_pcl_tools test.launch.py 
+        - ros2 launch mrs_uav_gazebo_simulator simulation.launch.py gz_headless:=false gz_verbose:=true
+        - |
+          waitForGazebo; sleep 5; ros2 service call /mrs_drone_spawner/spawn mrs_msgs/srv/String "{value: '1 --$UAV_TYPE --enable-rangefinder --enable-ouster'}"
+  - pcl_filtration:
+      layout: tiled
+      panes:
+        - |
+          waitForGazebo; sleep 5; ros2 launch mrs_pcl_tools pcl_filtration.launch.py 
   - send_command:
       layout: tiled
       panes:

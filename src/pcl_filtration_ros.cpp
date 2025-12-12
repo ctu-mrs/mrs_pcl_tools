@@ -17,8 +17,16 @@ namespace mrs_pcl_tools
 
     m_readParams();
 
+    if (m_lidar_params.republish)
+    {
+      m_initLidarRepublishing();
+    }
+
     m_pcl_filtration_core_ = std::make_unique<PCLFiltrationCore>(*m_logger_);
+    m_pcl_filtration_core_->loadLidarParams(m_lidar_params);
+
     m_timer_init_->cancel();
+    m_is_initialized = true;
   }
   /*//}*/
 
@@ -37,11 +45,27 @@ namespace mrs_pcl_tools
     }
 
     m_readLidarParams();
+
+    if (!m_param_loader_->loadedSuccessfully())
+    {
+      RCLCPP_ERROR(this->get_logger(), "[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
+      rclcpp::shutdown();
+    }
   }
   /*//}*/
 
   /*//{ m_readLidarParams() */
   void PCLFiltration::m_readLidarParams()
+  {
+    m_readLidarGeneralParams();
+    m_readLidarClipParams();
+    m_readLidarCropboxParams();
+    m_readLidarDownSamplingParams();
+  }
+  /*//}*/
+
+  /*//{ m_readLidarGeneralParams() */
+  void PCLFiltration::m_readLidarGeneralParams()
   {
     m_param_loader_->loadParam("lidar3d/name", m_lidar_params.name, std::string("ouster"));
     m_param_loader_->loadParam("lidar3d/frequency", m_lidar_params.frequency);
@@ -50,6 +74,16 @@ namespace mrs_pcl_tools
     m_param_loader_->loadParam("lidar3d/keep_organized", m_lidar_params.keep_organized, true);
     m_param_loader_->loadParam("lidar3d/republish", m_lidar_params.republish, false);
     m_param_loader_->loadParam("lidar3d/invalid_value", m_lidar_params.invalid_value, std::numeric_limits<float>::quiet_NaN());
+
+    int temp_dynamic_row_offset;
+    m_param_loader_->loadParam("lidar3d/dynamic_row_offset", temp_dynamic_row_offset, 0);
+    m_lidar_params.dynamic_row_offset = temp_dynamic_row_offset;
+
+  } /*//}*/
+
+  /*//{ m_readLidarClipParams() */
+  void PCLFiltration::m_readLidarClipParams()
+  {
     m_param_loader_->loadParam("lidar3d/clip/range/use", m_lidar_params.rangeclip.use, false);
     m_param_loader_->loadParam("lidar3d/clip/range/min", m_lidar_params.rangeclip.min_sq, 0.4f);
     m_param_loader_->loadParam("lidar3d/clip/range/max", m_lidar_params.rangeclip.max_sq, 100.0f);
@@ -58,6 +92,45 @@ namespace mrs_pcl_tools
     m_lidar_params.rangeclip.min_sq *= m_lidar_params.rangeclip.min_sq;
     m_lidar_params.rangeclip.max_sq *= m_lidar_params.rangeclip.max_sq;
 
+    m_param_loader_->loadParam("lidar3d/clip/intensity/use", m_lidar_params.intensity.use, false);
+    m_param_loader_->loadParam("lidar3d/clip/intensity/threshold", m_lidar_params.intensity.threshold, std::numeric_limits<float>::max());
+    m_param_loader_->loadParam("lidar3d/clip/intensity/range", m_lidar_params.intensity.range_sq, std::numeric_limits<float>::max());
+    m_lidar_params.intensity.range_mm = m_lidar_params.intensity.range_sq * 1000;
+    m_lidar_params.intensity.range_sq *= m_lidar_params.intensity.range_sq;
+
+    m_param_loader_->loadParam("lidar3d/clip/reflectivity/use", m_lidar_params.reflectivity.use, false);
+    m_param_loader_->loadParam("lidar3d/clip/reflectivity/range", m_lidar_params.reflectivity.range_sq, std::numeric_limits<float>::max());
+    const int lidar3d_filter_reflectivity_threshold =
+        m_param_loader_->loadParam2("lidar3d/clip/reflectivity/threshold", static_cast<int>(std::numeric_limits<uint16_t>::max()));
+    m_lidar_params.reflectivity.threshold = static_cast<uint16_t>(lidar3d_filter_reflectivity_threshold);
+    m_lidar_params.reflectivity.range_mm = m_lidar_params.reflectivity.range_sq * 1000;
+    m_lidar_params.reflectivity.range_sq *= m_lidar_params.reflectivity.range_sq;
+  }
+  /*//}*/
+
+  /*//{ m_readLidarCropboxParams() */
+  void PCLFiltration::m_readLidarCropboxParams()
+  {
+    m_param_loader_->loadParam("lidar3d/cropbox/crop_inside", m_lidar_params.cropbox.crop_inside);
+    m_param_loader_->loadParam("lidar3d/cropbox/frame_id", m_lidar_params.cropbox.frame_id, {});
+
+    Eigen::Vector3d temp_min;
+    m_param_loader_->loadMatrixStatic("lidar3d/cropbox/min", temp_min, -std::numeric_limits<float>::infinity() * Eigen::Vector3d::Ones());
+    m_lidar_params.cropbox.min = temp_min.cast<float>();
+    Eigen::Vector3d temp_max;
+    m_param_loader_->loadMatrixStatic("lidar3d/cropbox/max", temp_max, std::numeric_limits<float>::infinity() * Eigen::Vector3d::Ones());
+    m_lidar_params.cropbox.max = temp_max.cast<float>();
+
+    // by default, use the cropbox filter if any of the crop coordinates is finite
+    const bool cbox_use_default = m_lidar_params.cropbox.min.array().isFinite().any() || m_lidar_params.cropbox.max.array().isFinite().any();
+    // the user can override this behavior by setting the "lidar3d/cropbox/use" parameter
+    m_param_loader_->loadParam("lidar3d/cropbox/use", m_lidar_params.cropbox.use, cbox_use_default);
+  }
+  /*//}*/
+
+  /*//{ m_readLidarDownSamplingParams() */
+  void PCLFiltration::m_readLidarDownSamplingParams()
+  {
     // load downsampling parameters
     m_param_loader_->loadParam("lidar3d/downsampling/dynamic_row_selection", m_lidar_params.dynamic_row_selection_enabled, false);
     m_param_loader_->loadParam("lidar3d/downsampling/row_step", m_lidar_params.downsample.row_step, 1);
@@ -81,32 +154,142 @@ namespace mrs_pcl_tools
     {
       RCLCPP_INFO(this->get_logger(), "[PCLFiltration] Downsampling of input lidar data is disabled.");
     }
+  }
+  /*//}*/
 
-    // load cropbox parameters
-    m_param_loader_->loadParam("lidar3d/cropbox/crop_inside", m_lidar_params.cropbox.crop_inside);
-    m_param_loader_->loadParam("lidar3d/cropbox/frame_id", m_lidar_params.cropbox.frame_id, {});
-    // m_param_loader_->loadMatrixStatic("lidar3d/cropbox/min", m_lidar_params.cropbox.min, -std::numeric_limits<float>::infinity() * vec3_t::Ones());
-    // m_param_loader_->loadMatrixStatic("lidar3d/cropbox/max", m_lidar_params.cropbox.max, std::numeric_limits<float>::infinity() * vec3_t::Ones());
+  /*//{ m_initLidarRepublishing() */
+  void PCLFiltration::m_initLidarRepublishing()
+  {
+    if (m_lidar_params.downsample.row_step <= 0 || m_lidar_params.downsample.col_step <= 0)
+    {
+      RCLCPP_ERROR(this->get_logger(), "[PCLFiltration]: Downsampling row/col steps for 3D lidar must be >=1, ending nodelet.");
+      rclcpp::shutdown();
+    }
 
-    // by default, use the cropbox filter if any of the crop coordinates is finite
-    const bool cbox_use_default = m_lidar_params.cropbox.min.array().isFinite().any() || m_lidar_params.cropbox.max.array().isFinite().any();
-    // the user can override this behavior by setting the "lidar3d/cropbox/use" parameter
-    m_param_loader_->loadParam("lidar3d/cropbox/use", m_lidar_params.cropbox.use, cbox_use_default);
+    mrs_lib::SubscriberHandlerOptions shopts;
+    shopts.node = m_node_;
+    shopts.node_name = m_node_->get_name();
+    shopts.no_message_timeout = rclcpp::Duration::from_seconds(5.0);
+    m_sub_lidar = mrs_lib::SubscriberHandler<sensor_msgs::msg::PointCloud2>(shopts, "~/lidar_in", &PCLFiltration::m_lidarCallback, this);
+
+    mrs_lib::PublisherHandlerOptions pubopts;
+    pubopts.node = m_node_;
+    pubopts.qos = rclcpp::QoS(1);
+
+    m_pub_lidar = mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2>(pubopts, "~/lidar_out");
+    m_pub_lidar_over_max_range = mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2>(pubopts, "~/lidar_over_max_range_out");
+  }
+  /*//}*/
+
+  /*//{ m_lidarCallback() */
+  void PCLFiltration::m_lidarCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg)
+  {
+    if (!m_lidar_params.republish || !m_is_initialized)
+    {
+      return;
+    }
+
+    if (msg->width % m_lidar_params.downsample.col_step != 0 || msg->height % m_lidar_params.downsample.row_step != 0)
+    {
+      RCLCPP_WARN(this->get_logger(),
+                  "[PCLFiltration] Step-based downsampling of 3D lidar data would create nondeterministic results. "
+                  "Data (w: %d, h: %d) with downsampling step (w: %d, h: %d) would leave some samples untouched. "
+                  "Skipping lidar frame.",
+                  msg->width, msg->height, m_lidar_params.downsample.col_step, m_lidar_params.downsample.row_step);
+      return;
+    }
 
 
-    m_param_loader_->loadParam("lidar3d/clip/intensity/use", m_lidar_params.intensity.use, false);
-    m_param_loader_->loadParam("lidar3d/clip/intensity/threshold", m_lidar_params.intensity.threshold, std::numeric_limits<float>::max());
-    m_param_loader_->loadParam("lidar3d/clip/intensity/range", m_lidar_params.intensity.range_sq, std::numeric_limits<float>::max());
-    m_lidar_params.intensity.range_mm = m_lidar_params.intensity.range_sq * 1000;
-    m_lidar_params.intensity.range_sq *= m_lidar_params.intensity.range_sq;
+    const bool is_ouster_type = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
 
-    m_param_loader_->loadParam("lidar3d/clip/reflectivity/use", m_lidar_params.reflectivity.use, false);
-    m_param_loader_->loadParam("lidar3d/clip/reflectivity/range", m_lidar_params.reflectivity.range_sq, std::numeric_limits<float>::max());
-    const int lidar3d_filter_reflectivity_threshold =
-        m_param_loader_->loadParam2("lidar3d/clip/reflectivity/threshold", static_cast<int>(std::numeric_limits<uint16_t>::max()));
-    m_lidar_params.reflectivity.threshold = static_cast<uint16_t>(lidar3d_filter_reflectivity_threshold);
-    m_lidar_params.reflectivity.range_mm = m_lidar_params.reflectivity.range_sq * 1000;
-    m_lidar_params.reflectivity.range_sq *= m_lidar_params.reflectivity.range_sq;
+    if (is_ouster_type)
+    {
+      // TODO: #ifdef COMPILE_WITH_OUSTER otherwise PC_OS is unknown
+      //  PC_OS::Ptr cloud = std::make_shared<PC_OS>();
+      //  pcl::fromROSMsg(*msg, *cloud);
+      //  m_processMsg(cloud);
+    } else
+    {
+      RCLCPP_INFO_ONCE(this->get_logger(), "[PCLFiltration] Received first 3D LIDAR message. Point type: pcl::PointXYZI.");
+
+      PC_I::Ptr cloud = std::make_shared<PC_I>();
+      pcl::fromROSMsg(*msg, *cloud);
+      m_processMsg(cloud);
+    }
+  }
+  /*//}*/
+
+  /*//{ m_processMsg() */
+  template <typename PC>
+  void PCLFiltration::m_processMsg(std::shared_ptr<PC>& inout_pc_ptr)
+  {
+    if (!inout_pc_ptr)
+    {
+      RCLCPP_WARN(this->get_logger(), "[PCLFiltration] Received null point cloud pointer. Skipping.");
+      return;
+    }
+
+    const size_t height_before = inout_pc_ptr->height;
+    const size_t width_before = inout_pc_ptr->width;
+    const size_t points_before = inout_pc_ptr->size();
+
+    if (m_lidar_params.downsample.use)
+    {
+      const size_t row_offset = m_lidar_params.dynamic_row_selection_enabled ? m_lidar_params.dynamic_row_offset : m_lidar_params.downsample.row_step - 1;
+      m_pcl_filtration_core_->downsample(inout_pc_ptr, m_lidar_params.downsample.row_step, m_lidar_params.downsample.col_step, row_offset);
+    }
+
+    const bool use_intensity_or_reflectivity = m_lidar_params.intensity.use || m_lidar_params.reflectivity.use;
+    if (m_lidar_params.rangeclip.use)
+    {
+      const bool publish_removed_far = m_pub_lidar_over_max_range.getNumSubscribers() > 0;
+
+      if (use_intensity_or_reflectivity)
+      {
+        const typename PC::Ptr pcl_over_max_range = m_pcl_filtration_core_->removeCloseAndFarAndLowFields(inout_pc_ptr, false, publish_removed_far);
+        if (publish_removed_far)
+        {
+          // TODO: mismatch with ‘std::shared_ptr<pcl::PointCloud<pcl::PointXYZI> >’ to ‘const std::shared_ptr<sensor_msgs::msg::PointCloud2
+          sensor_msgs::msg::PointCloud2 pcl_msg;
+          pcl::toROSMsg(*pcl_over_max_range, pcl_msg);
+          m_pub_lidar_over_max_range.publish(pcl_msg);
+        }
+      } else
+      {
+        const typename PC::Ptr pcl_over_max_range = m_pcl_filtration_core_->removeCloseAndFar(inout_pc_ptr, false, publish_removed_far);
+        if (publish_removed_far)
+        {
+          // TODO: mismatch with ‘std::shared_ptr<pcl::PointCloud<pcl::PointXYZI> >’ to ‘const std::shared_ptr<sensor_msgs::msg::PointCloud2
+          sensor_msgs::msg::PointCloud2 pcl_msg;
+          pcl::toROSMsg(*pcl_over_max_range, pcl_msg);
+          m_pub_lidar_over_max_range.publish(pcl_msg);
+        }
+      }
+    } else if (use_intensity_or_reflectivity)
+    {
+      m_pcl_filtration_core_->removeLowFields(inout_pc_ptr);
+    } else
+    {
+    }
+
+    if (m_lidar_params.cropbox.use)
+    {
+      // m_pcl_filtration_core_->cropBoxPointCloud(inout_pc_ptr);  // ROS msg I guess
+    }
+
+    if (!m_lidar_params.keep_organized)
+    {
+      // TODO:
+      m_pcl_filtration_core_->removeInfinitePoints();
+    }
+
+    inout_pc_ptr->is_dense = !m_lidar_params.keep_organized;
+
+    // TODO: mismatch with ‘std::shared_ptr<pcl::PointCloud<pcl::PointXYZI> >’ to ‘const std::shared_ptr<sensor_msgs::msg::PointCloud2
+    // TODO: need to modify it
+    sensor_msgs::msg::PointCloud2 pcl_msg;
+    pcl::toROSMsg(*inout_pc_ptr, pcl_msg);
+    m_pub_lidar.publish(pcl_msg);
   }
   /*//}*/
 

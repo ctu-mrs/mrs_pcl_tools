@@ -55,7 +55,9 @@ def generate_launch_description():
                             "use_sim_time": launch.substitutions.LaunchConfiguration("use_sim_time")
                         },
                     ],
-                    remappings=[],
+                    remappings=[
+                        ("~/lidar_in", f"/{UAV_NAME}/ouster/points"),
+                    ],
                 ),
             ],
             output='screen',
