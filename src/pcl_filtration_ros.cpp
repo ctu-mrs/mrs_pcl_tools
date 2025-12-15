@@ -18,6 +18,7 @@ namespace mrs_pcl_tools
     m_readParams();
     m_initTransformer();
     m_initScopeTimerLogger();
+    m_diagnostics_ = std::make_shared<PclFiltrationDiagnostics>(m_node_);
 
 
     if (m_lidar_params.republish)
@@ -225,6 +226,14 @@ namespace mrs_pcl_tools
       return;
     }
 
+    mrs_modules_msgs::msg::PclToolsDiagnostics diag_msg;
+    diag_msg.sensor_name = m_lidar_params.name;
+    diag_msg.stamp = msg->header.stamp;
+    diag_msg.sensor_type = mrs_modules_msgs::msg::PclToolsDiagnostics::SENSOR_TYPE_LIDAR_3D;
+    diag_msg.cols_before = msg->width;
+    diag_msg.rows_before = msg->height;
+    diag_msg.frequency = m_lidar_params.frequency;
+    diag_msg.vfov = m_lidar_params.vfov;
 
     const bool is_ouster_type = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
 
@@ -234,6 +243,8 @@ namespace mrs_pcl_tools
       //  PC_OS::Ptr cloud = std::make_shared<PC_OS>();
       //  pcl::fromROSMsg(*msg, *cloud);
       //  m_processMsg(cloud);
+      // diag_msg->cols_after = cloud->width;
+      // diag_msg->rows_after = cloud->height;
     } else
     {
       RCLCPP_INFO_ONCE(this->get_logger(), "[PCLFiltration] Received first 3D LIDAR message. Point type: pcl::PointXYZI.");
@@ -241,7 +252,11 @@ namespace mrs_pcl_tools
       PC_I::Ptr cloud = std::make_shared<PC_I>();
       pcl::fromROSMsg(*msg, *cloud);
       m_processMsg(cloud);
+      diag_msg.cols_after = cloud->width;
+      diag_msg.rows_after = cloud->height;
     }
+
+    m_diagnostics_->publish(diag_msg);
   }
   /*//}*/
 

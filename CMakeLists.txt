@@ -31,6 +31,7 @@ set(DEPENDENCIES
   geometry_msgs
   mrs_lib
   mrs_msgs
+  mrs_modules_msgs
   sensor_msgs
   std_msgs
   visualization_msgs
@@ -109,6 +110,7 @@ ament_target_dependencies(MrsPclTools_PCLSupportLib
 add_library(mrs_pcl_filtration SHARED
   src/pcl_filtration_ros.cpp
   src/pcl_filtration_core.cpp
+  src/pcl_filtration_diagnostics.cpp
 )
 
 target_link_libraries(mrs_pcl_filtration
