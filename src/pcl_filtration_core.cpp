@@ -17,10 +17,4 @@ namespace mrs_pcl_tools
   /*//}*/
 
 
-  /*//{ removeInfinitePoints() */
-  void PCLFiltrationCore::removeInfinitePoints()
-  {
-  }
-  /*//}*/
-
 }  // namespace mrs_pcl_tools

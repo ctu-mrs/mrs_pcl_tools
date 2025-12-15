@@ -39,6 +39,7 @@ set(DEPENDENCIES
   image_transport
   pcl_ros
   pcl_conversions
+  tf2_eigen
   # eigen_conversions
   rosidl_default_generators
   )

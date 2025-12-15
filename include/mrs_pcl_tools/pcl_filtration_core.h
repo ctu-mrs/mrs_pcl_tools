@@ -21,8 +21,8 @@ namespace mrs_pcl_tools
     template <typename PC>
     void downsample(std::shared_ptr<PC>& inout_pc_ptr, const size_t scale_row, const size_t scale_col, const size_t row_offset);
 
-    void removeLowFields();
-    void removeInfinitePoints();
+    template <typename PC>
+    void removeInfinitePoints(std::shared_ptr<PC>& inout_pc_ptr);
 
     template <typename pt_t>
     void invalidatePoint(pt_t& point);
@@ -31,7 +31,7 @@ namespace mrs_pcl_tools
     void invalidatePointsAtIndices(const pcl::IndicesConstPtr& indices, std::shared_ptr<PC>& cloud);
 
     template <typename PC>
-    void cropBoxPointCloud(const std::shared_ptr<PC>& inout_pc_ptr, const Eigen::Affine3f& tf);
+    void cropBoxPointCloud(std::shared_ptr<PC>& inout_pc_ptr, const Eigen::Affine3f& tf);
 
     template <typename PC>
     std::shared_ptr<PC> removeCloseAndFar(std::shared_ptr<PC>& inout_pc_ptr, const bool return_removed_close, const bool return_removed_far);
@@ -48,16 +48,38 @@ namespace mrs_pcl_tools
     Lidar3DConfig m_lidar_params;
   };
 
-  // template <typename PC>
-  // void PCLFiltrationCore::cropBoxPointCloud(const std::shared_ptr<PC>& inout_pc_ptr, const Eigen::Affine3f& tf)
-  // {
-  //   // TODO: ros version has to do rest of the stuff
-  //   if (!m_lidar_params.cropbox.frame_id.empty())
-  //   {
-  //     auto filtered_cloud = mrs_pcl_tools::filters::applyCropBox<PC>(m_logger, inout_pc_ptr, tf, m_lidar_params.cropbox.min, m_lidar_params.cropbox.max,
-  //                                                                    m_lidar_params.keep_organized, m_lidar_params.cropbox.crop_inside);
-  //   }
-  // }
+  template <typename PC>
+  void PCLFiltrationCore::cropBoxPointCloud(std::shared_ptr<PC>& inout_pc_ptr, const Eigen::Affine3f& tf)
+  {
+    vec4_t cb_min;
+    cb_min.head<3>() = m_lidar_params.cropbox.min;
+    cb_min.w() = -std::numeric_limits<float>::infinity();
+
+    vec4_t cb_max;
+    cb_max.head<3>() = m_lidar_params.cropbox.max;
+    cb_max.w() = std::numeric_limits<float>::infinity();
+
+    inout_pc_ptr =
+        mrs_pcl_tools::filters::applyCropBox<PC>(m_logger, inout_pc_ptr, tf, cb_min, cb_max, m_lidar_params.keep_organized, m_lidar_params.cropbox.crop_inside);
+  }
+
+  template <typename PC>
+  void PCLFiltrationCore::removeInfinitePoints(std::shared_ptr<PC>& inout_pc_ptr)
+  {
+    const auto orig_pc = inout_pc_ptr;
+    inout_pc_ptr = std::make_shared<PC>();
+    inout_pc_ptr->header = orig_pc->header;
+    inout_pc_ptr->resize(orig_pc->size());
+    size_t it = 0;
+    for (const auto& pt : orig_pc->points)
+    {
+      if (pcl::isFinite(pt))
+      {
+        inout_pc_ptr->at(it++) = pt;
+      }
+    }
+    inout_pc_ptr->resize(it);
+  }
 
 
 #include <mrs_pcl_tools/pcl_filtration_core.tpp>

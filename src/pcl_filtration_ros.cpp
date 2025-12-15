@@ -16,6 +16,9 @@ namespace mrs_pcl_tools
     m_logger_ = std::make_shared<RosLogger>(this->get_logger());
 
     m_readParams();
+    m_initTransformer();
+    m_initScopeTimerLogger();
+
 
     if (m_lidar_params.republish)
     {
@@ -27,6 +30,29 @@ namespace mrs_pcl_tools
 
     m_timer_init_->cancel();
     m_is_initialized = true;
+  }
+  /*//}*/
+
+  /*//{ m_initScopeTimerLogger() */
+  void PCLFiltration::m_initScopeTimerLogger()
+  {
+    m_param_loader_->loadParam("scope_timer/enable", m_scope_timer_enabled, false);
+
+    const std::string time_logger_filepath = m_param_loader_->loadParam2("scope_timer/log_filename", std::string(""));
+    m_scope_timer_logger = std::make_shared<mrs_lib::ScopeTimerLogger>(m_node_, time_logger_filepath, m_scope_timer_enabled);
+  }
+  /*//}*/
+
+  /*//{ m_initTransformer() */
+  void PCLFiltration::m_initTransformer()
+  {
+    const auto uav_name = m_param_loader_->loadParam2<std::string>("uav_name");
+    m_transformer_ = std::make_shared<mrs_lib::Transformer>(m_node_);
+    m_transformer_->setDefaultPrefix(uav_name);
+    m_transformer_->setLookupTimeout(rclcpp::Duration::from_seconds(0.05));
+    m_transformer_->retryLookupNewest(false);
+
+    m_lidar_params.cropbox.frame_id = m_transformer_->resolveFrame(m_lidar_params.cropbox.frame_id);
   }
   /*//}*/
 
@@ -229,6 +255,8 @@ namespace mrs_pcl_tools
       return;
     }
 
+    mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer(m_node_, "PCLFiltration::process_msg", m_scope_timer_logger, m_scope_timer_enabled);
+
     const size_t height_before = inout_pc_ptr->height;
     const size_t width_before = inout_pc_ptr->width;
     const size_t points_before = inout_pc_ptr->size();
@@ -249,7 +277,6 @@ namespace mrs_pcl_tools
         const typename PC::Ptr pcl_over_max_range = m_pcl_filtration_core_->removeCloseAndFarAndLowFields(inout_pc_ptr, false, publish_removed_far);
         if (publish_removed_far)
         {
-          // TODO: mismatch with ‘std::shared_ptr<pcl::PointCloud<pcl::PointXYZI> >’ to ‘const std::shared_ptr<sensor_msgs::msg::PointCloud2
           sensor_msgs::msg::PointCloud2 pcl_msg;
           pcl::toROSMsg(*pcl_over_max_range, pcl_msg);
           m_pub_lidar_over_max_range.publish(pcl_msg);
@@ -259,7 +286,6 @@ namespace mrs_pcl_tools
         const typename PC::Ptr pcl_over_max_range = m_pcl_filtration_core_->removeCloseAndFar(inout_pc_ptr, false, publish_removed_far);
         if (publish_removed_far)
         {
-          // TODO: mismatch with ‘std::shared_ptr<pcl::PointCloud<pcl::PointXYZI> >’ to ‘const std::shared_ptr<sensor_msgs::msg::PointCloud2
           sensor_msgs::msg::PointCloud2 pcl_msg;
           pcl::toROSMsg(*pcl_over_max_range, pcl_msg);
           m_pub_lidar_over_max_range.publish(pcl_msg);
@@ -274,22 +300,26 @@ namespace mrs_pcl_tools
 
     if (m_lidar_params.cropbox.use)
     {
-      // m_pcl_filtration_core_->cropBoxPointCloud(inout_pc_ptr);  // ROS msg I guess
+      m_cropBoxPointCloud(inout_pc_ptr);
     }
 
     if (!m_lidar_params.keep_organized)
     {
-      // TODO:
-      m_pcl_filtration_core_->removeInfinitePoints();
+      m_pcl_filtration_core_->removeInfinitePoints(inout_pc_ptr);
     }
-
     inout_pc_ptr->is_dense = !m_lidar_params.keep_organized;
 
-    // TODO: mismatch with ‘std::shared_ptr<pcl::PointCloud<pcl::PointXYZI> >’ to ‘const std::shared_ptr<sensor_msgs::msg::PointCloud2
-    // TODO: need to modify it
     sensor_msgs::msg::PointCloud2 pcl_msg;
     pcl::toROSMsg(*inout_pc_ptr, pcl_msg);
     m_pub_lidar.publish(pcl_msg);
+
+    if (m_lidar_params.dynamic_row_selection_enabled)
+    {
+      m_lidar_params.dynamic_row_offset++;
+      m_lidar_params.dynamic_row_offset %= m_lidar_params.downsample.row_step;
+    }
+
+    m_logPointCloudStats(timer, inout_pc_ptr, height_before, width_before, points_before);
   }
   /*//}*/
 
