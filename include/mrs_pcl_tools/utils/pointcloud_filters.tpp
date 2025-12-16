@@ -87,7 +87,13 @@ namespace mrs_pcl_tools
     typename PC_t::Ptr applyCropBox([[maybe_unused]] ILogger& logger, const typename PC_t::ConstPtr& cloud, const Eigen::Affine3f& transform,
                                     const Eigen::Vector4f& min, const Eigen::Vector4f& max, bool keep_organized, bool set_negative)
     {
-      pcl::CropBox<typename PC_t::PointType> cb;
+      bool extract_removed_indices{false};
+      if (keep_organized)
+      {
+        extract_removed_indices = true;
+      }
+      pcl::CropBox<typename PC_t::PointType> cb(extract_removed_indices);
+
 
       cb.setTransform(transform);
       cb.setKeepOrganized(keep_organized);
