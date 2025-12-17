@@ -236,27 +236,36 @@ namespace mrs_pcl_tools
     diag_msg.vfov = m_lidar_params.vfov;
 
     const bool is_ouster_type = hasField("range", msg) && hasField("ring", msg) && hasField("t", msg);
-
     if (is_ouster_type)
     {
-      // TODO: #ifdef COMPILE_WITH_OUSTER otherwise PC_OS is unknown
-      //  PC_OS::Ptr cloud = std::make_shared<PC_OS>();
-      //  pcl::fromROSMsg(*msg, *cloud);
-      //  m_processMsg(cloud);
-      // diag_msg->cols_after = cloud->width;
-      // diag_msg->rows_after = cloud->height;
+      RCLCPP_INFO_ONCE(this->get_logger(), "[PCLFiltration] Received first 3D LIDAR message. Point type: ouster_ros::Point.");
+
+#ifdef COMPILE_WITH_OUSTER
+      m_processPointCloud<PC_OS>(msg, diag_msg);
+#else
+      RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                            "[PCLFiltration] 3D LiDAR message comes from an Ouster sensor, but this package was not compiled with the Ouster flag. Please "
+                            "rebuild the package with: --cmake-args -DCOMPILE_WITH_OUSTER=ON");
+#endif
     } else
     {
       RCLCPP_INFO_ONCE(this->get_logger(), "[PCLFiltration] Received first 3D LIDAR message. Point type: pcl::PointXYZI.");
-
-      PC_I::Ptr cloud = std::make_shared<PC_I>();
-      pcl::fromROSMsg(*msg, *cloud);
-      m_processMsg(cloud);
-      diag_msg.cols_after = cloud->width;
-      diag_msg.rows_after = cloud->height;
+      m_processPointCloud<PC_I>(msg, diag_msg);
     }
 
     m_diagnostics_->publish(diag_msg);
+  }
+  /*//}*/
+
+  /*//{ m_processPointCloud() */
+  template <typename PC>
+  void PCLFiltration::m_processPointCloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg, mrs_modules_msgs::msg::PclToolsDiagnostics& diag_msg)
+  {
+    typename PC::Ptr cloud = std::make_shared<PC>();
+    pcl::fromROSMsg(*msg, *cloud);
+    m_processMsg(cloud);
+    diag_msg.cols_after = cloud->width;
+    diag_msg.rows_after = cloud->height;
   }
   /*//}*/
 
@@ -278,6 +287,7 @@ namespace mrs_pcl_tools
 
     if (m_lidar_params.downsample.use)
     {
+      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying downsampling");
       const size_t row_offset = m_lidar_params.dynamic_row_selection_enabled ? m_lidar_params.dynamic_row_offset : m_lidar_params.downsample.row_step - 1;
       m_pcl_filtration_core_->downsample(inout_pc_ptr, m_lidar_params.downsample.row_step, m_lidar_params.downsample.col_step, row_offset);
     }
@@ -285,10 +295,12 @@ namespace mrs_pcl_tools
     const bool use_intensity_or_reflectivity = m_lidar_params.intensity.use || m_lidar_params.reflectivity.use;
     if (m_lidar_params.rangeclip.use)
     {
+      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying range-clipping");
       const bool publish_removed_far = m_pub_lidar_over_max_range.getNumSubscribers() > 0;
 
       if (use_intensity_or_reflectivity)
       {
+        DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeCloseAndFarAndLowFields");
         const typename PC::Ptr pcl_over_max_range = m_pcl_filtration_core_->removeCloseAndFarAndLowFields(inout_pc_ptr, false, publish_removed_far);
         if (publish_removed_far)
         {
@@ -298,6 +310,7 @@ namespace mrs_pcl_tools
         }
       } else
       {
+        DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeCloseAndFar");
         const typename PC::Ptr pcl_over_max_range = m_pcl_filtration_core_->removeCloseAndFar(inout_pc_ptr, false, publish_removed_far);
         if (publish_removed_far)
         {
@@ -308,6 +321,7 @@ namespace mrs_pcl_tools
       }
     } else if (use_intensity_or_reflectivity)
     {
+      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeCloseAndFar");
       m_pcl_filtration_core_->removeLowFields(inout_pc_ptr);
     } else
     {
@@ -315,11 +329,13 @@ namespace mrs_pcl_tools
 
     if (m_lidar_params.cropbox.use)
     {
+      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying crobox filter");
       m_cropBoxPointCloud(inout_pc_ptr);
     }
 
     if (!m_lidar_params.keep_organized)
     {
+      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeInfinitePoints");
       m_pcl_filtration_core_->removeInfinitePoints(inout_pc_ptr);
     }
     inout_pc_ptr->is_dense = !m_lidar_params.keep_organized;

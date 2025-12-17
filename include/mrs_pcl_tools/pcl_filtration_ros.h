@@ -46,6 +46,9 @@ namespace mrs_pcl_tools
     void m_lidarCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);
 
     template <typename PC>
+    void m_processPointCloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg, mrs_modules_msgs::msg::PclToolsDiagnostics& diag_msg);
+
+    template <typename PC>
     void m_processMsg(std::shared_ptr<PC>& inout_pc_ptr);
 
     template <typename PC>
