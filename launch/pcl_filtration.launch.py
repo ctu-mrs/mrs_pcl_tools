@@ -30,8 +30,7 @@ def generate_launch_description():
     UAV_NAME = os.getenv('UAV_NAME', 'uav1')
 
     config_files = [
-        pkg_share_path + '/config/pcl_filter.yaml',
-        pkg_share_path + '/config/pcl_filtration_config.yaml',
+        pkg_share_path + '/config/pcl_filter.yaml'
     ]
 
     namespace = UAV_NAME

@@ -18,7 +18,6 @@ namespace mrs_pcl_tools
     m_readParams();
     m_initTransformer();
     m_initScopeTimerLogger();
-    m_diagnostics_ = std::make_shared<PclFiltrationDiagnostics>(m_node_);
 
 
     if (m_lidar_params.republish)
@@ -71,13 +70,45 @@ namespace mrs_pcl_tools
       m_param_loader_->addYamlFile(config_file);
     }
 
+    m_initDynParams();
     m_readLidarParams();
 
-    if (!m_param_loader_->loadedSuccessfully())
+    if (!m_param_loader_->loadedSuccessfully() || !m_dynparam_mgr_->loaded_successfully())
     {
       RCLCPP_ERROR(this->get_logger(), "[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
       rclcpp::shutdown();
     }
+  }
+  /*//}*/
+
+  /*//{ m_initDynParams() */
+  void PCLFiltration::m_initDynParams()
+  {
+    m_diagnostics_ = std::make_shared<PclFiltrationDiagnostics>(m_node_);
+    m_dynparam_mgr_ = std::make_shared<mrs_lib::DynparamMgr>(m_node_, m_mutex_drs_params);
+    m_dynparam_mgr_->get_param_provider().copyYamls(m_param_loader_->getParamProvider());
+
+    m_initDynLidarParams();
+  }
+  /*//}*/
+
+  /*//{ m_initDynLidarParams() */
+  void PCLFiltration::m_initDynLidarParams()
+  {
+    // clang-format off
+    m_dynparam_mgr_->register_param("lidar3d/clip/intensity/use", 
+                                    &m_lidar_params.intensity.use,
+                                    (std::function<void(const bool&)>)std::bind(
+                                        &PCLFiltration::callbackIntensityFilterEnable, this, std::placeholders::_1
+                                      ));
+    // clang-format on
+    m_dynparam_mgr_->register_param(
+        "lidar3d/clip/intensity/threshold", &m_lidar_params.intensity.threshold, mrs_lib::DynparamMgr::range_t<float>(0.0, 100000000.0),
+        (std::function<void(const float&)>)std::bind(&PCLFiltration::callbackIntensityFilterThreshold, this, std::placeholders::_1));
+
+
+    m_dynparam_mgr_->register_param("lidar3d/clip/intensity/range", &m_lidar_params.intensity.range_sq, mrs_lib::DynparamMgr::range_t<float>(0, 100000000),
+                                    (std::function<void(const float&)>)std::bind(&PCLFiltration::callbackIntensityFilterRange, this, std::placeholders::_1));
   }
   /*//}*/
 
@@ -257,100 +288,29 @@ namespace mrs_pcl_tools
   }
   /*//}*/
 
-  /*//{ m_processPointCloud() */
-  template <typename PC>
-  void PCLFiltration::m_processPointCloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg, mrs_modules_msgs::msg::PclToolsDiagnostics& diag_msg)
+  /*//{ callbackIntensityFilterEnable() */
+  void PCLFiltration::callbackIntensityFilterEnable(const bool& param_value)
   {
-    typename PC::Ptr cloud = std::make_shared<PC>();
-    pcl::fromROSMsg(*msg, *cloud);
-    m_processMsg(cloud);
-    diag_msg.cols_after = cloud->width;
-    diag_msg.rows_after = cloud->height;
+    RCLCPP_INFO(get_logger(), "callbackIntensityFilterEnable()");
+    m_lidar_params.intensity.use = param_value;
   }
   /*//}*/
 
-  /*//{ m_processMsg() */
-  template <typename PC>
-  void PCLFiltration::m_processMsg(std::shared_ptr<PC>& inout_pc_ptr)
+  /*//{ callbackIntensityFilterThreshold() */
+  void PCLFiltration::callbackIntensityFilterThreshold(const float& param_value)
   {
-    if (!inout_pc_ptr)
-    {
-      RCLCPP_WARN(this->get_logger(), "[PCLFiltration] Received null point cloud pointer. Skipping.");
-      return;
-    }
+    RCLCPP_INFO(get_logger(), "callbackIntensityFilterThreshold()");
+    m_lidar_params.intensity.threshold = param_value;
+  }
+  /*//}*/
 
-    mrs_lib::ScopeTimer timer = mrs_lib::ScopeTimer(m_node_, "PCLFiltration::process_msg", m_scope_timer_logger, m_scope_timer_enabled);
-
-    const size_t height_before = inout_pc_ptr->height;
-    const size_t width_before = inout_pc_ptr->width;
-    const size_t points_before = inout_pc_ptr->size();
-
-    if (m_lidar_params.downsample.use)
-    {
-      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying downsampling");
-      const size_t row_offset = m_lidar_params.dynamic_row_selection_enabled ? m_lidar_params.dynamic_row_offset : m_lidar_params.downsample.row_step - 1;
-      m_pcl_filtration_core_->downsample(inout_pc_ptr, m_lidar_params.downsample.row_step, m_lidar_params.downsample.col_step, row_offset);
-    }
-
-    const bool use_intensity_or_reflectivity = m_lidar_params.intensity.use || m_lidar_params.reflectivity.use;
-    if (m_lidar_params.rangeclip.use)
-    {
-      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying range-clipping");
-      const bool publish_removed_far = m_pub_lidar_over_max_range.getNumSubscribers() > 0;
-
-      if (use_intensity_or_reflectivity)
-      {
-        DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeCloseAndFarAndLowFields");
-        const typename PC::Ptr pcl_over_max_range = m_pcl_filtration_core_->removeCloseAndFarAndLowFields(inout_pc_ptr, false, publish_removed_far);
-        if (publish_removed_far)
-        {
-          sensor_msgs::msg::PointCloud2 pcl_msg;
-          pcl::toROSMsg(*pcl_over_max_range, pcl_msg);
-          m_pub_lidar_over_max_range.publish(pcl_msg);
-        }
-      } else
-      {
-        DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeCloseAndFar");
-        const typename PC::Ptr pcl_over_max_range = m_pcl_filtration_core_->removeCloseAndFar(inout_pc_ptr, false, publish_removed_far);
-        if (publish_removed_far)
-        {
-          sensor_msgs::msg::PointCloud2 pcl_msg;
-          pcl::toROSMsg(*pcl_over_max_range, pcl_msg);
-          m_pub_lidar_over_max_range.publish(pcl_msg);
-        }
-      }
-    } else if (use_intensity_or_reflectivity)
-    {
-      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeCloseAndFar");
-      m_pcl_filtration_core_->removeLowFields(inout_pc_ptr);
-    } else
-    {
-    }
-
-    if (m_lidar_params.cropbox.use)
-    {
-      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying crobox filter");
-      m_cropBoxPointCloud(inout_pc_ptr);
-    }
-
-    if (!m_lidar_params.keep_organized)
-    {
-      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeInfinitePoints");
-      m_pcl_filtration_core_->removeInfinitePoints(inout_pc_ptr);
-    }
-    inout_pc_ptr->is_dense = !m_lidar_params.keep_organized;
-
-    sensor_msgs::msg::PointCloud2 pcl_msg;
-    pcl::toROSMsg(*inout_pc_ptr, pcl_msg);
-    m_pub_lidar.publish(pcl_msg);
-
-    if (m_lidar_params.dynamic_row_selection_enabled)
-    {
-      m_lidar_params.dynamic_row_offset++;
-      m_lidar_params.dynamic_row_offset %= m_lidar_params.downsample.row_step;
-    }
-
-    m_logPointCloudStats(timer, inout_pc_ptr, height_before, width_before, points_before);
+  /*//{ callbackIntensityFilterRange() */
+  void PCLFiltration::callbackIntensityFilterRange(const float& param_value)
+  {
+    RCLCPP_INFO(get_logger(), "callbackIntensityFilterRange()");
+    m_lidar_params.intensity.range_sq = param_value;
+    m_lidar_params.intensity.range_mm = m_lidar_params.intensity.range_sq * 1000;
+    m_lidar_params.intensity.range_sq *= m_lidar_params.intensity.range_sq;
   }
   /*//}*/
 

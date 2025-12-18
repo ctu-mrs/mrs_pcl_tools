@@ -1,6 +1,8 @@
 #pragma once
 
 /* includes //{ */
+#include <mutex>
+
 #include <mrs_pcl_tools/support.h>
 #include <mrs_pcl_tools/pcl_filtration_core.h>
 #include <mrs_pcl_tools/utils/ros_logger.h>
@@ -11,6 +13,7 @@
 #include <mrs_lib/subscriber_handler.h>
 #include <mrs_lib/publisher_handler.h>
 #include <mrs_lib/scope_timer.h>
+#include <mrs_lib/dynparam_mgr.h>
 
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
@@ -33,6 +36,8 @@ namespace mrs_pcl_tools
     void m_timerInit();
 
     void m_readParams();
+    void m_initDynParams();
+    void m_initDynLidarParams();
     void m_readLidarParams();
     void m_readLidarGeneralParams();
     void m_readLidarClipParams();
@@ -44,6 +49,10 @@ namespace mrs_pcl_tools
 
     void m_initLidarRepublishing();
     void m_lidarCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);
+    void callbackIntensityFilterEnable(const bool& param_value);
+    void callbackIntensityFilterThreshold(const float& param_value);
+    void callbackIntensityFilterRange(const float& param_value);
+
 
     template <typename PC>
     void m_processPointCloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg, mrs_modules_msgs::msg::PclToolsDiagnostics& diag_msg);
@@ -63,23 +72,21 @@ namespace mrs_pcl_tools
     rclcpp::Node::SharedPtr m_node_;
     std::shared_ptr<mrs_lib::ParamLoader> m_param_loader_;
     std::shared_ptr<mrs_lib::Transformer> m_transformer_;
+    std::shared_ptr<mrs_lib::DynparamMgr> m_dynparam_mgr_;
+    std::shared_ptr<mrs_lib::ScopeTimerLogger> m_scope_timer_logger;
     std::shared_ptr<PclFiltrationDiagnostics> m_diagnostics_;
 
-    std::shared_ptr<mrs_lib::ScopeTimerLogger> m_scope_timer_logger;
-    bool m_scope_timer_enabled{false};
-
     std::shared_ptr<RosLogger> m_logger_;
+    std::unique_ptr<PCLFiltrationCore> m_pcl_filtration_core_;
 
     mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2> m_pub_lidar;
     mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2> m_pub_lidar_over_max_range;
     mrs_lib::SubscriberHandler<sensor_msgs::msg::PointCloud2> m_sub_lidar;
 
-
-    std::unique_ptr<PCLFiltrationCore> m_pcl_filtration_core_;
-
-    Lidar3DConfig m_lidar_params;
-
     bool m_is_initialized{false};
+    bool m_scope_timer_enabled{false};
+    std::mutex m_mutex_drs_params;
+    Lidar3DConfig m_lidar_params;
   };
 
 #include <mrs_pcl_tools/pcl_filtration_ros.tpp>
