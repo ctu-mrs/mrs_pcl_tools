@@ -17,11 +17,11 @@ lidar3d:
       min: 1.1  # [m]
       max: 40.0 # [m]
     intensity:
-      use: false
-      threshold: 35
-      range: 5.0
+      use: true
+      threshold: 100.0    # 100.0 # points below this intensity beyond the range will be filtered out <0, 100000000>
+      range: 5.0          # points beyond this the range below the intensity will be filtered out <0, 100000000>
     reflectivity:
-      use: false
+      use: true
       threshold: 25
       range: 5.0
 
