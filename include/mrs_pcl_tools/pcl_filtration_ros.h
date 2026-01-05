@@ -89,7 +89,6 @@ namespace mrs_pcl_tools
     Lidar3DConfig m_lidar_params;
   };
 
-#include <mrs_pcl_tools/pcl_filtration_ros.tpp>
-
-
 }  // namespace mrs_pcl_tools
+
+#include <mrs_pcl_tools/pcl_filtration_ros.tpp>
