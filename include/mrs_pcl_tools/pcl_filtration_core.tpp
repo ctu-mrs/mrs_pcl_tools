@@ -185,7 +185,7 @@ namespace mrs_pcl_tools
 
   /*//{ removeLowFields() */
   template <typename PC>
-  std::shared_ptr<PC> PCLFiltrationCore::removeLowFields(std::shared_ptr<PC>& inout_pc_ptr)
+  std::shared_ptr<PC> PCLFiltrationCore::removeLowFields(std::shared_ptr<PC>& inout_pc_ptr, const bool return_removed)
   {
     DEBUG_LOG(m_logger, "[PCLFiltration]: Applying removeLowFields");
 
@@ -194,6 +194,10 @@ namespace mrs_pcl_tools
     // Prepare pointcloud of removed points
     typename PC::Ptr removed_pc = std::make_shared<PC>();
     removed_pc->header = inout_pc_ptr->header;
+    if (return_removed)
+    {
+      removed_pc->resize(inout_pc_ptr->size());
+    }
     size_t removed_it = 0;
 
     if (!cfg.intensity_exists && !cfg.reflectivity_exists)
@@ -211,6 +215,10 @@ namespace mrs_pcl_tools
 
       if (invalid)
       {
+        if (return_removed)
+        {
+          removed_pc->at(removed_it++) = point;
+        }
         invalidatePoint(point);
       }
     }
@@ -241,6 +249,8 @@ namespace mrs_pcl_tools
   template <typename PC>
   void PCLFiltrationCore::removeInfinitePoints(std::shared_ptr<PC>& inout_pc_ptr)
   {
+    DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeInfinitePoints");
+
     const auto orig_pc = inout_pc_ptr;
     inout_pc_ptr = std::make_shared<PC>();
     inout_pc_ptr->header = orig_pc->header;

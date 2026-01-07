@@ -5,6 +5,8 @@ namespace mrs_pcl_tools
   template <typename PC>
   void PCLFiltration::m_cropBoxPointCloud(std::shared_ptr<PC>& inout_pc_ptr)
   {
+    DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying cropbox filter");
+
     Eigen::Affine3d tf = Eigen::Affine3d::Identity();
 
     if (!m_lidar_params.cropbox.frame_id.empty())
@@ -100,19 +102,18 @@ namespace mrs_pcl_tools
       m_publishOverMaxRange(pcl_over_max_range);
     } else if (use_intensity_or_reflectivity)
     {
-      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeCloseAndFar");
-      m_pcl_filtration_core_->removeLowFields(inout_pc_ptr);
+      // Note: if anyone actually needs to publish the removed points, then implement the publisher etc.
+      const bool publish_removed = false;
+      m_pcl_filtration_core_->removeLowFields(inout_pc_ptr, publish_removed);
     }
 
     if (m_lidar_params.cropbox.use)
     {
-      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying cropbox filter");
       m_cropBoxPointCloud(inout_pc_ptr);
     }
 
     if (!m_lidar_params.keep_organized)
     {
-      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeInfinitePoints");
       m_pcl_filtration_core_->removeInfinitePoints(inout_pc_ptr);
       inout_pc_ptr->is_dense = true;
     }

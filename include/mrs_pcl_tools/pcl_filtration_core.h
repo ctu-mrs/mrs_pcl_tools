@@ -61,7 +61,7 @@ namespace mrs_pcl_tools
                                                       const bool clip_return_removed_far);
 
     template <typename PC>
-    std::shared_ptr<PC> removeLowFields(std::shared_ptr<PC>& inout_pc_ptr);
+    std::shared_ptr<PC> removeLowFields(std::shared_ptr<PC>& inout_pc_ptr, const bool return_removed);
 
   private:
     template <typename PC>
