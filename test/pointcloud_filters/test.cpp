@@ -5,8 +5,8 @@
 
 using PC_t = pcl::PointCloud<pcl::PointXYZ>;
 
-/* TEST(TESTSuite, returnOriginal_VoxelGridFilter) //{ */
-TEST(TESTSuite, returnOriginal_VoxelGridFilter)
+/* TEST(PointcloudFilters, returnOriginal_VoxelGridFilter) //{ */
+TEST(PointcloudFilters, returnOriginal_VoxelGridFilter)
 {
   DummyLogger logger;
 
@@ -29,8 +29,8 @@ TEST(TESTSuite, returnOriginal_VoxelGridFilter)
 }
 //}
 
-/* TEST(TESTSuite, downsample_VoxelGridFilter) //{ */
-TEST(TESTSuite, downsample_VoxelGridFilter)
+/* TEST(PointcloudFilters, downsample_VoxelGridFilter) //{ */
+TEST(PointcloudFilters, downsample_VoxelGridFilter)
 {
   DummyLogger logger;
 
@@ -54,8 +54,8 @@ TEST(TESTSuite, downsample_VoxelGridFilter)
 }
 //}
 
-/* TEST(TESTSuite, applyRadiusOutlierFilter) //{ */
-TEST(TESTSuite, applyRadiusOutlierFilter)
+/* TEST(PointcloudFilters, applyRadiusOutlierFilter) //{ */
+TEST(PointcloudFilters, applyRadiusOutlierFilter)
 {
   DummyLogger logger;
 
@@ -93,8 +93,8 @@ TEST(TESTSuite, applyRadiusOutlierFilter)
 //}
 
 
-/* TEST(TESTSuite, applyMinimumGridFilter) //{ */
-TEST(TESTSuite, applyMinimumGridFilter)
+/* TEST(PointcloudFilters, applyMinimumGridFilter) //{ */
+TEST(PointcloudFilters, applyMinimumGridFilter)
 {
   DummyLogger logger;
 
@@ -122,7 +122,8 @@ TEST(TESTSuite, applyMinimumGridFilter)
 }
 //}
 
-TEST(TESTSuite, applyCropBox)
+/* TEST(PointcloudFilters, applyCropBox) //{ */
+TEST(PointcloudFilters, applyCropBox)
 {
   DummyLogger logger;
 
@@ -145,11 +146,11 @@ TEST(TESTSuite, applyCropBox)
   ASSERT_NE(filtered_cloud, nullptr);
   EXPECT_EQ(filtered_cloud->size(), 2u);
 }
+//}
 
-// /* TEST(TESTSuite, applyBilateralFilter) //{ */
-// TEST(TESTSuite, applyBilateralFilter)
+// /* TEST(PointcloudFilters, applyBilateralFilter) //{ */
+// TEST(PointcloudFilters, applyBilateralFilter)
 // {
-//   //TODO: add after figuring out the logger
 // }
 // //}
 

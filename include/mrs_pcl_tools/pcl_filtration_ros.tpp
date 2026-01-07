@@ -81,8 +81,6 @@ namespace mrs_pcl_tools
 
     if (m_lidar_params.downsample.use)
     {
-      DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying downsampling");
-
       m_pcl_filtration_core_->downsample(inout_pc_ptr, m_lidar_params.downsample);
       m_pcl_filtration_core_->updateDownsampleParams(m_lidar_params.downsample);
     }
@@ -92,17 +90,13 @@ namespace mrs_pcl_tools
     {
       DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying range-clipping");
       const bool publish_removed_far = m_pub_lidar_over_max_range.getNumSubscribers() > 0;
-      typename PC::Ptr pcl_over_max_range;
 
-      if (use_intensity_or_reflectivity)
-      {
-        DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeCloseAndFarAndLowFields");
-        pcl_over_max_range = m_pcl_filtration_core_->removeCloseAndFarAndLowFields(inout_pc_ptr, false, publish_removed_far);
-      } else
-      {
-        DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeCloseAndFar");
-        pcl_over_max_range = m_pcl_filtration_core_->removeCloseAndFar(inout_pc_ptr, false, publish_removed_far);
-      }
+      // clang-format off
+      auto pcl_over_max_range = use_intensity_or_reflectivity 
+        ? m_pcl_filtration_core_->removeCloseAndFarAndLowFields(inout_pc_ptr, false, publish_removed_far)
+        : m_pcl_filtration_core_->removeCloseAndFar(inout_pc_ptr, false, publish_removed_far);
+      // clang-format on
+
       m_publishOverMaxRange(pcl_over_max_range);
     } else if (use_intensity_or_reflectivity)
     {
@@ -123,11 +117,9 @@ namespace mrs_pcl_tools
       inout_pc_ptr->is_dense = true;
     }
 
-
     sensor_msgs::msg::PointCloud2 pcl_msg;
     pcl::toROSMsg(*inout_pc_ptr, pcl_msg);
     m_pub_lidar.publish(pcl_msg);
-
 
     m_logPointCloudStats(timer, inout_pc_ptr, height_before, width_before, points_before);
   }
