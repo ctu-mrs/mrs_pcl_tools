@@ -17,9 +17,10 @@ namespace mrs_pcl_tools
     PCLFiltrationCore(ILogger& logger);
 
     void loadLidarParams(const Lidar3DConfig& params);
+    void updateDownsampleParams(DownsampleConfig& downsample_params);
 
     template <typename PC>
-    void downsample(std::shared_ptr<PC>& inout_pc_ptr, const size_t scale_row, const size_t scale_col, const size_t row_offset);
+    void downsample(std::shared_ptr<PC>& inout_pc_ptr, const DownsampleConfig& downsample_params);
 
     template <typename PC>
     void removeInfinitePoints(std::shared_ptr<PC>& inout_pc_ptr);

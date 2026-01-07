@@ -132,11 +132,6 @@ namespace mrs_pcl_tools
     m_param_loader_->loadParam("lidar3d/keep_organized", m_lidar_params.keep_organized, true);
     m_param_loader_->loadParam("lidar3d/republish", m_lidar_params.republish, false);
     m_param_loader_->loadParam("lidar3d/invalid_value", m_lidar_params.invalid_value, std::numeric_limits<float>::quiet_NaN());
-
-    int temp_dynamic_row_offset;
-    m_param_loader_->loadParam("lidar3d/dynamic_row_offset", temp_dynamic_row_offset, 0);
-    m_lidar_params.dynamic_row_offset = temp_dynamic_row_offset;
-
   } /*//}*/
 
   /*//{ m_readLidarClipParams() */
@@ -190,12 +185,15 @@ namespace mrs_pcl_tools
   void PCLFiltration::m_readLidarDownSamplingParams()
   {
     // load downsampling parameters
-    m_param_loader_->loadParam("lidar3d/downsampling/dynamic_row_selection", m_lidar_params.dynamic_row_selection_enabled, false);
+    int temp_dynamic_row_offset;
+    m_param_loader_->loadParam("lidar3d/downsampling/dynamic_row_offset", temp_dynamic_row_offset, 0);
+    m_lidar_params.downsample.dynamic_row_offset = temp_dynamic_row_offset;
+    m_param_loader_->loadParam("lidar3d/downsampling/dynamic_row_selection", m_lidar_params.downsample.dynamic_row_selection_enabled, false);
     m_param_loader_->loadParam("lidar3d/downsampling/row_step", m_lidar_params.downsample.row_step, 1);
     m_param_loader_->loadParam("lidar3d/downsampling/col_step", m_lidar_params.downsample.col_step, 1);
 
     // load dynamic row selection
-    if (m_lidar_params.dynamic_row_selection_enabled && m_lidar_params.downsample.row_step > 1 && m_lidar_params.downsample.row_step % 2 != 0)
+    if (m_lidar_params.downsample.dynamic_row_selection_enabled && m_lidar_params.downsample.row_step > 1 && m_lidar_params.downsample.row_step % 2 != 0)
     {
       RCLCPP_ERROR(this->get_logger(),
                    "[PCLFiltration]: Dynamic selection of lidar rows is enabled, but `lidar_row_step` is not even and/or greater than 1. Ending node.");
@@ -203,11 +201,12 @@ namespace mrs_pcl_tools
     }
 
     m_lidar_params.downsample.use =
-        m_lidar_params.dynamic_row_selection_enabled || m_lidar_params.downsample.row_step > 1 || m_lidar_params.downsample.col_step > 1;
+        m_lidar_params.downsample.dynamic_row_selection_enabled || m_lidar_params.downsample.row_step > 1 || m_lidar_params.downsample.col_step > 1;
     if (m_lidar_params.downsample.use)
     {
       RCLCPP_INFO(this->get_logger(), "[PCLFiltration] Downsampling of input lidar data is enabled -> dynamically: %s, row step: %d, col step: %d",
-                  m_lidar_params.dynamic_row_selection_enabled ? "true" : "false", m_lidar_params.downsample.row_step, m_lidar_params.downsample.col_step);
+                  m_lidar_params.downsample.dynamic_row_selection_enabled ? "true" : "false", m_lidar_params.downsample.row_step,
+                  m_lidar_params.downsample.col_step);
     } else
     {
       RCLCPP_INFO(this->get_logger(), "[PCLFiltration] Downsampling of input lidar data is disabled.");

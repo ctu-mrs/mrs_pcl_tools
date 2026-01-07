@@ -111,22 +111,22 @@ ament_target_dependencies(MrsPclTools_PCLSupportLib
 
 ## | --------------------- MrsPclTools_PCLFiltration --------------------- |
 
-add_library(mrs_pcl_filtration SHARED
+add_library(MrsPclTools_PCLFiltration SHARED
   src/pcl_filtration_ros.cpp
   src/pcl_filtration_core.cpp
   src/pcl_filtration_diagnostics.cpp
 )
 
-target_link_libraries(mrs_pcl_filtration
+target_link_libraries(MrsPclTools_PCLFiltration
   ${LIBRARIES}
   ${PCL_LIBRARIES}
 )
 
-target_compile_definitions(mrs_pcl_filtration
+target_compile_definitions(MrsPclTools_PCLFiltration
   PRIVATE
     $<$<CONFIG:Debug>:DEBUG>
 )
-rclcpp_components_register_nodes(mrs_pcl_filtration PLUGIN "${PROJECT_NAME}::PCLFiltration" EXECUTABLE mrs_pcl_filtration)
+rclcpp_components_register_nodes(MrsPclTools_PCLFiltration PLUGIN "${PROJECT_NAME}::PCLFiltration" EXECUTABLE MrsPclTools_PCLFiltration)
 
 
 ## | -------------------- export interfaces ------------------- |
@@ -186,7 +186,7 @@ ament_export_libraries(
 
 install(
   TARGETS
-    mrs_pcl_filtration
+    MrsPclTools_PCLFiltration
     mrs_pcl_tools_mrs_pcl_tools
     ${LIBRARIES}
     ${EXECUTABLES}

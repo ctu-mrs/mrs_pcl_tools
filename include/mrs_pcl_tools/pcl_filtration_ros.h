@@ -46,13 +46,15 @@ namespace mrs_pcl_tools
 
     void m_initTransformer();
     void m_initScopeTimerLogger();
-
     void m_initLidarRepublishing();
     void m_lidarCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);
+
     void callbackIntensityFilterEnable(const bool& param_value);
     void callbackIntensityFilterThreshold(const float& param_value);
     void callbackIntensityFilterRange(const float& param_value);
 
+    template <typename PC>
+    void m_publishOverMaxRange(const std::shared_ptr<PC>& pc);
 
     template <typename PC>
     void m_processPointCloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg, mrs_modules_msgs::msg::PclToolsDiagnostics& diag_msg);

@@ -52,6 +52,8 @@ namespace mrs_pcl_tools
   struct DownsampleConfig
   {
     bool use;
+    uint32_t dynamic_row_offset;
+    bool dynamic_row_selection_enabled;
     int row_step;
     int col_step;
   };
@@ -64,8 +66,6 @@ namespace mrs_pcl_tools
     bool keep_organized;
     bool republish;
     float invalid_value;
-    bool dynamic_row_selection_enabled;
-    uint32_t dynamic_row_offset;
 
     RangeClipConfig rangeclip;
     InertialClipConfig inertclip;

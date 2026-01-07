@@ -3,11 +3,26 @@ namespace mrs_pcl_tools
 
   /*//{ downsample() */
   template <typename PC>
-  void PCLFiltrationCore::downsample(std::shared_ptr<PC>& inout_pc_ptr, const size_t scale_row, const size_t scale_col, const size_t row_offset)
+  void PCLFiltrationCore::downsample(std::shared_ptr<PC>& inout_pc_ptr, const DownsampleConfig& dp)
   {
+    const size_t scale_row = dp.row_step;
+    const size_t scale_col = dp.col_step;
+    const size_t row_offset = [&] {
+      if (dp.dynamic_row_selection_enabled)
+      {
+        return dp.dynamic_row_offset;
+      }
+      return static_cast<uint32_t>(dp.row_step - 1);
+    }();
+
     if (!inout_pc_ptr)
     {
       m_logger.error("[PCLFiltration] Received null point cloud pointer. Skipping downsampling...");
+      return;
+    }
+    if (inout_pc_ptr->height <= 1 || inout_pc_ptr->width <= 1)
+    {
+      m_logger.error("[PCLFiltration] Received unorganized pointcloud. Skipping downsampling...");
       return;
     }
     if (scale_row == 0 || scale_col == 0)
@@ -28,10 +43,14 @@ namespace mrs_pcl_tools
 
     const size_t height_before = inout_pc_ptr->height;
     const size_t width_before = inout_pc_ptr->width;
-    const size_t height_after = height_before / scale_row;
-    const size_t width_after = width_before / scale_col;
+    // const size_t height_after = height_before / scale_row;
+    // const size_t width_after = width_before / scale_col;
+    // Note: to fix overflowing we have to ceil it
+    const size_t height_after = (height_before - row_offset + scale_row - 1) / scale_row;
+    const size_t width_after = (width_before + scale_col - 1) / scale_col;
 
     std::shared_ptr<PC> pc_out = std::make_shared<PC>(width_after, height_after);
+
 
     size_t r = 0;
 

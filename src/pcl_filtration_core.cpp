@@ -16,5 +16,15 @@ namespace mrs_pcl_tools
   }
   /*//}*/
 
+  /*//{ updateDownsampleParams() */
+  void PCLFiltrationCore::updateDownsampleParams(DownsampleConfig& dp)
+  {
+    if (dp.dynamic_row_selection_enabled && dp.row_step > 0)
+    {
+      dp.dynamic_row_offset++;
+      dp.dynamic_row_offset %= dp.row_step;
+    }
+  }
+  /*//}*/
 
 }  // namespace mrs_pcl_tools
