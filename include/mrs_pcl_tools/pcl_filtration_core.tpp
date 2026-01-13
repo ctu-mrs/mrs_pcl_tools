@@ -249,7 +249,7 @@ namespace mrs_pcl_tools
   template <typename PC>
   void PCLFiltrationCore::removeInfinitePoints(std::shared_ptr<PC>& inout_pc_ptr)
   {
-    DEBUG_LOG(*m_logger_, "[PCLFiltration]: Applying removeInfinitePoints");
+    DEBUG_LOG(m_logger, "[PCLFiltration]: Applying removeInfinitePoints");
 
     const auto orig_pc = inout_pc_ptr;
     inout_pc_ptr = std::make_shared<PC>();
