@@ -36,7 +36,7 @@ namespace mrs_pcl_tools
   /*//{ m_initScopeTimerLogger() */
   void PCLFiltration::m_initScopeTimerLogger()
   {
-    m_param_loader_->loadParam("scope_timer/enable", m_scope_timer_enabled, false);
+    m_param_loader_->loadParam("scope_timer/enable", m_scope_timer_enabled);
 
     const std::string time_logger_filepath = m_param_loader_->loadParam2("scope_timer/log_filename", std::string(""));
     m_scope_timer_logger = std::make_shared<mrs_lib::ScopeTimerLogger>(m_node_, time_logger_filepath, m_scope_timer_enabled);
@@ -61,13 +61,37 @@ namespace mrs_pcl_tools
   {
     m_param_loader_ = std::make_shared<mrs_lib::ParamLoader>(m_node_, m_node_->get_name());
 
+    // load custom config
+    std::string custom_config_path;
+    m_param_loader_->loadParam("custom_config", custom_config_path);
+
+    if (custom_config_path != "")
+    {
+      RCLCPP_INFO(m_node_->get_logger(), "loading custom config '%s", custom_config_path.c_str());
+
+      bool succ = m_param_loader_->addYamlFile(custom_config_path);
+
+      if (!succ)
+      {
+        RCLCPP_ERROR(m_node_->get_logger(), "Failed to load custom config.");
+        rclcpp::shutdown();
+        exit(1);
+      }
+    }
+
     std::vector<std::string> config_files;
     m_param_loader_->loadParam("config_files", config_files);
 
     for (auto config_file : config_files)
     {
       RCLCPP_INFO(m_node_->get_logger(), "loading config file '%s'", config_file.c_str());
-      m_param_loader_->addYamlFile(config_file);
+
+      if (!m_param_loader_->addYamlFile(config_file))
+      {
+        RCLCPP_ERROR(m_node_->get_logger(), "could not load config file %s", config_file.c_str());
+        rclcpp::shutdown();
+        exit(1);
+      }
     }
 
     m_initDynParams();
@@ -77,6 +101,7 @@ namespace mrs_pcl_tools
     {
       RCLCPP_ERROR(this->get_logger(), "[PCLFiltration]: Some compulsory parameters were not loaded successfully, ending the node");
       rclcpp::shutdown();
+      exit(1);
     }
   }
   /*//}*/
@@ -96,7 +121,7 @@ namespace mrs_pcl_tools
   void PCLFiltration::m_initDynLidarParams()
   {
     // clang-format off
-    m_dynparam_mgr_->register_param("lidar3d/clip/intensity/use", 
+    m_dynparam_mgr_->register_param("lidar3d/clip/intensity/use",
                                     &m_lidar_params.intensity.use,
                                     (std::function<void(const bool&)>)std::bind(
                                         &PCLFiltration::callbackIntensityFilterEnable, this, std::placeholders::_1
@@ -125,37 +150,43 @@ namespace mrs_pcl_tools
   /*//{ m_readLidarGeneralParams() */
   void PCLFiltration::m_readLidarGeneralParams()
   {
-    m_param_loader_->loadParam("lidar3d/name", m_lidar_params.name, std::string("ouster"));
+    m_param_loader_->loadParam("lidar3d/name", m_lidar_params.name);
     m_param_loader_->loadParam("lidar3d/frequency", m_lidar_params.frequency);
     m_param_loader_->loadParam("lidar3d/vfov", m_lidar_params.vfov);
 
-    m_param_loader_->loadParam("lidar3d/keep_organized", m_lidar_params.keep_organized, true);
-    m_param_loader_->loadParam("lidar3d/republish", m_lidar_params.republish, false);
-    m_param_loader_->loadParam("lidar3d/invalid_value", m_lidar_params.invalid_value, std::numeric_limits<float>::quiet_NaN());
+    m_param_loader_->loadParam("lidar3d/keep_organized", m_lidar_params.keep_organized);
+    m_param_loader_->loadParam("lidar3d/republish", m_lidar_params.republish);
+    m_param_loader_->loadParam("lidar3d/invalid_value", m_lidar_params.invalid_value);
+
+    if (abs(m_lidar_params.invalid_value - 42.0) < 1e-3)
+    {
+      m_lidar_params.invalid_value = std::numeric_limits<float>::quiet_NaN();
+    }
   } /*//}*/
 
   /*//{ m_readLidarClipParams() */
   void PCLFiltration::m_readLidarClipParams()
   {
-    m_param_loader_->loadParam("lidar3d/clip/range/use", m_lidar_params.rangeclip.use, false);
-    m_param_loader_->loadParam("lidar3d/clip/range/min", m_lidar_params.rangeclip.min_sq, 0.4f);
-    m_param_loader_->loadParam("lidar3d/clip/range/max", m_lidar_params.rangeclip.max_sq, 100.0f);
+    m_param_loader_->loadParam("lidar3d/clip/range/use", m_lidar_params.rangeclip.use);
+    m_param_loader_->loadParam("lidar3d/clip/range/min", m_lidar_params.rangeclip.min_sq);
+    m_param_loader_->loadParam("lidar3d/clip/range/max", m_lidar_params.rangeclip.max_sq);
+
     m_lidar_params.rangeclip.min_mm = m_lidar_params.rangeclip.min_sq * 1000;
     m_lidar_params.rangeclip.max_mm = m_lidar_params.rangeclip.max_sq * 1000;
     m_lidar_params.rangeclip.min_sq *= m_lidar_params.rangeclip.min_sq;
     m_lidar_params.rangeclip.max_sq *= m_lidar_params.rangeclip.max_sq;
 
-    m_param_loader_->loadParam("lidar3d/clip/intensity/use", m_lidar_params.intensity.use, false);
-    m_param_loader_->loadParam("lidar3d/clip/intensity/threshold", m_lidar_params.intensity.threshold, std::numeric_limits<float>::max());
-    m_param_loader_->loadParam("lidar3d/clip/intensity/range", m_lidar_params.intensity.range_sq, std::numeric_limits<float>::max());
+    m_param_loader_->loadParam("lidar3d/clip/intensity/use", m_lidar_params.intensity.use);
+    m_param_loader_->loadParam("lidar3d/clip/intensity/threshold", m_lidar_params.intensity.threshold);
+    m_param_loader_->loadParam("lidar3d/clip/intensity/range", m_lidar_params.intensity.range_sq);
     m_lidar_params.intensity.range_mm = m_lidar_params.intensity.range_sq * 1000;
     m_lidar_params.intensity.range_sq *= m_lidar_params.intensity.range_sq;
 
-    m_param_loader_->loadParam("lidar3d/clip/reflectivity/use", m_lidar_params.reflectivity.use, false);
-    m_param_loader_->loadParam("lidar3d/clip/reflectivity/range", m_lidar_params.reflectivity.range_sq, std::numeric_limits<float>::max());
-    const int lidar3d_filter_reflectivity_threshold =
-        m_param_loader_->loadParam2("lidar3d/clip/reflectivity/threshold", static_cast<int>(std::numeric_limits<uint16_t>::max()));
-    m_lidar_params.reflectivity.threshold = static_cast<uint16_t>(lidar3d_filter_reflectivity_threshold);
+    m_param_loader_->loadParam("lidar3d/clip/reflectivity/use", m_lidar_params.reflectivity.use);
+    m_param_loader_->loadParam("lidar3d/clip/reflectivity/range", m_lidar_params.reflectivity.range_sq);
+
+    m_param_loader_->loadParam2("lidar3d/clip/reflectivity/threshold", m_lidar_params.reflectivity.threshold);
+
     m_lidar_params.reflectivity.range_mm = m_lidar_params.reflectivity.range_sq * 1000;
     m_lidar_params.reflectivity.range_sq *= m_lidar_params.reflectivity.range_sq;
   }
@@ -165,7 +196,7 @@ namespace mrs_pcl_tools
   void PCLFiltration::m_readLidarCropboxParams()
   {
     m_param_loader_->loadParam("lidar3d/cropbox/crop_inside", m_lidar_params.cropbox.crop_inside);
-    m_param_loader_->loadParam("lidar3d/cropbox/frame_id", m_lidar_params.cropbox.frame_id, {});
+    m_param_loader_->loadParam("lidar3d/cropbox/frame_id", m_lidar_params.cropbox.frame_id);
 
     Eigen::Vector3d temp_min;
     m_param_loader_->loadMatrixStatic("lidar3d/cropbox/min", temp_min, -std::numeric_limits<float>::infinity() * Eigen::Vector3d::Ones());
@@ -174,10 +205,8 @@ namespace mrs_pcl_tools
     m_param_loader_->loadMatrixStatic("lidar3d/cropbox/max", temp_max, std::numeric_limits<float>::infinity() * Eigen::Vector3d::Ones());
     m_lidar_params.cropbox.max = temp_max.cast<float>();
 
-    // by default, use the cropbox filter if any of the crop coordinates is finite
-    const bool cbox_use_default = m_lidar_params.cropbox.min.array().isFinite().any() || m_lidar_params.cropbox.max.array().isFinite().any();
     // the user can override this behavior by setting the "lidar3d/cropbox/use" parameter
-    m_param_loader_->loadParam("lidar3d/cropbox/use", m_lidar_params.cropbox.use, cbox_use_default);
+    m_param_loader_->loadParam("lidar3d/cropbox/use", m_lidar_params.cropbox.use);
   }
   /*//}*/
 
@@ -186,11 +215,11 @@ namespace mrs_pcl_tools
   {
     // load downsampling parameters
     int temp_dynamic_row_offset;
-    m_param_loader_->loadParam("lidar3d/downsampling/dynamic_row_offset", temp_dynamic_row_offset, 0);
+    m_param_loader_->loadParam("lidar3d/downsampling/dynamic_row_offset", temp_dynamic_row_offset);
     m_lidar_params.downsample.dynamic_row_offset = temp_dynamic_row_offset;
-    m_param_loader_->loadParam("lidar3d/downsampling/dynamic_row_selection", m_lidar_params.downsample.dynamic_row_selection_enabled, false);
-    m_param_loader_->loadParam("lidar3d/downsampling/row_step", m_lidar_params.downsample.row_step, 1);
-    m_param_loader_->loadParam("lidar3d/downsampling/col_step", m_lidar_params.downsample.col_step, 1);
+    m_param_loader_->loadParam("lidar3d/downsampling/dynamic_row_selection", m_lidar_params.downsample.dynamic_row_selection_enabled);
+    m_param_loader_->loadParam("lidar3d/downsampling/row_step", m_lidar_params.downsample.row_step);
+    m_param_loader_->loadParam("lidar3d/downsampling/col_step", m_lidar_params.downsample.col_step);
 
     // load dynamic row selection
     if (m_lidar_params.downsample.dynamic_row_selection_enabled && m_lidar_params.downsample.row_step > 1 && m_lidar_params.downsample.row_step % 2 != 0)
@@ -227,14 +256,14 @@ namespace mrs_pcl_tools
     shopts.node = m_node_;
     shopts.node_name = m_node_->get_name();
     shopts.no_message_timeout = rclcpp::Duration::from_seconds(5.0);
-    m_sub_lidar = mrs_lib::SubscriberHandler<sensor_msgs::msg::PointCloud2>(shopts, "~/lidar_in", &PCLFiltration::m_lidarCallback, this);
+    m_sub_lidar = mrs_lib::SubscriberHandler<sensor_msgs::msg::PointCloud2>(shopts, "~/points_in", &PCLFiltration::m_lidarCallback, this);
 
     mrs_lib::PublisherHandlerOptions pubopts;
     pubopts.node = m_node_;
     pubopts.qos = rclcpp::QoS(1);
 
-    m_pub_lidar = mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2>(pubopts, "~/lidar_out");
-    m_pub_lidar_over_max_range = mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2>(pubopts, "~/lidar_over_max_range_out");
+    m_pub_lidar = mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2>(pubopts, "~/points_out");
+    m_pub_lidar_over_max_range = mrs_lib::PublisherHandler<sensor_msgs::msg::PointCloud2>(pubopts, "~/false");
   }
   /*//}*/
 
@@ -257,6 +286,7 @@ namespace mrs_pcl_tools
     }
 
     mrs_modules_msgs::msg::PclToolsDiagnostics diag_msg;
+
     diag_msg.sensor_name = m_lidar_params.name;
     diag_msg.stamp = msg->header.stamp;
     diag_msg.sensor_type = mrs_modules_msgs::msg::PclToolsDiagnostics::SENSOR_TYPE_LIDAR_3D;

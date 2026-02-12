@@ -1,27 +1,28 @@
-scope_timer:
-  enable: false
-  log_filename: ""
-
 lidar3d:
 
   name:      "ouster"
-  frequency: 10       # [Hz]
-  vfov:      90       # [deg]
+  frequency: 10.0 # [Hz]
+  vfov:      90.0 # [deg]
 
   republish: true
   keep_organized: true
 
+  invalid_value: -42.0 # [-42.0 => NaN]
+
   clip:
+
     range:
-      use: true
+      use: false
       min: 1.1  # [m]
       max: 40.0 # [m]
+
     intensity:
-      use: true
-      threshold: 100.0    # 100.0 # points below this intensity beyond the range will be filtered out <0, 100000000>
-      range: 5.0          # points beyond this the range below the intensity will be filtered out <0, 100000000>
+      use: false
+      threshold: 100.0 # 100.0 # points below this intensity beyond the range will be filtered out <0, 100000000>
+      range: 5.0       # points beyond this the range below the intensity will be filtered out <0, 100000000>
+
     reflectivity:
-      use: true
+      use: false
       threshold: 25
       range: 5.0
 
@@ -33,6 +34,12 @@ lidar3d:
     max: [35.0, 5.0, 19.0]
 
   downsampling:
-    dynamic_row_selection: false
     row_step: 1
     col_step: 1
+
+    dynamic_row_selection: false
+    dynamic_row_offset: 0
+
+scope_timer:
+  enable: false
+  log_filename: ""
